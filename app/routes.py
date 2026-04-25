@@ -68,9 +68,6 @@ def yeni_talep():
             siparis_no=generate_siparis_no(),
             talep_eden_id=current_user.id,
             department_id=request.form.get('department_id'),
-            kullanim_amaci=request.form.get('kullanim_amaci'),
-            kullanilan_alan=request.form.get('kullanilan_alan'),
-            proje_makine=request.form.get('proje_makine'),
             durum='bekliyor'
         )
         db.session.add(talep)
@@ -243,8 +240,6 @@ def talep_pdf(talep_id):
     info_data = [
         ['Siparis No:', talep.siparis_no, 'Tarih:', talep.created_at.strftime('%d.%m.%Y')],
         ['Departman:', talep.department.name if talep.department else '-', 'Talep Eden:', talep.talep_eden.name if talep.talep_eden else '-'],
-        ['Kullanim Amaci:', talep.kullanim_amaci or '-', 'Kullanilan Alan:', talep.kullanilan_alan or '-'],
-        ['Proje/Makine:', talep.proje_makine or '-', '', ''],
     ]
     
     info_table = Table(info_data, colWidths=[3*cm, 7*cm, 3*cm, 7*cm])
