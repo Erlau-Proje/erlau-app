@@ -43,6 +43,7 @@ class TalepFormu(db.Model):
     talep_eden_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     department_id = db.Column(db.Integer, db.ForeignKey('department.id'))
     durum = db.Column(db.String(30), default='bekliyor')
+    yolda_tarihi = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     kalemler = db.relationship('TalepKalem', backref='talep', lazy=True, cascade='all, delete-orphan')

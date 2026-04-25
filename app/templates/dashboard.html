@@ -55,9 +55,22 @@
           {% elif talep.durum == 'onaylandi' %}
           <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">Onaylandı</span>
           {% elif talep.durum == 'yolda' %}
-          <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">Yolda</span>
+          <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">🚚 Yolda</span>
+          {% if talep.id in kalan_gunler %}
+            {% set kalan = kalan_gunler[talep.id] %}
+            <br>
+            {% if kalan < 0 %}
+            <span class="text-xs text-red-600 font-medium">{{ kalan|abs }} gün gecikti</span>
+            {% elif kalan == 0 %}
+            <span class="text-xs text-orange-600 font-medium">Bugün ulaşmalı</span>
+            {% elif kalan <= 3 %}
+            <span class="text-xs text-orange-500 font-medium">{{ kalan }} gün kaldı</span>
+            {% else %}
+            <span class="text-xs text-blue-600">{{ kalan }} gün kaldı</span>
+            {% endif %}
+          {% endif %}
           {% elif talep.durum == 'teslim_alindi' %}
-          <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs">Teslim Alındı</span>
+          <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs">✓ Teslim Alındı</span>
           {% elif talep.durum == 'iptal' %}
           <span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs">İptal</span>
           {% else %}

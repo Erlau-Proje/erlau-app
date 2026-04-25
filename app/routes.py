@@ -4,7 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
 from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci
 from app.utils import generate_siparis_no
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from functools import wraps
 
 auth = Blueprint('auth', __name__)
@@ -57,7 +57,17 @@ def dashboard():
         talepler = TalepFormu.query.filter_by(
             talep_eden_id=current_user.id
         ).order_by(TalepFormu.created_at.desc()).limit(10).all()
-    return render_template('dashboard.html', talepler=talepler)
+
+    bugun = date.today()
+    kalan_gunler = {}
+    for talep in talepler:
+        if talep.durum == 'yolda' and talep.yolda_tarihi:
+            termin = max((k.termin_gun or 0) for k in talep.kalemler) if talep.kalemler else 0
+            if termin > 0:
+                bitis = talep.yolda_tarihi.date() + timedelta(days=termin)
+                kalan_gunler[talep.id] = (bitis - bugun).days
+
+    return render_template('dashboard.html', talepler=talepler, kalan_gunler=kalan_gunler)
 
 @main.route('/talep/yeni', methods=['GET', 'POST'])
 @login_required
@@ -433,6 +443,8 @@ def durum_guncelle(talep_id):
     gecerli_durumlar = ['bekliyor', 'fiyatlandirildi', 'onaylandi', 'yolda', 'teslim_alindi', 'iptal']
     if yeni_durum in gecerli_durumlar:
         talep.durum = yeni_durum
+        if yeni_durum == 'yolda' and not talep.yolda_tarihi:
+            talep.yolda_tarihi = datetime.utcnow()
         if yeni_durum == 'teslim_alindi':
             now = datetime.utcnow()
             for kalem in talep.kalemler:
