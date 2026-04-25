@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//tmp/**)",
+      "Read(//home/**)",
+      "Bash(git commit -m ' *)",
+      "Bash(journalctl -u erlau -n 30 --no-pager)",
+      "Bash(curl -sL \"https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2\" -o dejavu.tar.bz2)",
+      "Bash(tar xjf *)"
+    ]
+  }
+}

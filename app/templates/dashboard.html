@@ -75,9 +75,15 @@
           <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">{{ talep.durum }}</span>
           {% endif %}
         </td>
-        <td class="px-6 py-3">
-          <a href="{{ url_for('main.talep_detay', talep_id=talep.id) }}"
-            class="text-green-700 hover:underline text-xs">Detay</a>
+        <td class="px-6 py-3 flex gap-2 items-center">
+          <a href="{{ url_for('main.talep_detay', talep_id=talep.id) }}" class="text-green-700 hover:underline text-xs">Detay</a>
+          {% if talep.durum == 'bekliyor' and (talep.talep_eden_id == current_user.id or current_user.role == 'admin') %}
+          <a href="{{ url_for('main.talep_duzenle', talep_id=talep.id) }}" class="text-blue-600 hover:underline text-xs">Düzenle</a>
+          <form method="POST" action="{{ url_for('main.talep_sil', talep_id=talep.id) }}" class="inline"
+            onsubmit="return confirm('Bu talep silinecek. Emin misiniz?')">
+            <button type="submit" class="text-red-500 hover:underline text-xs">Sil</button>
+          </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

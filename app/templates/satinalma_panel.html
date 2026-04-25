@@ -15,14 +15,18 @@
       <a href="{{ url_for('satin_alma.panel', durum='fiyatlandirildi') }}" class="px-3 py-1.5 rounded-full text-xs font-medium {% if secili_durum == 'fiyatlandirildi' %}bg-purple-600 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">Fiyatlandırıldı</a>
       <a href="{{ url_for('satin_alma.panel', durum='iptal') }}" class="px-3 py-1.5 rounded-full text-xs font-medium {% if secili_durum == 'iptal' %}bg-red-500 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">İptal</a>
     </div>
-    <form method="GET" class="flex gap-2">
+    <form method="GET" class="flex gap-2 flex-wrap">
+      <input type="text" name="q" value="{{ arama }}" placeholder="Sipariş no veya malzeme ara..."
+        class="border border-gray-200 rounded-lg px-3 py-1.5 text-xs w-52">
       <select name="dept" class="border border-gray-200 rounded-lg px-3 py-1.5 text-xs">
         <option value="">Tüm departmanlar</option>
         {% for dep in departmanlar %}
         <option value="{{ dep.id }}">{{ dep.name }}</option>
         {% endfor %}
       </select>
-      <button type="submit" class="erlau-green text-white px-3 py-1.5 rounded-lg text-xs">Filtrele</button>
+      <input type="hidden" name="durum" value="{{ secili_durum }}">
+      <button type="submit" class="erlau-green text-white px-3 py-1.5 rounded-lg text-xs">Ara</button>
+      {% if arama %}<a href="{{ url_for('satin_alma.panel', durum=secili_durum) }}" class="border border-gray-300 text-gray-500 px-3 py-1.5 rounded-lg text-xs">Temizle</a>{% endif %}
     </form>
   </div>
 </div>

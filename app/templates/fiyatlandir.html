@@ -27,6 +27,7 @@
             <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Vade (gün)</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Termin (gün)</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-blue-500">Son Alım</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-gray-400">Alım Sayısı</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -83,6 +84,7 @@
                 <span class="text-gray-300">İlk alım</span>
               {% endif %}
             </td>
+            <td class="px-4 py-3 text-center text-xs text-gray-400" data-malzeme="{{ kalem.malzeme_adi }}">—</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -122,6 +124,13 @@ function hesapla(kalemId, miktar) {
   toplamEl.textContent = toplam > 0 ? toplam.toFixed(2) : '—';
   genelToplamHesapla();
 }
+
+document.querySelectorAll('td[data-malzeme]').forEach(td => {
+  const malzeme = td.getAttribute('data-malzeme');
+  fetch('/api/kullanim-sikligi?malzeme_adi=' + encodeURIComponent(malzeme))
+    .then(r => r.json())
+    .then(d => { if (d && d.toplam > 0) td.textContent = d.toplam + 'x'; });
+});
 
 function genelToplamHesapla() {
   let genel = 0;

@@ -7,7 +7,8 @@ login_manager = LoginManager()
 
 def create_app():
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'erlau-secret-key-2026'
+    import os
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'erlau-secret-key-2026')
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///erlau.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 

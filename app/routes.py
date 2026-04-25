@@ -124,20 +124,88 @@ def talep_detay(talep_id):
     talep = TalepFormu.query.get_or_404(talep_id)
     return render_template('talep_detay.html', talep=talep)
 
+@main.route('/talep/<int:talep_id>/duzenle', methods=['GET', 'POST'])
+@login_required
+def talep_duzenle(talep_id):
+    talep = TalepFormu.query.get_or_404(talep_id)
+    if talep.talep_eden_id != current_user.id and current_user.role != 'admin':
+        flash('Bu talebi düzenleme yetkiniz yok.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    if talep.durum != 'bekliyor':
+        flash('Sadece bekleyen talepler düzenlenebilir.', 'danger')
+        return redirect(url_for('main.talep_detay', talep_id=talep_id))
+    if request.method == 'POST':
+        for kalem in list(talep.kalemler):
+            db.session.delete(kalem)
+        db.session.flush()
+        malzeme_adlari = request.form.getlist('malzeme_adi[]')
+        marka_modeller = request.form.getlist('marka_model[]')
+        malzeme_turleri = request.form.getlist('malzeme_turu[]')
+        birimler = request.form.getlist('birim[]')
+        miktarlar = request.form.getlist('miktar[]')
+        hedefler = request.form.getlist('hedef[]')
+        kullanim_amaclari = request.form.getlist('kullanim_amaci[]')
+        kullanilan_alanlar = request.form.getlist('kullanilan_alan[]')
+        proje_makineler = request.form.getlist('proje_makine[]')
+        kwler = request.form.getlist('kw[]')
+        aciklamalar = request.form.getlist('aciklama[]')
+        for i, ad in enumerate(malzeme_adlari):
+            if ad.strip():
+                db.session.add(TalepKalem(
+                    talep_id=talep.id,
+                    malzeme_adi=ad,
+                    marka_model=marka_modeller[i] if i < len(marka_modeller) else '',
+                    malzeme_turu=malzeme_turleri[i] if i < len(malzeme_turleri) else '',
+                    birim=birimler[i] if i < len(birimler) else 'Adet',
+                    miktar=float(miktarlar[i]) if i < len(miktarlar) and miktarlar[i] else 0,
+                    hedef=hedefler[i] if i < len(hedefler) else 'siparis',
+                    kullanim_amaci=kullanim_amaclari[i] if i < len(kullanim_amaclari) else '',
+                    kullanilan_alan=kullanilan_alanlar[i] if i < len(kullanilan_alanlar) else '',
+                    proje_makine=proje_makineler[i] if i < len(proje_makineler) else '',
+                    kw=kwler[i] if i < len(kwler) else '',
+                    aciklama=aciklamalar[i] if i < len(aciklamalar) else ''
+                ))
+        db.session.commit()
+        flash('Talep güncellendi.', 'success')
+        return redirect(url_for('main.talep_detay', talep_id=talep_id))
+    return render_template('talep_duzenle.html', talep=talep)
+
+@main.route('/talep/<int:talep_id>/sil', methods=['POST'])
+@login_required
+def talep_sil(talep_id):
+    talep = TalepFormu.query.get_or_404(talep_id)
+    if talep.talep_eden_id != current_user.id and current_user.role != 'admin':
+        flash('Bu talebi silme yetkiniz yok.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    if talep.durum != 'bekliyor':
+        flash('Sadece bekleyen talepler silinebilir.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    db.session.delete(talep)
+    db.session.commit()
+    flash('Talep silindi.', 'success')
+    return redirect(url_for('main.dashboard'))
+
 @satin_alma.route('/panel')
 @login_required
 @role_required('satinalma', 'admin', 'gm')
 def panel():
     durum = request.args.get('durum', 'hepsi')
     dept = request.args.get('dept', '')
+    arama = request.args.get('q', '').strip()
     q = TalepFormu.query
     if durum != 'hepsi':
         q = q.filter_by(durum=durum)
     if dept:
         q = q.filter_by(department_id=dept)
+    if arama:
+        from sqlalchemy import or_
+        q = q.filter(or_(
+            TalepFormu.siparis_no.ilike(f'%{arama}%'),
+            TalepFormu.kalemler.any(TalepKalem.malzeme_adi.ilike(f'%{arama}%'))
+        ))
     talepler = q.order_by(TalepFormu.created_at.desc()).all()
     departmanlar = Department.query.all()
-    return render_template('satinalma_panel.html', talepler=talepler, departmanlar=departmanlar, secili_durum=durum)
+    return render_template('satinalma_panel.html', talepler=talepler, departmanlar=departmanlar, secili_durum=durum, arama=arama)
 
 @satin_alma.route('/onayla/<int:talep_id>', methods=['POST'])
 @login_required
@@ -282,11 +350,28 @@ from reportlab.graphics import renderPDF
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-import io
+import io, os
+
+_fonts_registered = False
+def _register_fonts():
+    global _fonts_registered
+    if _fonts_registered:
+        return
+    base = os.path.join(os.path.dirname(__file__), 'static')
+    try:
+        pdfmetrics.registerFont(TTFont('DejaVu', os.path.join(base, 'DejaVuSans.ttf')))
+        pdfmetrics.registerFont(TTFont('DejaVu-Bold', os.path.join(base, 'DejaVuSans-Bold.ttf')))
+        _fonts_registered = True
+    except Exception:
+        pass
 
 @main.route('/talep/<int:talep_id>/pdf')
 @login_required
 def talep_pdf(talep_id):
+    _register_fonts()
+    FONT = 'DejaVu' if _fonts_registered else 'Helvetica'
+    FONT_BOLD = 'DejaVu-Bold' if _fonts_registered else 'Helvetica-Bold'
+
     talep = TalepFormu.query.get_or_404(talep_id)
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
@@ -296,9 +381,9 @@ def talep_pdf(talep_id):
     styles = getSampleStyleSheet()
     elements = []
 
-    header_style = ParagraphStyle('header', fontSize=11, fontName='Helvetica-Bold', spaceAfter=4)
-    normal_style = ParagraphStyle('normal', fontSize=9, fontName='Helvetica')
-    small_style = ParagraphStyle('small', fontSize=8, fontName='Helvetica')
+    header_style = ParagraphStyle('header', fontSize=11, fontName=FONT_BOLD, spaceAfter=4)
+    normal_style = ParagraphStyle('normal', fontSize=9, fontName=FONT)
+    small_style = ParagraphStyle('small', fontSize=8, fontName=FONT)
 
     logo_drawing = Drawing(140, 40)
     logo_drawing.add(String(0, 14, 'ERLAU', fontSize=28, fontName='Helvetica-Bold', fillColor=colors.HexColor('#3a8a00')))
@@ -315,16 +400,16 @@ def talep_pdf(talep_id):
     elements.append(Spacer(1, 0.3*cm))
     
     info_data = [
-        ['Siparis No:', talep.siparis_no, 'Tarih:', talep.created_at.strftime('%d.%m.%Y')],
+        ['Sipariş No:', talep.siparis_no, 'Tarih:', talep.created_at.strftime('%d.%m.%Y')],
         ['Departman:', talep.department.name if talep.department else '-', 'Talep Eden:', talep.talep_eden.name if talep.talep_eden else '-'],
     ]
-    
+
     info_table = Table(info_data, colWidths=[3*cm, 7*cm, 3*cm, 7*cm])
     info_table.setStyle(TableStyle([
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTNAME', (0,0), (-1,-1), FONT),
         ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
-        ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (0,0), (0,-1), FONT_BOLD),
+        ('FONTNAME', (2,0), (2,-1), FONT_BOLD),
         ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
         ('BACKGROUND', (0,0), (0,-1), colors.lightgrey),
         ('BACKGROUND', (2,0), (2,-1), colors.lightgrey),
@@ -332,8 +417,8 @@ def talep_pdf(talep_id):
     ]))
     elements.append(info_table)
     elements.append(Spacer(1, 0.5*cm))
-    
-    table_data = [['#', 'Malzeme Adi', 'Marka/Model', 'Tur', 'Birim', 'Miktar', 'Hedef', 'KW', 'Aciklama', 'Son Alim']]
+
+    table_data = [['#', 'Malzeme Adı', 'Marka/Model', 'Tür', 'Birim', 'Miktar', 'Hedef', 'KW', 'Açıklama', 'Son Alım']]
     for i, kalem in enumerate(talep.kalemler):
         son_alim = kalem.son_alinma_tarihi.strftime('%d.%m.%Y') if kalem.son_alinma_tarihi else '-'
         table_data.append([
@@ -352,9 +437,9 @@ def talep_pdf(talep_id):
     col_widths = [0.8*cm, 4.5*cm, 3.5*cm, 2.2*cm, 1.3*cm, 1.3*cm, 1.6*cm, 1.3*cm, 3.5*cm, 2*cm]
     main_table = Table(table_data, colWidths=col_widths, repeatRows=1)
     main_table.setStyle(TableStyle([
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTNAME', (0,0), (-1,-1), FONT),
         ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2d7a3a')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
@@ -364,17 +449,17 @@ def talep_pdf(talep_id):
     ]))
     elements.append(main_table)
     elements.append(Spacer(1, 1*cm))
-    
+
     imza_data = [
-        ['Talebi Olusturan', 'Departman Muduru Onayi', 'Genel Mudur Onayi'],
+        ['Talebi Oluşturan', 'Departman Müdürü Onayı', 'Genel Müdür Onayı'],
         ['\n\n\n' + (talep.talep_eden.name if talep.talep_eden else ''), '\n\n\nAd Soyad', '\n\n\nAd Soyad'],
-        ['Imza / Tarih', 'Imza / Tarih', 'Imza / Tarih'],
+        ['İmza / Tarih', 'İmza / Tarih', 'İmza / Tarih'],
     ]
     imza_table = Table(imza_data, colWidths=[8*cm, 8*cm, 8*cm])
     imza_table.setStyle(TableStyle([
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTNAME', (0,0), (-1,-1), FONT),
         ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
         ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -472,3 +557,17 @@ def son_alim_api():
             'siparis_no': kalem.son_siparis_no or ''
         })
     return jsonify(None)
+
+@main.route('/api/kullanim-sikligi')
+@login_required
+def kullanim_sikligi_api():
+    from sqlalchemy import func
+    malzeme_adi = request.args.get('malzeme_adi', '').strip()
+    if not malzeme_adi:
+        return jsonify(None)
+    toplam = (TalepKalem.query
+              .join(TalepFormu)
+              .filter(func.lower(TalepKalem.malzeme_adi) == func.lower(malzeme_adi))
+              .filter(TalepFormu.durum == 'teslim_alindi')
+              .count())
+    return jsonify({'toplam': toplam})
