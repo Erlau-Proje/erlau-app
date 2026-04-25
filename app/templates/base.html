@@ -11,8 +11,7 @@
 <nav class="erlau-green text-white shadow-lg">
 <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
 <div class="flex items-center gap-4">
-<div class="w-8 h-8 bg-white rounded flex items-center justify-center"><span class="erlau-green-text font-bold text-sm">E</span></div>
-<span class="font-semibold text-lg">Erlau Satın Alma</span>
+<img src="{{ url_for('static', filename='logo.svg') }}" alt="Erlau" class="h-8 bg-white rounded px-1 py-0.5">
 <div class="hidden md:flex gap-4 ml-6">
 <a href="{{ url_for('main.dashboard') }}" class="hover:text-green-200 text-sm">Ana Sayfa</a>
 <a href="{{ url_for('main.yeni_talep') }}" class="hover:text-green-200 text-sm">Yeni Talep</a>
