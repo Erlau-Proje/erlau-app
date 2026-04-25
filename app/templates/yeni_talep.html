@@ -38,6 +38,7 @@
           <tr>
             <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">#</th>
             <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">Malzeme adı *</th>
+            <th class="px-2 py-2 text-left text-xs font-medium text-gray-500 text-blue-600">Son Alım</th>
             <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">Marka/model</th>
             <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">Tür</th>
             <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">Birim</th>
@@ -54,7 +55,8 @@
         <tbody id="malzeme-tbody">
           <tr class="border-t border-gray-100">
             <td class="px-2 py-2 text-gray-400 text-xs">1</td>
-            <td class="px-2 py-2"><input type="text" name="malzeme_adi[]" class="w-32 border border-gray-200 rounded px-2 py-1 text-xs"></td>
+            <td class="px-2 py-2"><input type="text" name="malzeme_adi[]" class="malzeme-adi-input w-32 border border-gray-200 rounded px-2 py-1 text-xs"></td>
+            <td class="px-2 py-2 son-alim-cell"><span class="text-xs text-gray-400 italic">—</span></td>
             <td class="px-2 py-2"><input type="text" name="marka_model[]" class="w-28 border border-gray-200 rounded px-2 py-1 text-xs"></td>
             <td class="px-2 py-2"><select name="malzeme_turu[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option>Hammadde</option><option>Sarf malzeme</option><option>Yedek parça</option><option>Ambalaj</option><option>Demirbaş</option><option>Fason</option><option>Diğer</option></select></td>
             <td class="px-2 py-2"><select name="birim[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option>Adet</option><option>KG</option><option>Boy</option><option>M2</option><option>Metre</option><option>Paket</option></select></td>
@@ -79,6 +81,34 @@
 </form>
 
 <script>
+function sonAlimSorgula(input) {
+  const tr = input.closest('tr');
+  const cell = tr.querySelector('.son-alim-cell');
+  const malzemeAdi = input.value.trim();
+  if (!malzemeAdi) {
+    cell.innerHTML = '<span class="text-xs text-gray-400 italic">—</span>';
+    return;
+  }
+  cell.innerHTML = '<span class="text-xs text-gray-300">...</span>';
+  fetch('/api/son-alim?malzeme_adi=' + encodeURIComponent(malzemeAdi))
+    .then(r => r.json())
+    .then(data => {
+      if (data) {
+        cell.innerHTML = '<span class="text-xs text-blue-600 font-medium">' + data.tarih + '</span>' +
+          (data.siparis_no ? '<br><span class="text-xs text-gray-400">' + data.siparis_no + '</span>' : '');
+      } else {
+        cell.innerHTML = '<span class="text-xs text-gray-300">İlk alım</span>';
+      }
+    })
+    .catch(() => { cell.innerHTML = '<span class="text-xs text-gray-400 italic">—</span>'; });
+}
+
+document.getElementById('malzeme-tbody').addEventListener('blur', function(e) {
+  if (e.target.classList.contains('malzeme-adi-input')) {
+    sonAlimSorgula(e.target);
+  }
+}, true);
+
 let satirSayisi = 1;
 function satirEkle() {
   satirSayisi++;
@@ -87,7 +117,8 @@ function satirEkle() {
   tr.className = 'border-t border-gray-100';
   tr.innerHTML = `
     <td class="px-2 py-2 text-gray-400 text-xs">${satirSayisi}</td>
-    <td class="px-2 py-2"><input type="text" name="malzeme_adi[]" class="w-32 border border-gray-200 rounded px-2 py-1 text-xs"></td>
+    <td class="px-2 py-2"><input type="text" name="malzeme_adi[]" class="malzeme-adi-input w-32 border border-gray-200 rounded px-2 py-1 text-xs"></td>
+    <td class="px-2 py-2 son-alim-cell"><span class="text-xs text-gray-400 italic">—</span></td>
     <td class="px-2 py-2"><input type="text" name="marka_model[]" class="w-28 border border-gray-200 rounded px-2 py-1 text-xs"></td>
     <td class="px-2 py-2"><select name="malzeme_turu[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option>Hammadde</option><option>Sarf malzeme</option><option>Yedek parça</option><option>Ambalaj</option><option>Demirbaş</option><option>Fason</option><option>Diğer</option></select></td>
     <td class="px-2 py-2"><select name="birim[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option>Adet</option><option>KG</option><option>Boy</option><option>M2</option><option>Metre</option><option>Paket</option></select></td>

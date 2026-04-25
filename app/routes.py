@@ -323,8 +323,9 @@ def talep_pdf(talep_id):
     elements.append(info_table)
     elements.append(Spacer(1, 0.5*cm))
     
-    table_data = [['#', 'Malzeme Adi', 'Marka/Model', 'Tur', 'Birim', 'Miktar', 'Hedef', 'KW', 'Aciklama']]
+    table_data = [['#', 'Malzeme Adi', 'Marka/Model', 'Tur', 'Birim', 'Miktar', 'Hedef', 'KW', 'Aciklama', 'Son Alim']]
     for i, kalem in enumerate(talep.kalemler):
+        son_alim = kalem.son_alinma_tarihi.strftime('%d.%m.%Y') if kalem.son_alinma_tarihi else '-'
         table_data.append([
             str(i+1),
             kalem.malzeme_adi or '',
@@ -335,9 +336,10 @@ def talep_pdf(talep_id):
             kalem.hedef or '',
             kalem.kw or '',
             kalem.aciklama or '',
+            son_alim,
         ])
-    
-    col_widths = [0.8*cm, 5*cm, 4*cm, 2.5*cm, 1.5*cm, 1.5*cm, 1.8*cm, 1.5*cm, 4*cm]
+
+    col_widths = [0.8*cm, 4.5*cm, 3.5*cm, 2.2*cm, 1.3*cm, 1.3*cm, 1.6*cm, 1.3*cm, 3.5*cm, 2*cm]
     main_table = Table(table_data, colWidths=col_widths, repeatRows=1)
     main_table.setStyle(TableStyle([
         ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
@@ -431,6 +433,30 @@ def durum_guncelle(talep_id):
     gecerli_durumlar = ['bekliyor', 'fiyatlandirildi', 'onaylandi', 'yolda', 'teslim_alindi', 'iptal']
     if yeni_durum in gecerli_durumlar:
         talep.durum = yeni_durum
+        if yeni_durum == 'teslim_alindi':
+            now = datetime.utcnow()
+            for kalem in talep.kalemler:
+                kalem.son_alinma_tarihi = now
+                kalem.son_siparis_no = talep.siparis_no
         db.session.commit()
         flash('Durum güncellendi.', 'success')
     return redirect(url_for('satin_alma.panel'))
+
+@main.route('/api/son-alim')
+@login_required
+def son_alim_api():
+    malzeme_adi = request.args.get('malzeme_adi', '').strip()
+    if not malzeme_adi:
+        return jsonify(None)
+    from sqlalchemy import func
+    kalem = (TalepKalem.query
+             .filter(func.lower(TalepKalem.malzeme_adi) == func.lower(malzeme_adi))
+             .filter(TalepKalem.son_alinma_tarihi.isnot(None))
+             .order_by(TalepKalem.son_alinma_tarihi.desc())
+             .first())
+    if kalem:
+        return jsonify({
+            'tarih': kalem.son_alinma_tarihi.strftime('%d.%m.%Y'),
+            'siparis_no': kalem.son_siparis_no or ''
+        })
+    return jsonify(None)

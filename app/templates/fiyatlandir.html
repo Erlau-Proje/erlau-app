@@ -26,6 +26,7 @@
             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">Toplam</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Vade (gün)</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Termin (gün)</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-blue-500">Son Alım</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -73,6 +74,14 @@
                 value="{{ kalem.termin_gun or '' }}"
                 class="w-16 border border-gray-200 rounded px-2 py-1 text-xs text-center"
                 placeholder="7">
+            </td>
+            <td class="px-4 py-3 text-center text-xs">
+              {% if kalem.son_alinma_tarihi %}
+                <span class="text-blue-600 font-medium">{{ kalem.son_alinma_tarihi.strftime('%d.%m.%Y') }}</span>
+                {% if kalem.son_siparis_no %}<br><span class="text-gray-400">{{ kalem.son_siparis_no }}</span>{% endif %}
+              {% else %}
+                <span class="text-gray-300">İlk alım</span>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
