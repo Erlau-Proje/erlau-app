@@ -365,6 +365,30 @@ def talep_pdf(talep_id):
     response.headers['Content-Disposition'] = f'inline; filename=talep_{talep.siparis_no}.pdf'
     return response
 
+@satin_alma.route('/fiyatlandir/<int:talep_id>', methods=['GET', 'POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def fiyatlandir(talep_id):
+    talep = TalepFormu.query.get_or_404(talep_id)
+    tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
+    if request.method == 'POST':
+        for kalem in talep.kalemler:
+            prefix = f'kalem_{kalem.id}_'
+            br_fiyat = request.form.get(prefix + 'br_fiyat')
+            kalem.tedarikci_id = request.form.get(prefix + 'tedarikci_id') or None
+            kalem.br_fiyat = float(br_fiyat) if br_fiyat else None
+            kalem.toplam_fiyat = kalem.br_fiyat * kalem.miktar if kalem.br_fiyat and kalem.miktar else None
+            kalem.para_birimi = request.form.get(prefix + 'para_birimi', 'TL')
+            vade = request.form.get(prefix + 'vade_gun')
+            termin = request.form.get(prefix + 'termin_gun')
+            kalem.vade_gun = int(vade) if vade else None
+            kalem.termin_gun = int(termin) if termin else None
+        talep.durum = 'fiyatlandirildi'
+        db.session.commit()
+        flash('Fiyatlandırma kaydedildi.', 'success')
+        return redirect(url_for('satin_alma.panel'))
+    return render_template('fiyatlandir.html', talep=talep, tedarikciler=tedarikciler)
+
 @satin_alma.route('/yolda/<int:talep_id>', methods=['POST'])
 @login_required
 @role_required('satinalma', 'admin')

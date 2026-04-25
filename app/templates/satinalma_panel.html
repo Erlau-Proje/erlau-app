@@ -12,6 +12,7 @@
       <a href="{{ url_for('satin_alma.panel', durum='onaylandi') }}" class="px-3 py-1.5 rounded-full text-xs font-medium {% if secili_durum == 'onaylandi' %}bg-green-600 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">Onaylandı</a>
       <a href="{{ url_for('satin_alma.panel', durum='yolda') }}" class="px-3 py-1.5 rounded-full text-xs font-medium {% if secili_durum == 'yolda' %}bg-blue-600 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">Yolda</a>
       <a href="{{ url_for('satin_alma.panel', durum='teslim_alindi') }}" class="px-3 py-1.5 rounded-full text-xs font-medium {% if secili_durum == 'teslim_alindi' %}bg-gray-600 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">Teslim Alındı</a>
+      <a href="{{ url_for('satin_alma.panel', durum='fiyatlandirildi') }}" class="px-3 py-1.5 rounded-full text-xs font-medium {% if secili_durum == 'fiyatlandirildi' %}bg-purple-600 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">Fiyatlandırıldı</a>
       <a href="{{ url_for('satin_alma.panel', durum='iptal') }}" class="px-3 py-1.5 rounded-full text-xs font-medium {% if secili_durum == 'iptal' %}bg-red-500 text-white{% else %}bg-gray-100 text-gray-600{% endif %}">İptal</a>
     </div>
     <form method="GET" class="flex gap-2">
@@ -52,6 +53,7 @@
             {% elif talep.durum == 'onaylandi' %}<span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">Onaylandı</span>
             {% elif talep.durum == 'yolda' %}<span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">Yolda</span>
             {% elif talep.durum == 'teslim_alindi' %}<span class="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs">Teslim Alındı</span>
+            {% elif talep.durum == 'fiyatlandirildi' %}<span class="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs">Fiyatlandırıldı</span>
             {% elif talep.durum == 'iptal' %}<span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs">İptal</span>
             {% else %}<span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">{{ talep.durum }}</span>{% endif %}
           </td>
@@ -59,6 +61,12 @@
             <div class="flex gap-2 justify-center flex-wrap">
               <a href="{{ url_for('main.talep_detay', talep_id=talep.id) }}" class="text-xs border border-gray-300 px-2 py-1 rounded hover:bg-gray-50">Detay</a>
               {% if talep.durum == 'bekliyor' %}
+              <a href="{{ url_for('satin_alma.fiyatlandir', talep_id=talep.id) }}" class="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700">Fiyatlandır</a>
+              <form method="POST" action="{{ url_for('satin_alma.iptal', talep_id=talep.id) }}" class="inline">
+                <button type="submit" class="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">İptal</button>
+              </form>
+              {% elif talep.durum == 'fiyatlandirildi' %}
+              <a href="{{ url_for('satin_alma.fiyatlandir', talep_id=talep.id) }}" class="text-xs border border-purple-400 text-purple-600 px-2 py-1 rounded hover:bg-purple-50">Düzenle</a>
               <form method="POST" action="{{ url_for('satin_alma.onayla', talep_id=talep.id) }}" class="inline">
                 <button type="submit" class="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700">Onayla</button>
               </form>
