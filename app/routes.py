@@ -62,12 +62,11 @@ def dashboard():
 @main.route('/talep/yeni', methods=['GET', 'POST'])
 @login_required
 def yeni_talep():
-    departmanlar = Department.query.all()
     if request.method == 'POST':
         talep = TalepFormu(
             siparis_no=generate_siparis_no(),
             talep_eden_id=current_user.id,
-            department_id=request.form.get('department_id'),
+            department_id=current_user.department_id,
             durum='bekliyor'
         )
         db.session.add(talep)
@@ -107,7 +106,7 @@ def yeni_talep():
         flash(f'Talep {talep.siparis_no} başarıyla oluşturuldu!', 'success')
         return redirect(url_for('main.dashboard'))
 
-    return render_template('yeni_talep.html', departmanlar=departmanlar)
+    return render_template('yeni_talep.html')
 
 @main.route('/talep/<int:talep_id>')
 @login_required

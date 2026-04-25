@@ -11,11 +11,15 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Departman</label>
-        <select name="department_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          {% for dep in departmanlar %}
-          <option value="{{ dep.id }}" {% if dep.id == current_user.department_id %}selected{% endif %}>{{ dep.name }}</option>
-          {% endfor %}
-        </select>
+        <p class="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-700">
+          {{ current_user.department.name if current_user.department else '-' }}
+        </p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Talep Eden</label>
+        <p class="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-700">
+          {{ current_user.name }}
+        </p>
       </div>
     </div>
   </div>
