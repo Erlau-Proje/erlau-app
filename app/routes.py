@@ -179,6 +179,32 @@ def kullanici_ekle():
     flash(f'{name} başarıyla eklendi.', 'success')
     return redirect(url_for('admin.kullanicilar'))
 
+@admin.route('/kullanici/<int:user_id>/duzenle', methods=['POST'])
+@login_required
+@role_required('admin')
+def kullanici_duzenle(user_id):
+    user = User.query.get_or_404(user_id)
+    user.name = request.form.get('name')
+    user.role = request.form.get('role')
+    user.department_id = request.form.get('department_id') or None
+    user.is_active = request.form.get('is_active') == '1'
+    db.session.commit()
+    flash(f'{user.name} güncellendi.', 'success')
+    return redirect(url_for('admin.kullanicilar'))
+
+@admin.route('/kullanici/<int:user_id>/sil', methods=['POST'])
+@login_required
+@role_required('admin')
+def kullanici_sil(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash('Kendi hesabınızı silemezsiniz.', 'danger')
+        return redirect(url_for('admin.kullanicilar'))
+    user.is_active = False
+    db.session.commit()
+    flash(f'{user.name} pasife alındı.', 'warning')
+    return redirect(url_for('admin.kullanicilar'))
+
 @admin.route('/tedarikci')
 @login_required
 @role_required('admin', 'satinalma')
@@ -205,6 +231,35 @@ def tedarikci_ekle():
     db.session.add(t)
     db.session.commit()
     flash('Tedarikçi eklendi.', 'success')
+    return redirect(url_for('admin.tedarikci_listesi'))
+
+@admin.route('/tedarikci/<int:t_id>/duzenle', methods=['POST'])
+@login_required
+@role_required('admin', 'satinalma')
+def tedarikci_duzenle(t_id):
+    t = Tedarikci.query.get_or_404(t_id)
+    t.name = request.form.get('name')
+    t.unvan = request.form.get('unvan')
+    t.vergi_no = request.form.get('vergi_no')
+    t.iletisim_kisi = request.form.get('iletisim_kisi')
+    t.email = request.form.get('email')
+    t.telefon = request.form.get('telefon')
+    t.kategori = request.form.get('kategori')
+    t.para_birimi = request.form.get('para_birimi', 'TL')
+    t.vade_gun = int(request.form.get('vade_gun', 30))
+    t.is_active = request.form.get('is_active') == '1'
+    db.session.commit()
+    flash(f'{t.name} güncellendi.', 'success')
+    return redirect(url_for('admin.tedarikci_listesi'))
+
+@admin.route('/tedarikci/<int:t_id>/sil', methods=['POST'])
+@login_required
+@role_required('admin', 'satinalma')
+def tedarikci_sil(t_id):
+    t = Tedarikci.query.get_or_404(t_id)
+    t.is_active = False
+    db.session.commit()
+    flash(f'{t.name} pasife alındı.', 'warning')
     return redirect(url_for('admin.tedarikci_listesi'))
 
 from flask import make_response

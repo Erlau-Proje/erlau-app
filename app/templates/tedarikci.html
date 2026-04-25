@@ -17,6 +17,7 @@
           <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Para birimi</th>
           <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Vade</th>
           <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Durum</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">İşlem</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-50">
@@ -34,10 +35,18 @@
             {% if t.is_active %}<span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">Aktif</span>
             {% else %}<span class="bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs">Pasif</span>{% endif %}
           </td>
+          <td class="px-4 py-3 text-center">
+            <button onclick="tedarikciDuzenle({{ t.id }}, '{{ t.name|replace("'", "\\'") }}', '{{ t.unvan or '' }}', '{{ t.vergi_no or '' }}', '{{ t.iletisim_kisi or '' }}', '{{ t.email or '' }}', '{{ t.telefon or '' }}', '{{ t.kategori or '' }}', '{{ t.para_birimi }}', {{ t.vade_gun }}, {{ '1' if t.is_active else '0' }})"
+              class="text-xs text-blue-600 hover:underline mr-2">Düzenle</button>
+            <form method="POST" action="{{ url_for('admin.tedarikci_sil', t_id=t.id) }}" class="inline"
+              onsubmit="return confirm('{{ t.name }} pasife alınacak. Emin misiniz?')">
+              <button type="submit" class="text-xs text-red-500 hover:underline">Pasife Al</button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
         {% if not tedarikciler %}
-        <tr><td colspan="6" class="px-4 py-12 text-center text-gray-400">Henüz tedarikçi eklenmedi.</td></tr>
+        <tr><td colspan="7" class="px-4 py-12 text-center text-gray-400">Henüz tedarikçi eklenmedi.</td></tr>
         {% endif %}
       </tbody>
     </table>
@@ -93,4 +102,92 @@
     </form>
   </div>
 </div>
+
+<!-- Düzenleme Modalı -->
+<div id="editModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-md mx-4 max-h-screen overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold text-gray-800">Tedarikçi Düzenle</h3>
+      <button onclick="modalKapat()" class="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    </div>
+    <form id="editForm" method="POST">
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Firma adı *</label>
+          <input type="text" name="name" id="edit_name" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Firma ünvanı</label>
+          <input type="text" name="unvan" id="edit_unvan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Vergi no</label>
+          <input type="text" name="vergi_no" id="edit_vergi" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">İletişim kişisi</label>
+          <input type="text" name="iletisim_kisi" id="edit_iletisim" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">E-posta</label>
+          <input type="email" name="email" id="edit_email" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Telefon</label>
+          <input type="text" name="telefon" id="edit_telefon" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kategori</label>
+          <input type="text" name="kategori" id="edit_kategori" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Para birimi</label>
+            <select name="para_birimi" id="edit_para" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <option>TL</option><option>EUR</option><option>USD</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Vade (gün)</label>
+            <input type="number" name="vade_gun" id="edit_vade" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Durum</label>
+          <select name="is_active" id="edit_active" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="1">Aktif</option>
+            <option value="0">Pasif</option>
+          </select>
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="modalKapat()" class="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">İptal</button>
+          <button type="submit" class="flex-1 erlau-green text-white py-2 rounded-lg text-sm font-medium hover:opacity-90">Kaydet</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function tedarikciDuzenle(id, name, unvan, vergi, iletisim, email, telefon, kategori, para, vade, isActive) {
+  document.getElementById('editForm').action = '/admin/tedarikci/' + id + '/duzenle';
+  document.getElementById('edit_name').value = name;
+  document.getElementById('edit_unvan').value = unvan;
+  document.getElementById('edit_vergi').value = vergi;
+  document.getElementById('edit_iletisim').value = iletisim;
+  document.getElementById('edit_email').value = email;
+  document.getElementById('edit_telefon').value = telefon;
+  document.getElementById('edit_kategori').value = kategori;
+  document.getElementById('edit_para').value = para;
+  document.getElementById('edit_vade').value = vade;
+  document.getElementById('edit_active').value = isActive;
+  document.getElementById('editModal').classList.remove('hidden');
+}
+function modalKapat() {
+  document.getElementById('editModal').classList.add('hidden');
+}
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) modalKapat();
+});
+</script>
 {% endblock %}
