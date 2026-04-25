@@ -266,12 +266,13 @@ from flask import make_response
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.graphics.shapes import Drawing, String, Line
+from reportlab.graphics import renderPDF
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import io
-import os
 
 @main.route('/talep/<int:talep_id>/pdf')
 @login_required
@@ -289,11 +290,11 @@ def talep_pdf(talep_id):
     normal_style = ParagraphStyle('normal', fontSize=9, fontName='Helvetica')
     small_style = ParagraphStyle('small', fontSize=8, fontName='Helvetica')
 
-    logo_path = os.path.join(os.path.dirname(__file__), 'static', 'logo.svg')
-    header_data = [[
-        Image(logo_path, width=5*cm, height=1.6*cm) if os.path.exists(logo_path) else '',
-        Paragraph('SATIN ALMA TALEP FORMU', header_style)
-    ]]
+    logo_drawing = Drawing(140, 40)
+    logo_drawing.add(String(0, 14, 'ERLAU', fontSize=28, fontName='Helvetica-Bold', fillColor=colors.HexColor('#3a8a00')))
+    logo_drawing.add(String(2, 4, 'EINE MARKE DER RUD GRUPPE', fontSize=7, fontName='Helvetica-Bold', fillColor=colors.black))
+
+    header_data = [[logo_drawing, Paragraph('SATIN ALMA TALEP FORMU', header_style)]]
     header_table = Table(header_data, colWidths=[6*cm, None])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
