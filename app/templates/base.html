@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Erlau</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>.erlau-green{background-color:#2d7a3a}.erlau-green-text{color:#2d7a3a}</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+{% if current_user.is_authenticated %}
+<nav class="erlau-green text-white shadow-lg">
+<div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 bg-white rounded flex items-center justify-center"><span class="erlau-green-text font-bold text-sm">E</span></div>
+<span class="font-semibold text-lg">Erlau Satın Alma</span>
+<div class="hidden md:flex gap-4 ml-6">
+<a href="{{ url_for('main.dashboard') }}" class="hover:text-green-200 text-sm">Ana Sayfa</a>
+<a href="{{ url_for('main.yeni_talep') }}" class="hover:text-green-200 text-sm">Yeni Talep</a>
+{% if current_user.role in ['satinalma', 'admin', 'gm'] %}<a href="{{ url_for('satin_alma.panel') }}" class="hover:text-green-200 text-sm">Satın Alma Paneli</a>{% endif %}
+{% if current_user.role == 'admin' %}<a href="{{ url_for('admin.kullanicilar') }}" class="hover:text-green-200 text-sm">Kullanıcılar</a>
+<a href="{{ url_for('admin.tedarikci_listesi') }}" class="hover:text-green-200 text-sm">Tedarikçiler</a>{% endif %}
+</div></div>
+<div class="flex items-center gap-3">
+<span class="text-sm text-green-100">{{ current_user.name }}</span>
+<a href="{{ url_for('auth.logout') }}" class="bg-white text-green-700 px-3 py-1 rounded text-sm">Çıkış</a>
+</div></div></nav>
+{% endif %}
+<div class="max-w-7xl mx-auto px-4 py-6">
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for category, message in messages %}
+<div class="mb-4 p-3 rounded {% if category == 'success' %}bg-green-100 text-green-800{% elif category == 'danger' %}bg-red-100 text-red-800{% else %}bg-yellow-100 text-yellow-800{% endif %}">{{ message }}</div>
+{% endfor %}{% endif %}{% endwith %}
+{% block content %}{% endblock %}
+</div></body></html>

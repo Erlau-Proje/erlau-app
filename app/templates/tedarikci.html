@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-semibold text-gray-800">Tedarikçi Yönetimi</h1>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="md:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100">
+      <h2 class="font-medium text-gray-800">Tedarikçiler</h2>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Tedarikçi adı</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">İletişim</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Kategori</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Para birimi</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Vade</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Durum</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for t in tedarikciler %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3">
+            <p class="font-medium text-green-700">{{ t.name }}</p>
+            <p class="text-xs text-gray-400">{{ t.email or '' }}</p>
+          </td>
+          <td class="px-4 py-3 text-gray-500 text-xs">{{ t.iletisim_kisi or '-' }}<br>{{ t.telefon or '' }}</td>
+          <td class="px-4 py-3 text-gray-500 text-xs">{{ t.kategori or '-' }}</td>
+          <td class="px-4 py-3 text-center font-medium text-xs">{{ t.para_birimi }}</td>
+          <td class="px-4 py-3 text-center text-xs">{{ t.vade_gun }} gün</td>
+          <td class="px-4 py-3 text-center">
+            {% if t.is_active %}<span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">Aktif</span>
+            {% else %}<span class="bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs">Pasif</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not tedarikciler %}
+        <tr><td colspan="6" class="px-4 py-12 text-center text-gray-400">Henüz tedarikçi eklenmedi.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+    <h2 class="font-medium text-gray-800 mb-4">Yeni Tedarikçi Ekle</h2>
+    <form method="POST" action="{{ url_for('admin.tedarikci_ekle') }}">
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Firma adı *</label>
+          <input type="text" name="name" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Firma ünvanı</label>
+          <input type="text" name="unvan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Vergi no</label>
+          <input type="text" name="vergi_no" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">İletişim kişisi</label>
+          <input type="text" name="iletisim_kisi" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">E-posta</label>
+          <input type="email" name="email" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Telefon</label>
+          <input type="text" name="telefon" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kategori</label>
+          <input type="text" name="kategori" placeholder="Hammadde, Sarf malzeme..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Para birimi</label>
+            <select name="para_birimi" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <option>TL</option><option>EUR</option><option>USD</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Vade (gün)</label>
+            <input type="number" name="vade_gun" value="30" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          </div>
+        </div>
+        <button type="submit" class="w-full erlau-green text-white py-2 rounded-lg text-sm font-medium hover:opacity-90">
+          Tedarikçi Ekle
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
