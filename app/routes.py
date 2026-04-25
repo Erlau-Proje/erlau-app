@@ -408,3 +408,16 @@ def teslim(talep_id):
     db.session.commit()
     flash('Sipariş teslim alındı olarak işaretlendi.', 'success')
     return redirect(url_for('satin_alma.panel'))
+
+@satin_alma.route('/durum/<int:talep_id>', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def durum_guncelle(talep_id):
+    talep = TalepFormu.query.get_or_404(talep_id)
+    yeni_durum = request.form.get('durum')
+    gecerli_durumlar = ['bekliyor', 'fiyatlandirildi', 'onaylandi', 'yolda', 'teslim_alindi', 'iptal']
+    if yeni_durum in gecerli_durumlar:
+        talep.durum = yeni_durum
+        db.session.commit()
+        flash('Durum güncellendi.', 'success')
+    return redirect(url_for('satin_alma.panel'))

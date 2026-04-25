@@ -50,12 +50,18 @@
         <td class="px-6 py-3">
           {% if talep.durum == 'bekliyor' %}
           <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs">Onay Bekliyor</span>
+          {% elif talep.durum == 'fiyatlandirildi' %}
+          <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs">Fiyatlandırıldı</span>
           {% elif talep.durum == 'onaylandi' %}
           <span class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">Onaylandı</span>
+          {% elif talep.durum == 'yolda' %}
+          <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">Yolda</span>
+          {% elif talep.durum == 'teslim_alindi' %}
+          <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs">Teslim Alındı</span>
           {% elif talep.durum == 'iptal' %}
           <span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs">İptal</span>
           {% else %}
-          <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">{{ talep.durum }}</span>
+          <span class="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">{{ talep.durum }}</span>
           {% endif %}
         </td>
         <td class="px-6 py-3">
