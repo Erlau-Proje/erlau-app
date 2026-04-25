@@ -49,9 +49,14 @@ def logout():
 def dashboard():
     if current_user.role in ['satinalma', 'admin']:
         return redirect(url_for('satin_alma.panel'))
-    talepler = TalepFormu.query.filter_by(
-        talep_eden_id=current_user.id
-    ).order_by(TalepFormu.created_at.desc()).limit(10).all()
+    if current_user.role == 'departman_yoneticisi':
+        talepler = TalepFormu.query.filter_by(
+            department_id=current_user.department_id
+        ).order_by(TalepFormu.created_at.desc()).all()
+    else:
+        talepler = TalepFormu.query.filter_by(
+            talep_eden_id=current_user.id
+        ).order_by(TalepFormu.created_at.desc()).limit(10).all()
     return render_template('dashboard.html', talepler=talepler)
 
 @main.route('/talep/yeni', methods=['GET', 'POST'])
@@ -79,6 +84,9 @@ def yeni_talep():
         hedefler = request.form.getlist('hedef[]')
         kwler = request.form.getlist('kw[]')
         aciklamalar = request.form.getlist('aciklama[]')
+        kullanim_amaclari = request.form.getlist('kullanim_amaci[]')
+        kullanilan_alanlar = request.form.getlist('kullanilan_alan[]')
+        proje_makineler = request.form.getlist('proje_makine[]')
 
         for i, ad in enumerate(malzeme_adlari):
             if ad.strip():
@@ -90,6 +98,9 @@ def yeni_talep():
                     birim=birimler[i] if i < len(birimler) else 'Adet',
                     miktar=float(miktarlar[i]) if i < len(miktarlar) and miktarlar[i] else 0,
                     hedef=hedefler[i] if i < len(hedefler) else 'siparis',
+                    kullanim_amaci=kullanim_amaclari[i] if i < len(kullanim_amaclari) else '',
+                    kullanilan_alan=kullanilan_alanlar[i] if i < len(kullanilan_alanlar) else '',
+                    proje_makine=proje_makineler[i] if i < len(proje_makineler) else '',
                     kw=kwler[i] if i < len(kwler) else '',
                     aciklama=aciklamalar[i] if i < len(aciklamalar) else ''
                 )
@@ -199,3 +210,128 @@ def tedarikci_ekle():
     db.session.commit()
     flash('Tedarikçi eklendi.', 'success')
     return redirect(url_for('admin.tedarikci_listesi'))
+
+from flask import make_response
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib import colors
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import io
+
+@main.route('/talep/<int:talep_id>/pdf')
+@login_required
+def talep_pdf(talep_id):
+    talep = TalepFormu.query.get_or_404(talep_id)
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
+        rightMargin=1.5*cm, leftMargin=1.5*cm,
+        topMargin=1.5*cm, bottomMargin=1.5*cm)
+    
+    styles = getSampleStyleSheet()
+    elements = []
+    
+    header_style = ParagraphStyle('header', fontSize=14, fontName='Helvetica-Bold', spaceAfter=6)
+    normal_style = ParagraphStyle('normal', fontSize=9, fontName='Helvetica')
+    small_style = ParagraphStyle('small', fontSize=8, fontName='Helvetica')
+    
+    elements.append(Paragraph('ERLAU - SATIN ALMA TALEP FORMU', header_style))
+    elements.append(Spacer(1, 0.3*cm))
+    
+    info_data = [
+        ['Siparis No:', talep.siparis_no, 'Tarih:', talep.created_at.strftime('%d.%m.%Y')],
+        ['Departman:', talep.department.name if talep.department else '-', 'Talep Eden:', talep.talep_eden.name if talep.talep_eden else '-'],
+        ['Kullanim Amaci:', talep.kullanim_amaci or '-', 'Kullanilan Alan:', talep.kullanilan_alan or '-'],
+        ['Proje/Makine:', talep.proje_makine or '-', '', ''],
+    ]
+    
+    info_table = Table(info_data, colWidths=[3*cm, 7*cm, 3*cm, 7*cm])
+    info_table.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (2,0), (2,-1), 'Helvetica-Bold'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('BACKGROUND', (0,0), (0,-1), colors.lightgrey),
+        ('BACKGROUND', (2,0), (2,-1), colors.lightgrey),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 0.5*cm))
+    
+    table_data = [['#', 'Malzeme Adi', 'Marka/Model', 'Tur', 'Birim', 'Miktar', 'Hedef', 'KW', 'Aciklama']]
+    for i, kalem in enumerate(talep.kalemler):
+        table_data.append([
+            str(i+1),
+            kalem.malzeme_adi or '',
+            kalem.marka_model or '',
+            kalem.malzeme_turu or '',
+            kalem.birim or '',
+            str(kalem.miktar or ''),
+            kalem.hedef or '',
+            kalem.kw or '',
+            kalem.aciklama or '',
+        ])
+    
+    col_widths = [0.8*cm, 5*cm, 4*cm, 2.5*cm, 1.5*cm, 1.5*cm, 1.8*cm, 1.5*cm, 4*cm]
+    main_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    main_table.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2d7a3a')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f5f5f5')]),
+        ('PADDING', (0,0), (-1,-1), 4),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    elements.append(main_table)
+    elements.append(Spacer(1, 1*cm))
+    
+    imza_data = [
+        ['Talebi Olusturan', 'Departman Muduru Onayi', 'Genel Mudur Onayi'],
+        ['\n\n\n' + (talep.talep_eden.name if talep.talep_eden else ''), '\n\n\nAd Soyad', '\n\n\nAd Soyad'],
+        ['Imza / Tarih', 'Imza / Tarih', 'Imza / Tarih'],
+    ]
+    imza_table = Table(imza_data, colWidths=[8*cm, 8*cm, 8*cm])
+    imza_table.setStyle(TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('PADDING', (0,0), (-1,-1), 6),
+    ]))
+    elements.append(imza_table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    
+    response = make_response(buffer.read())
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'inline; filename=talep_{talep.siparis_no}.pdf'
+    return response
+
+@satin_alma.route('/yolda/<int:talep_id>', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def yolda(talep_id):
+    talep = TalepFormu.query.get_or_404(talep_id)
+    talep.durum = 'yolda'
+    db.session.commit()
+    flash('Sipariş yolda olarak işaretlendi.', 'success')
+    return redirect(url_for('satin_alma.panel'))
+
+@satin_alma.route('/teslim/<int:talep_id>', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teslim(talep_id):
+    talep = TalepFormu.query.get_or_404(talep_id)
+    talep.durum = 'teslim_alindi'
+    db.session.commit()
+    flash('Sipariş teslim alındı olarak işaretlendi.', 'success')
+    return redirect(url_for('satin_alma.panel'))

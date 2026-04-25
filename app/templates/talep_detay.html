@@ -5,7 +5,8 @@
     <h1 class="text-2xl font-semibold text-gray-800">{{ talep.siparis_no }}</h1>
     <p class="text-gray-500 text-sm">{{ talep.created_at.strftime('%d.%m.%Y %H:%M') }} · {{ talep.talep_eden.name }}</p>
   </div>
-  <a href="{{ url_for('main.dashboard') }}" class="text-sm text-gray-500 hover:underline">← Geri</a>
+  <a href="{{ url_for('main.dashboard') }}" class="text-sm text-gray-500 hover:underline"><a href="{{ url_for('main.talep_pdf', talep_id=talep.id) }}" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:opacity-90" target="_blank">PDF İndir</a>
+          <a href="{{ url_for('main.dashboard') }}" class="text-sm text-gray-500 hover:underline">← Geri</a></a>
 </div>
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
   <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
