@@ -18,8 +18,8 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), default='personel')
-    department_id = db.Column(db.Integer, db.ForeignKey('department.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    department_id = db.Column(db.Integer, db.ForeignKey('department.id'), index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     is_active = db.Column(db.Boolean, default=True)
     unvan = db.Column(db.String(100))
     telefon = db.Column(db.String(20))
@@ -33,7 +33,7 @@ class User(db.Model, UserMixin):
 
 class Tedarikci(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
+    name = db.Column(db.String(200), nullable=False, index=True)
     unvan = db.Column(db.String(200))
     vergi_no = db.Column(db.String(50))
     email = db.Column(db.String(120))
@@ -48,22 +48,22 @@ class Tedarikci(db.Model):
 
 class TalepFormu(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    siparis_no = db.Column(db.String(50), unique=True, nullable=False)
-    talep_eden_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    department_id = db.Column(db.Integer, db.ForeignKey('department.id'))
-    durum = db.Column(db.String(30), default='bekliyor')
+    siparis_no = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    talep_eden_id = db.Column(db.Integer, db.ForeignKey('user.id'), index=True)
+    department_id = db.Column(db.Integer, db.ForeignKey('department.id'), index=True)
+    durum = db.Column(db.String(30), default='bekliyor', index=True)
     yolda_tarihi = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     kalemler = db.relationship('TalepKalem', backref='talep', lazy=True, cascade='all, delete-orphan')
     department = db.relationship('Department', foreign_keys=[department_id])
 
 class TalepKalem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    talep_id = db.Column(db.Integer, db.ForeignKey('talep_formu.id'))
-    malzeme_adi = db.Column(db.String(200), nullable=False)
+    talep_id = db.Column(db.Integer, db.ForeignKey('talep_formu.id'), index=True)
+    malzeme_adi = db.Column(db.String(200), nullable=False, index=True)
     marka_model = db.Column(db.String(200))
-    malzeme_turu = db.Column(db.String(50))
+    malzeme_turu = db.Column(db.String(50), index=True)
     birim = db.Column(db.String(20))
     miktar = db.Column(db.Float)
     hedef = db.Column(db.String(20), default='siparis')
@@ -86,25 +86,25 @@ class TalepKalem(db.Model):
 
 class Fatura(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    fatura_no = db.Column(db.String(100))
+    fatura_no = db.Column(db.String(100), index=True)
     fatura_tarihi = db.Column(db.Date)
     vade_tarihi = db.Column(db.Date)
-    tedarikci_id = db.Column(db.Integer, db.ForeignKey('tedarikci.id'))
+    tedarikci_id = db.Column(db.Integer, db.ForeignKey('tedarikci.id'), index=True)
     tedarikci = db.relationship('Tedarikci', foreign_keys=[tedarikci_id])
     tedarikci_adi_ham = db.Column(db.String(200))  # AI'dan gelen ham isim
     ara_toplam = db.Column(db.Float)
     kdv_tutari = db.Column(db.Float)
     genel_toplam = db.Column(db.Float)
     para_birimi = db.Column(db.String(10), default='TL')
-    durum = db.Column(db.String(30), default='bekliyor')  # bekliyor, onaylandi, odendi, iptal, iade
+    durum = db.Column(db.String(30), default='bekliyor', index=True)  # bekliyor, onaylandi, odendi, iptal, iade
     dosya_yolu = db.Column(db.String(300))
     ai_ham_veri = db.Column(db.Text)  # AI'dan gelen raw JSON
     ai_guvenskoru = db.Column(db.Float)  # 0-1 arası güven skoru
     notlar = db.Column(db.Text)
-    yukleme_tarihi = db.Column(db.DateTime, default=datetime.utcnow)
+    yukleme_tarihi = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     yukleyen_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     yukleyen = db.relationship('User', foreign_keys=[yukleyen_id])
-    talep_id = db.Column(db.Integer, db.ForeignKey('talep_formu.id'))
+    talep_id = db.Column(db.Integer, db.ForeignKey('talep_formu.id'), index=True)
     talep = db.relationship('TalepFormu', foreign_keys=[talep_id])
     kalemler = db.relationship('FaturaKalem', backref='fatura', lazy=True, cascade='all, delete-orphan')
     odeme_tarihi = db.Column(db.Date)
@@ -118,7 +118,7 @@ class Fatura(db.Model):
 
 class FaturaKalem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    fatura_id = db.Column(db.Integer, db.ForeignKey('fatura.id'))
+    fatura_id = db.Column(db.Integer, db.ForeignKey('fatura.id'), index=True)
     malzeme_adi = db.Column(db.String(300))
     miktar = db.Column(db.Float)
     birim = db.Column(db.String(20))
@@ -128,7 +128,7 @@ class FaturaKalem(db.Model):
     br_fiyat = db.Column(db.Float)
     kdv_orani = db.Column(db.Float)
     toplam_fiyat = db.Column(db.Float)
-    talep_kalem_id = db.Column(db.Integer, db.ForeignKey('talep_kalem.id'))
+    talep_kalem_id = db.Column(db.Integer, db.ForeignKey('talep_kalem.id'), index=True)
     eslesme_durumu = db.Column(db.String(20))  # eslesti, fiyat_farki, urun_farki, eslesmiyor
     eslesme_notu = db.Column(db.Text)
 
