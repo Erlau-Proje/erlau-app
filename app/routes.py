@@ -91,34 +91,34 @@ def dashboard():
 
     page = request.args.get('page', 1, type=int)
     if current_user.role == 'departman_yoneticisi':
+        base_filter = {'department_id': current_user.department_id}
         pagination = TalepFormu.query.options(
             selectinload(TalepFormu.kalemler),
             selectinload(TalepFormu.talep_eden),
-        ).filter_by(
-            department_id=current_user.department_id
-        ).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
+        ).filter_by(**base_filter).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
     else:
+        base_filter = {'talep_eden_id': current_user.id}
         pagination = TalepFormu.query.options(
             selectinload(TalepFormu.kalemler),
-        ).filter_by(
-            talep_eden_id=current_user.id
-        ).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
+        ).filter_by(**base_filter).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
 
     talepler = pagination.items
+
+    # Yolda siparişleri tüm kayıtlardan ayrıca çek (sayfa sınırından bağımsız)
+    yolda_talepler = TalepFormu.query.options(
+        selectinload(TalepFormu.kalemler)
+    ).filter_by(**base_filter, durum='yolda').order_by(TalepFormu.created_at.desc()).all()
+
     kalan_gunler = {}
-    for talep in talepler:
-        if talep.durum == 'yolda' and talep.yolda_tarihi:
+    for talep in yolda_talepler:
+        if talep.yolda_tarihi:
             termin = max((k.termin_gun or 0) for k in talep.kalemler) if talep.kalemler else 0
             if termin > 0:
                 bitis = talep.yolda_tarihi.date() + timedelta(days=termin)
                 kalan_gunler[talep.id] = (bitis - bugun).days
 
-    # İstatistikleri tüm kayıtlar üzerinden hesapla (sadece bu sayfadaki 20 üzerinden değil)
-    if current_user.role == 'departman_yoneticisi':
-        stats_q = TalepFormu.query.filter_by(department_id=current_user.department_id)
-    else:
-        stats_q = TalepFormu.query.filter_by(talep_eden_id=current_user.id)
-
+    # İstatistikler tüm kayıtlar üzerinden
+    stats_q = TalepFormu.query.filter_by(**base_filter)
     stats = {
         'toplam': stats_q.count(),
         'bekleyen': stats_q.filter(TalepFormu.durum.in_(('bekliyor', 'fiyatlandirildi'))).count(),
@@ -129,6 +129,7 @@ def dashboard():
 
     return render_template('dashboard.html',
         talepler=talepler,
+        yolda_talepler=yolda_talepler,
         kalan_gunler=kalan_gunler,
         pagination=pagination,
         stats=stats,
