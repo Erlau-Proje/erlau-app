@@ -427,7 +427,7 @@ def siparis_raporu():
     for row in ted_agg:
         name = ted_name_map.get(row.tedarikci_id, '—')
         if name not in ted_ozet:
-            ted_ozet[name] = {'adet': 0, 'toplam': 0, 'para': ''}
+            ted_ozet[name] = {'adet': 0, 'toplam': 0, 'para': '', 'id': row.tedarikci_id}
         ted_ozet[name]['adet'] += row.adet
         ted_ozet[name]['toplam'] += row.toplam or 0
         if row.para_birimi:

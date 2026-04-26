@@ -41,7 +41,6 @@
           <option value="iptal" {% if durum_filtre == 'iptal' %}selected{% endif %}>İptal</option>
         </select>
       </div>
-      {% if current_user.role in ['satinalma', 'admin', 'gm'] %}
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Tedarikçi</label>
         <select name="tedarikci_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -51,7 +50,6 @@
           {% endfor %}
         </select>
       </div>
-      {% endif %}
     </div>
     <!-- Satır 2 -->
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -147,8 +145,11 @@
       </thead>
       <tbody>
         {% for tur, ozet in tur_ozet.items() %}
-        <tr style="border-top:1px solid #f1f5f9">
-          <td class="px-4 py-2 font-medium text-gray-700">{{ tur }}</td>
+        <tr style="border-top:1px solid #f1f5f9" class="hover:bg-gray-50">
+          <td class="px-4 py-2">
+            <a href="?bas_tarih={{ bas_str }}&bit_tarih={{ bit_str }}&malzeme_turu={{ tur }}&tedarikci_id={{ ted_filtre }}&durum={{ durum_filtre }}&hedef={{ hedef_filtre }}&kullanim_amaci={{ amac_filtre }}&kullanilan_alan={{ alan_filtre }}&proje_makine={{ proje_filtre }}"
+              class="font-medium erlau-green-text hover:underline">{{ tur }}</a>
+          </td>
           <td class="px-4 py-2 text-center text-gray-600">{{ ozet.adet }}</td>
           {% if current_user.role in ['satinalma', 'admin', 'muhasebe'] %}
           <td class="px-4 py-2 text-right erlau-green-text font-medium">
@@ -179,8 +180,11 @@
       </thead>
       <tbody>
         {% for ad, ozet in ted_ozet.items() %}
-        <tr style="border-top:1px solid #f1f5f9">
-          <td class="px-4 py-2 font-medium text-gray-700">{{ ad }}</td>
+        <tr style="border-top:1px solid #f1f5f9" class="hover:bg-gray-50">
+          <td class="px-4 py-2">
+            <a href="?bas_tarih={{ bas_str }}&bit_tarih={{ bit_str }}&malzeme_turu={{ tur_filtre }}&tedarikci_id={{ ozet.id }}&durum={{ durum_filtre }}&hedef={{ hedef_filtre }}&kullanim_amaci={{ amac_filtre }}&kullanilan_alan={{ alan_filtre }}&proje_makine={{ proje_filtre }}"
+              class="font-medium erlau-green-text hover:underline">{{ ad }}</a>
+          </td>
           <td class="px-4 py-2 text-center text-gray-600">{{ ozet.adet }}</td>
           {% if current_user.role in ['satinalma', 'admin', 'muhasebe'] %}
           <td class="px-4 py-2 text-right erlau-green-text font-medium">
