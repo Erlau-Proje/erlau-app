@@ -1127,6 +1127,8 @@ def fatura_yukle():
             fatura_no=ai_sonuc.get('fatura_no'),
             tedarikci_adi_ham=ai_sonuc.get('tedarikci_adi'),
             ara_toplam=ai_sonuc.get('ara_toplam'),
+            iskonto_tutari=ai_sonuc.get('iskonto_tutari'),
+            iskonto_orani=ai_sonuc.get('iskonto_orani'),
             kdv_tutari=ai_sonuc.get('kdv_tutari'),
             genel_toplam=ai_sonuc.get('genel_toplam'),
             para_birimi=ai_sonuc.get('para_birimi', 'TL'),
@@ -1157,6 +1159,9 @@ def fatura_yukle():
                 malzeme_adi=k.get('malzeme_adi'),
                 miktar=k.get('miktar'),
                 birim=k.get('birim'),
+                liste_fiyati=k.get('liste_fiyati'),
+                iskonto_orani=k.get('iskonto_orani'),
+                iskonto_tutari=k.get('iskonto_tutari'),
                 br_fiyat=k.get('br_fiyat'),
                 kdv_orani=k.get('kdv_orani'),
                 toplam_fiyat=k.get('toplam_fiyat'),
@@ -1252,14 +1257,12 @@ def fatura_durum(fatura_id):
         # Onaylanan faturalarda eşleşmeleri hafızaya kaydet
         if yeni_durum in ['onaylandi', 'odendi']:
             from app.fatura_ai import hafizaya_kaydet
+            from app.models import TalepKalem
             for kalem in fatura.kalemler:
-                if kalem.eslesme_durumu in ['eslesti', 'fiyat_farki'] and kalem.talep_kalem_id:
-                    talep_kalemi = db.get_or_404(FaturaKalem, kalem.id)
-                    if kalem.malzeme_adi:
-                        from app.models import TalepKalem
-                        tk = TalepKalem.query.get(kalem.talep_kalem_id)
-                        if tk:
-                            hafizaya_kaydet(kalem.malzeme_adi, tk.malzeme_adi)
+                if kalem.eslesme_durumu in ['eslesti', 'fiyat_farki'] and kalem.talep_kalem_id and kalem.malzeme_adi:
+                    tk = TalepKalem.query.get(kalem.talep_kalem_id)
+                    if tk:
+                        hafizaya_kaydet(kalem.malzeme_adi, tk.malzeme_adi)
         db.session.commit()
         flash(f'Fatura durumu güncellendi: {yeni_durum}', 'success')
     return redirect(url_for('muhasebe.fatura_detay', fatura_id=fatura.id))
@@ -1275,7 +1278,17 @@ def fatura_esles(fatura_id):
         fatura.talep_id = talep.id
         from app.fatura_ai import siparis_eslestir
         eslesme = siparis_eslestir(
-            [{'malzeme_adi': k.malzeme_adi, 'br_fiyat': k.br_fiyat, 'miktar': k.miktar} for k in fatura.kalemler],
+            [{
+                'malzeme_adi': k.malzeme_adi,
+                'miktar': k.miktar,
+                'birim': k.birim,
+                'liste_fiyati': k.liste_fiyati,
+                'iskonto_orani': k.iskonto_orani,
+                'iskonto_tutari': k.iskonto_tutari,
+                'br_fiyat': k.br_fiyat,
+                'kdv_orani': k.kdv_orani,
+                'toplam_fiyat': k.toplam_fiyat,
+            } for k in fatura.kalemler],
             talep.kalemler
         )
         from app.fatura_ai import hafizaya_kaydet
