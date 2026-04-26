@@ -201,13 +201,18 @@ def dashboard():
             talepler=[], kalan_gunler={})
 
     if current_user.role == 'departman_yoneticisi':
-        talepler = TalepFormu.query.options(selectinload(TalepFormu.kalemler)).filter_by(
+        talepler = TalepFormu.query.options(
+            selectinload(TalepFormu.kalemler),
+            selectinload(TalepFormu.talep_eden),
+        ).filter_by(
             department_id=current_user.department_id
-        ).order_by(TalepFormu.created_at.desc()).limit(50).all()
+        ).order_by(TalepFormu.created_at.desc()).limit(20).all()
     else:
-        talepler = TalepFormu.query.options(selectinload(TalepFormu.kalemler)).filter_by(
+        talepler = TalepFormu.query.options(
+            selectinload(TalepFormu.kalemler),
+        ).filter_by(
             talep_eden_id=current_user.id
-        ).order_by(TalepFormu.created_at.desc()).limit(50).all()
+        ).order_by(TalepFormu.created_at.desc()).limit(20).all()
 
     kalan_gunler = {}
     for talep in talepler:
@@ -588,7 +593,11 @@ def panel():
     dept = request.args.get('dept', '')
     arama = request.args.get('q', '').strip()
     page = request.args.get('page', 1, type=int)
-    q = TalepFormu.query.options(selectinload(TalepFormu.kalemler))
+    q = TalepFormu.query.options(
+        selectinload(TalepFormu.kalemler),
+        selectinload(TalepFormu.talep_eden),
+        selectinload(TalepFormu.department),
+    )
     if durum != 'hepsi':
         q = q.filter_by(durum=durum)
     if dept:
@@ -599,7 +608,7 @@ def panel():
             TalepFormu.siparis_no.ilike(f'%{arama}%'),
             TalepFormu.kalemler.any(TalepKalem.malzeme_adi.ilike(f'%{arama}%'))
         ))
-    pagination = q.order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
+    pagination = q.order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
     departmanlar = Department.query.all()
     return render_template('satinalma_panel.html',
         talepler=pagination.items,

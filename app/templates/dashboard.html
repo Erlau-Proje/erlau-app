@@ -320,7 +320,7 @@ new Chart(document.getElementById('trendChart'), {
   <div class="px-6 py-4 border-b border-gray-50 flex items-center justify-between gap-4">
     <h2 class="font-medium text-gray-700 text-sm flex-shrink-0">
       {% if current_user.role == 'departman_yoneticisi' %}Departman Siparişleri{% else %}Siparişlerim{% endif %}
-      <span class="text-xs text-gray-300 font-normal ml-1">— son 50</span>
+      <span class="text-xs text-gray-300 font-normal ml-1">— son 20</span>
     </h2>
     <form method="GET" action="{{ url_for('main.arama') }}" class="w-full max-w-xs">
       <div class="relative">
