@@ -1304,7 +1304,14 @@ def fatura_esles(fatura_id):
                     if tk:
                         hafizaya_kaydet(kalem.malzeme_adi, tk.malzeme_adi)
         db.session.commit()
-        flash(f'Fatura {talep.siparis_no} ile eşleştirildi.', 'success')
+        eslesen = sum(1 for e in eslesme if e['eslesme_durumu'] in ['eslesti', 'fiyat_farki'])
+        toplam = len(eslesme)
+        if eslesen == 0:
+            flash(f'{talep.siparis_no} ile eşleştirildi — ancak hiçbir kalem uyuşmadı. Doğru siparişi seçtiğinizden emin olun.', 'warning')
+        elif eslesen == toplam:
+            flash(f'{talep.siparis_no} ile eşleştirildi. Tüm kalemler uyuştu ✓', 'success')
+        else:
+            flash(f'{talep.siparis_no} ile eşleştirildi. {eslesen}/{toplam} kalem uyuştu.', 'warning')
     return redirect(url_for('muhasebe.fatura_detay', fatura_id=fatura.id))
 
 @muhasebe.route('/fatura/<int:fatura_id>/sil', methods=['POST'])
