@@ -108,6 +108,13 @@ class Fatura(db.Model):
     talep = db.relationship('TalepFormu', foreign_keys=[talep_id])
     kalemler = db.relationship('FaturaKalem', backref='fatura', lazy=True, cascade='all, delete-orphan')
     odeme_tarihi = db.Column(db.Date)
+    fatura_turu  = db.Column(db.String(20), default='normal')  # normal | kur_farki
+    ana_fatura_id = db.Column(db.Integer, db.ForeignKey('fatura.id'))
+    ana_fatura   = db.relationship('Fatura', remote_side='Fatura.id', foreign_keys=[ana_fatura_id])
+    fatura_kuru  = db.Column(db.Float)   # fatura tarihindeki TCMB kuru
+    odeme_kuru   = db.Column(db.Float)   # ödeme anındaki kur
+    tl_karsiligi = db.Column(db.Float)   # genel_toplam * fatura_kuru
+    odenen_tl    = db.Column(db.Float)   # genel_toplam * odeme_kuru (gerçek ödeme)
 
 class FaturaKalem(db.Model):
     id = db.Column(db.Integer, primary_key=True)

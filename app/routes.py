@@ -1123,6 +1123,20 @@ def fatura_yukle():
             return redirect(request.url)
 
         import json
+        from app.tcmb import get_kur
+        para_birimi = ai_sonuc.get('para_birimi', 'TL')
+        genel_toplam = ai_sonuc.get('genel_toplam')
+        fatura_turu = request.form.get('fatura_turu', 'normal')
+        ana_fatura_id = request.form.get('ana_fatura_id') or None
+
+        # TCMB kuru otomatik çek
+        fatura_kuru = None
+        tl_karsiligi = None
+        if para_birimi != 'TL':
+            fatura_kuru = get_kur(para_birimi)
+            if fatura_kuru and genel_toplam:
+                tl_karsiligi = round(float(genel_toplam) * fatura_kuru, 2)
+
         fatura = Fatura(
             fatura_no=ai_sonuc.get('fatura_no'),
             tedarikci_adi_ham=ai_sonuc.get('tedarikci_adi'),
@@ -1130,13 +1144,17 @@ def fatura_yukle():
             iskonto_tutari=ai_sonuc.get('iskonto_tutari'),
             iskonto_orani=ai_sonuc.get('iskonto_orani'),
             kdv_tutari=ai_sonuc.get('kdv_tutari'),
-            genel_toplam=ai_sonuc.get('genel_toplam'),
-            para_birimi=ai_sonuc.get('para_birimi', 'TL'),
+            genel_toplam=genel_toplam,
+            para_birimi=para_birimi,
             dosya_yolu=dosya_adi,
             ai_ham_veri=json.dumps(ai_sonuc, ensure_ascii=False),
             ai_guvenskoru=ai_sonuc.get('guven_skoru', 0.5),
             yukleyen_id=current_user.id,
             durum='bekliyor',
+            fatura_turu=fatura_turu,
+            ana_fatura_id=int(ana_fatura_id) if ana_fatura_id else None,
+            fatura_kuru=fatura_kuru,
+            tl_karsiligi=tl_karsiligi,
         )
         if ai_sonuc.get('fatura_tarihi'):
             try:
@@ -1172,8 +1190,11 @@ def fatura_yukle():
         flash(f'Fatura yüklendi ve AI analiz etti. Lütfen kontrol edin.', 'success')
         return redirect(url_for('muhasebe.fatura_detay', fatura_id=fatura.id))
 
+    from app.tcmb import kur_listesi
     tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
-    return render_template('fatura_yukle.html', tedarikciler=tedarikciler)
+    diger_faturalar = Fatura.query.filter_by(fatura_turu='normal').order_by(Fatura.yukleme_tarihi.desc()).limit(100).all()
+    return render_template('fatura_yukle.html', tedarikciler=tedarikciler,
+                           guncel_kurlar=kur_listesi(), diger_faturalar=diger_faturalar)
 
 @muhasebe.route('/fatura/<int:fatura_id>')
 @login_required
@@ -1308,6 +1329,17 @@ def fatura_durum(fatura_id):
         if yeni_durum == 'odendi':
             from datetime import date
             fatura.odeme_tarihi = date.today()
+            # Ödeme kuru işle (döviz faturalar için)
+            odeme_kuru_str = request.form.get('odeme_kuru', '').strip()
+            if odeme_kuru_str and fatura.para_birimi != 'TL':
+                try:
+                    fatura.odeme_kuru = float(odeme_kuru_str.replace(',', '.'))
+                    if fatura.genel_toplam:
+                        fatura.odenen_tl = round(fatura.genel_toplam * fatura.odeme_kuru, 2)
+                except ValueError:
+                    pass
+            elif fatura.para_birimi == 'TL':
+                fatura.odenen_tl = fatura.genel_toplam
         # Onaylanan faturalarda eşleşmeleri hafızaya kaydet
         if yeni_durum in ['onaylandi', 'odendi']:
             from app.fatura_ai import hafizaya_kaydet

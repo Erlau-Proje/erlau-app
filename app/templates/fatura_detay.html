@@ -26,6 +26,23 @@
   </div>
 </div>
 
+<!-- Kur Farkı Faturası Uyarısı -->
+{% if fatura.fatura_turu == 'kur_farki' %}
+<div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4 flex gap-3 items-start">
+  <svg class="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+  <div>
+    <p class="text-sm font-medium text-orange-800">Kur Farkı Faturası</p>
+    {% if fatura.ana_fatura %}
+    <p class="text-xs text-orange-600 mt-0.5">Ana fatura:
+      <a href="{{ url_for('muhasebe.fatura_detay', fatura_id=fatura.ana_fatura.id) }}" class="font-medium underline">
+        {{ fatura.ana_fatura.fatura_no or '—' }} ({{ fatura.ana_fatura.para_birimi }})
+      </a>
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <!-- Uyarılar -->
 {% if fatura.ai_guvenskoru and fatura.ai_guvenskoru < 0.7 %}
 <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4 flex gap-3 items-start">
@@ -136,6 +153,42 @@
             {% endif %}
             {% if fatura.iskonto_tutari %}
             <div><span class="text-xs text-blue-500 font-medium">İskonto Tutarı</span><p class="text-sm font-semibold text-blue-800">{{ '{:,.2f}'.format(fatura.iskonto_tutari) }} {{ fatura.para_birimi }}</p></div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <!-- Döviz Kur Bilgisi -->
+          {% if fatura.para_birimi != 'TL' %}
+          <div class="col-span-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+            <p class="text-xs font-semibold text-amber-700 mb-2 uppercase tracking-wide">Döviz Kur Bilgisi</p>
+            <div class="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p class="text-xs text-amber-500">Fatura Kuru</p>
+                <p class="text-sm font-bold text-amber-800">
+                  {% if fatura.fatura_kuru %}{{ '{:,.4f}'.format(fatura.fatura_kuru) }} ₺{% else %}<span class="text-gray-400">—</span>{% endif %}
+                </p>
+              </div>
+              <div>
+                <p class="text-xs text-amber-500">TL Karşılığı</p>
+                <p class="text-sm font-bold text-amber-800">
+                  {% if fatura.tl_karsiligi %}{{ '{:,.2f}'.format(fatura.tl_karsiligi) }} ₺{% else %}<span class="text-gray-400">—</span>{% endif %}
+                </p>
+              </div>
+              <div>
+                <p class="text-xs text-amber-500">Ödenen TL</p>
+                <p class="text-sm font-bold {% if fatura.odenen_tl %}text-green-700{% else %}text-gray-400{% endif %}">
+                  {% if fatura.odenen_tl %}{{ '{:,.2f}'.format(fatura.odenen_tl) }} ₺{% else %}—{% endif %}
+                </p>
+              </div>
+            </div>
+            {% if fatura.odenen_tl and fatura.tl_karsiligi %}
+            {% set kur_farki_tutari = fatura.odenen_tl - fatura.tl_karsiligi %}
+            <div class="mt-2 pt-2 border-t border-amber-100 text-center">
+              <span class="text-xs {% if kur_farki_tutari > 0 %}text-red-500{% else %}text-green-600{% endif %} font-medium">
+                Kur Farkı: {% if kur_farki_tutari > 0 %}+{% endif %}{{ '{:,.2f}'.format(kur_farki_tutari) }} ₺
+                ({{ '{:,.4f}'.format(fatura.odeme_kuru) }} ödeme kuru)
+              </span>
+            </div>
             {% endif %}
           </div>
           {% endif %}
@@ -325,8 +378,9 @@
         {% elif fatura.durum == 'iade' %}<span class="badge bg-orange-100 text-orange-700 text-sm">İade</span>{% endif %}
         {% if fatura.odeme_tarihi %}<p class="text-xs text-gray-400 mt-1.5">Ödeme: {{ fatura.odeme_tarihi.strftime('%d.%m.%Y') }}</p>{% endif %}
       </div>
-      <form method="POST" action="{{ url_for('muhasebe.fatura_durum', fatura_id=fatura.id) }}">
-        <select name="durum" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3">
+      <form method="POST" action="{{ url_for('muhasebe.fatura_durum', fatura_id=fatura.id) }}" id="durumForm">
+        <select name="durum" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3"
+          onchange="toggleOdemeKuru(this.value)">
           {% if is_satinalma and not is_muhasebe %}
             <option value="bekliyor" {% if fatura.durum=='bekliyor' %}selected{% endif %}>Bekliyor</option>
             <option value="onaylandi" {% if fatura.durum=='onaylandi' %}selected{% endif %}>Onaylandı ✓</option>
@@ -340,10 +394,31 @@
             <option value="iade" {% if fatura.durum=='iade' %}selected{% endif %}>İade</option>
           {% endif %}
         </select>
+
+        {% if fatura.para_birimi != 'TL' %}
+        <div id="odemeKuruAlan" class="mb-3 {% if fatura.durum != 'odendi' %}hidden{% endif %}">
+          <label class="block text-xs font-medium text-amber-600 mb-1">
+            Ödeme Kuru ({{ fatura.para_birimi }}/TL)
+          </label>
+          <input type="number" step="0.0001" name="odeme_kuru"
+            value="{{ fatura.odeme_kuru or '' }}"
+            placeholder="örn. 38.5000"
+            class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-amber-50 focus:outline-none focus:border-amber-400">
+          <p class="text-xs text-amber-500 mt-1">Ödeme gününün TCMB satış kurunu girin.</p>
+        </div>
+        {% endif %}
+
         <button type="submit" class="w-full btn-primary justify-center">
           {% if is_satinalma and not is_muhasebe %}Onayla / İşaretle{% else %}Durumu Güncelle{% endif %}
         </button>
       </form>
+
+      <script>
+      function toggleOdemeKuru(durum) {
+        var alan = document.getElementById('odemeKuruAlan');
+        if (alan) alan.classList.toggle('hidden', durum !== 'odendi');
+      }
+      </script>
     </div>
 
     <!-- Sipariş Eşleştir -->

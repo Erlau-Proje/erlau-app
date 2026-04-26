@@ -6,15 +6,71 @@
     <p class="text-sm text-gray-500 mt-1">PDF faturayı yükleyin, AI otomatik olarak analiz edecek.</p>
   </div>
 
+  <!-- Güncel Kurlar -->
+  {% if guncel_kurlar %}
+  <div class="card p-4 mb-4">
+    <p class="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Bugünkü TCMB Kurları</p>
+    <div class="flex gap-4">
+      {% for kod, kur in guncel_kurlar.items() %}
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold text-gray-600">{{ kod }}/TL</span>
+        <span class="text-sm font-semibold erlau-green-text">{{ '{:,.4f}'.format(kur) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="text-xs text-gray-400 mt-2">Fatura yüklendiğinde kur otomatik uygulanır.</p>
+  </div>
+  {% endif %}
+
   <div class="card p-6">
     <form method="POST" enctype="multipart/form-data">
       <div class="space-y-4">
+
+        <!-- Fatura Türü -->
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Fatura Türü</label>
+          <div class="flex gap-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="fatura_turu" value="normal" checked
+                class="text-green-600" onchange="toggleKurFarki(false)">
+              <span class="text-sm text-gray-700">Normal Fatura</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="fatura_turu" value="kur_farki"
+                class="text-orange-500" onchange="toggleKurFarki(true)">
+              <span class="text-sm text-orange-600 font-medium">Kur Farkı Faturası</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Kur Farkı: Ana Fatura Seçimi -->
+        <div id="kurFarkiAlan" class="hidden">
+          <div class="bg-orange-50 border border-orange-200 rounded-lg p-3">
+            <label class="block text-xs font-medium text-orange-700 mb-1">
+              Bağlı Olduğu Ana Fatura
+            </label>
+            <select name="ana_fatura_id" class="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">Seçin...</option>
+              {% for f in diger_faturalar %}
+              <option value="{{ f.id }}">
+                {{ f.fatura_no or '—' }} — {{ f.tedarikci.name if f.tedarikci else f.tedarikci_adi_ham or '?' }}
+                ({{ f.para_birimi }}) — {{ f.fatura_tarihi.strftime('%d.%m.%Y') if f.fatura_tarihi else '?' }}
+              </option>
+              {% endfor %}
+            </select>
+            <p class="text-xs text-orange-500 mt-1">Bu fatura, seçilen döviz faturasının kur farkını kapsar.</p>
+          </div>
+        </div>
+
+        <!-- PDF -->
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1">PDF Dosyası <span class="text-red-500">*</span></label>
           <input type="file" name="pdf_dosya" accept=".pdf" required
             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
           <p class="text-xs text-gray-400 mt-1">Sadece .pdf formatı desteklenmektedir.</p>
         </div>
+
+        <!-- Tedarikçi -->
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1">Tedarikçi <span class="text-gray-400 font-normal">(AI öğrenmesi için seçin)</span></label>
           <select name="tedarikci_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -25,12 +81,13 @@
           </select>
         </div>
 
+        <!-- AI bilgi kutusu -->
         <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-700">
           <p class="font-medium mb-1">🤖 AI nasıl çalışır?</p>
           <ul class="space-y-1 text-xs">
             <li>• Fatura PDF'ini okuyup kalem kalem analiz eder</li>
+            <li>• Döviz faturalarda bugünkü TCMB kurunu otomatik uygular</li>
             <li>• Tedarikçi seçerseniz önceki faturalardan öğrendiği formatı kullanır</li>
-            <li>• Siz kontrol edip düzelttikçe hata oranı azalır</li>
           </ul>
         </div>
 
@@ -45,4 +102,10 @@
     </form>
   </div>
 </div>
+
+<script>
+function toggleKurFarki(show) {
+  document.getElementById('kurFarkiAlan').classList.toggle('hidden', !show);
+}
+</script>
 {% endblock %}
