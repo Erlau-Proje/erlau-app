@@ -87,22 +87,24 @@ def dashboard():
             bekleme_stats=stats_data['bekleme_stats'],
             gecikis_listesi=gecikis_listesi,
             top_tedarikci=stats_data['top_tedarikci'],
-            talepler=[], kalan_gunler={})
+            talepler=[], kalan_gunler={}, pagination=None)
 
+    page = request.args.get('page', 1, type=int)
     if current_user.role == 'departman_yoneticisi':
-        talepler = TalepFormu.query.options(
+        pagination = TalepFormu.query.options(
             selectinload(TalepFormu.kalemler),
             selectinload(TalepFormu.talep_eden),
         ).filter_by(
             department_id=current_user.department_id
-        ).order_by(TalepFormu.created_at.desc()).limit(20).all()
+        ).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
     else:
-        talepler = TalepFormu.query.options(
+        pagination = TalepFormu.query.options(
             selectinload(TalepFormu.kalemler),
         ).filter_by(
             talep_eden_id=current_user.id
-        ).order_by(TalepFormu.created_at.desc()).limit(20).all()
+        ).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
 
+    talepler = pagination.items
     kalan_gunler = {}
     for talep in talepler:
         if talep.durum == 'yolda' and talep.yolda_tarihi:
@@ -111,17 +113,24 @@ def dashboard():
                 bitis = talep.yolda_tarihi.date() + timedelta(days=termin)
                 kalan_gunler[talep.id] = (bitis - bugun).days
 
+    # İstatistikleri tüm kayıtlar üzerinden hesapla (sadece bu sayfadaki 20 üzerinden değil)
+    if current_user.role == 'departman_yoneticisi':
+        stats_q = TalepFormu.query.filter_by(department_id=current_user.department_id)
+    else:
+        stats_q = TalepFormu.query.filter_by(talep_eden_id=current_user.id)
+
     stats = {
-        'toplam': len(talepler),
-        'bekleyen': sum(1 for t in talepler if t.durum in ('bekliyor', 'fiyatlandirildi')),
-        'yolda': sum(1 for t in talepler if t.durum == 'yolda'),
-        'onaylandi': sum(1 for t in talepler if t.durum == 'onaylandi'),
-        'teslim': sum(1 for t in talepler if t.durum == 'teslim_alindi'),
+        'toplam': stats_q.count(),
+        'bekleyen': stats_q.filter(TalepFormu.durum.in_(('bekliyor', 'fiyatlandirildi'))).count(),
+        'yolda': stats_q.filter_by(durum='yolda').count(),
+        'onaylandi': stats_q.filter_by(durum='onaylandi').count(),
+        'teslim': stats_q.filter_by(durum='teslim_alindi').count(),
     }
 
     return render_template('dashboard.html',
         talepler=talepler,
         kalan_gunler=kalan_gunler,
+        pagination=pagination,
         stats=stats,
         gm_stats=None)
 
@@ -129,7 +138,9 @@ def dashboard():
 @login_required
 def arama():
     q = request.args.get('q', '').strip()
+    page = request.args.get('page', 1, type=int)
     sonuclar = []
+    pagination = None
     if q:
         from sqlalchemy import or_
         kalem_query = TalepKalem.query.join(TalepFormu).filter(
@@ -149,8 +160,11 @@ def arama():
                 kalem_query = kalem_query.filter(TalepFormu.department_id == current_user.department_id)
             else:
                 kalem_query = kalem_query.filter(TalepFormu.talep_eden_id == current_user.id)
-        sonuclar = kalem_query.order_by(TalepFormu.created_at.desc()).limit(100).all()
-    return render_template('arama.html', q=q, sonuclar=sonuclar)
+        
+        pagination = kalem_query.order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
+        sonuclar = pagination.items
+        
+    return render_template('arama.html', q=q, sonuclar=sonuclar, pagination=pagination)
 
 @main.route('/talep/yeni', methods=['GET', 'POST'])
 @login_required
