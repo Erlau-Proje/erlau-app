@@ -302,11 +302,8 @@ def siparis_raporu():
     export = request.args.get('export', '')
     page = request.args.get('page', 1, type=int)
 
-    query = TalepKalem.query.join(TalepFormu).options(
-        selectinload(TalepKalem.talep).selectinload(TalepFormu.talep_eden),
-        selectinload(TalepKalem.talep).selectinload(TalepFormu.department),
-        selectinload(TalepKalem.tedarikci)
-    )
+    # Base query — options eklenmeden, aggregation sorgularında da kullanılacak
+    query = TalepKalem.query.join(TalepFormu)
 
     # Rol bazlı kapsam
     if current_user.role in ['satinalma', 'admin', 'gm']:
@@ -344,9 +341,15 @@ def siparis_raporu():
     if proje_filtre:
         query = query.filter(TalepKalem.proje_makine.ilike(f'%{proje_filtre}%'))
 
-    # Excel export
+    _eager = [
+        selectinload(TalepKalem.talep).selectinload(TalepFormu.talep_eden),
+        selectinload(TalepKalem.talep).selectinload(TalepFormu.department),
+        selectinload(TalepKalem.tedarikci)
+    ]
+
+    # Excel export — filtreli tüm kayıtları al
     if export == 'excel':
-        kalemler = query.order_by(TalepFormu.created_at.desc()).all()
+        kalemler = query.options(*_eager).order_by(TalepFormu.created_at.desc()).all()
         import io
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment
@@ -392,32 +395,49 @@ def siparis_raporu():
         resp.headers['Content-Disposition'] = f'attachment; filename="siparis_raporu_{tarih}.xlsx"'
         return resp
 
-    # Normal sayfa görünümü için pagination
-    pagination = query.order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
-    kalemler = pagination.items
+    # Özet: türe göre — tüm filtreli kayıtlardan (DB aggregation)
+    tur_agg = query.with_entities(
+        TalepKalem.malzeme_turu,
+        TalepKalem.para_birimi,
+        func.count(TalepKalem.id).label('adet'),
+        func.sum(TalepKalem.toplam_fiyat).label('toplam'),
+    ).group_by(TalepKalem.malzeme_turu, TalepKalem.para_birimi).all()
 
-    # Özet: türe göre
     tur_ozet = {}
-    for k in kalemler:
-        tur = k.malzeme_turu or 'Belirtilmemiş'
+    for row in tur_agg:
+        tur = row.malzeme_turu or 'Belirtilmemiş'
         if tur not in tur_ozet:
             tur_ozet[tur] = {'adet': 0, 'toplam': 0, 'para': ''}
-        tur_ozet[tur]['adet'] += 1
-        if k.toplam_fiyat:
-            tur_ozet[tur]['toplam'] += k.toplam_fiyat
-            tur_ozet[tur]['para'] = k.para_birimi or ''
+        tur_ozet[tur]['adet'] += row.adet
+        tur_ozet[tur]['toplam'] += row.toplam or 0
+        if row.para_birimi:
+            tur_ozet[tur]['para'] = row.para_birimi
 
-    # Özet: tedarikçiye göre
+    # Özet: tedarikçiye göre — tüm filtreli kayıtlardan (DB aggregation)
+    ted_agg = query.filter(TalepKalem.tedarikci_id.isnot(None)).with_entities(
+        TalepKalem.tedarikci_id,
+        TalepKalem.para_birimi,
+        func.count(TalepKalem.id).label('adet'),
+        func.sum(TalepKalem.toplam_fiyat).label('toplam'),
+    ).group_by(TalepKalem.tedarikci_id, TalepKalem.para_birimi).all()
+
+    ted_id_set = {r.tedarikci_id for r in ted_agg}
+    ted_name_map = {t.id: t.name for t in Tedarikci.query.filter(Tedarikci.id.in_(ted_id_set)).all()} if ted_id_set else {}
     ted_ozet = {}
-    for k in kalemler:
-        if k.tedarikci:
-            ad = k.tedarikci.name
-            if ad not in ted_ozet:
-                ted_ozet[ad] = {'adet': 0, 'toplam': 0, 'para': ''}
-            ted_ozet[ad]['adet'] += 1
-            if k.toplam_fiyat:
-                ted_ozet[ad]['toplam'] += k.toplam_fiyat
-                ted_ozet[ad]['para'] = k.para_birimi or ''
+    for row in ted_agg:
+        name = ted_name_map.get(row.tedarikci_id, '—')
+        if name not in ted_ozet:
+            ted_ozet[name] = {'adet': 0, 'toplam': 0, 'para': ''}
+        ted_ozet[name]['adet'] += row.adet
+        ted_ozet[name]['toplam'] += row.toplam or 0
+        if row.para_birimi:
+            ted_ozet[name]['para'] = row.para_birimi
+
+    toplam_tutar = query.with_entities(func.sum(TalepKalem.toplam_fiyat)).scalar() or 0
+
+    # Sayfa görünümü için pagination (20 per page)
+    pagination = query.options(*_eager).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
+    kalemler = pagination.items
 
     def distinct_vals(col):
         return [v[0] for v in db.session.query(col).filter(col != None, col != '').distinct().order_by(col).all()]
@@ -430,6 +450,7 @@ def siparis_raporu():
 
     return render_template('siparis_raporu.html',
         kalemler=kalemler, pagination=pagination, tur_ozet=tur_ozet, ted_ozet=ted_ozet,
+        toplam_tutar=toplam_tutar,
         turler=turler, hedefler=hedefler, amaclar=amaclar, alanlar=alanlar,
         tedarikciler=tedarikciler,
         bas_str=bas_str, bit_str=bit_str,
