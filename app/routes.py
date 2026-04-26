@@ -51,8 +51,70 @@ def logout():
 @main.route('/dashboard')
 @login_required
 def dashboard():
+    from sqlalchemy import func
     if current_user.role in ['satinalma', 'admin']:
         return redirect(url_for('satin_alma.panel'))
+
+    bugun = date.today()
+
+    if current_user.role == 'gm':
+        ay_baslangic = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # Tüm durumları tek sorguda say
+        durum_sayilari = dict(db.session.query(
+            TalepFormu.durum, func.count(TalepFormu.id)
+        ).group_by(TalepFormu.durum).all())
+
+        bu_ay_toplam = TalepFormu.query.filter(TalepFormu.created_at >= ay_baslangic).count()
+        bu_ay_teslim = TalepFormu.query.filter(
+            TalepFormu.created_at >= ay_baslangic,
+            TalepFormu.durum == 'teslim_alindi'
+        ).count()
+
+        gm_stats = {
+            'bu_ay': bu_ay_toplam,
+            'bekleyen': (durum_sayilari.get('bekliyor', 0) + durum_sayilari.get('fiyatlandirildi', 0)),
+            'yolda': durum_sayilari.get('yolda', 0),
+            'bu_ay_teslim': bu_ay_teslim,
+        }
+
+        # Departman kırılımı — tek GROUP BY sorgusu
+        dept_rows = db.session.query(
+            TalepFormu.department_id,
+            TalepFormu.durum,
+            func.count(TalepFormu.id).label('sayi')
+        ).group_by(TalepFormu.department_id, TalepFormu.durum).all()
+
+        dept_map = {}
+        for row in dept_rows:
+            dm = dept_map.setdefault(row.department_id, {'toplam': 0, 'bekleyen': 0, 'yolda': 0, 'teslim': 0})
+            dm['toplam'] += row.sayi
+            if row.durum in ('bekliyor', 'fiyatlandirildi'):
+                dm['bekleyen'] += row.sayi
+            elif row.durum == 'yolda':
+                dm['yolda'] += row.sayi
+            elif row.durum == 'teslim_alindi':
+                dm['teslim'] += row.sayi
+
+        departmanlar = Department.query.order_by(Department.name).all()
+        dept_stats = [
+            {'dept': d, **dept_map.get(d.id, {'toplam': 0, 'bekleyen': 0, 'yolda': 0, 'teslim': 0})}
+            for d in departmanlar if dept_map.get(d.id, {}).get('toplam', 0) > 0
+        ]
+
+        # En uzun bekleyen 8 talep
+        bekleyen_talepler = TalepFormu.query.options(
+            selectinload(TalepFormu.kalemler)
+        ).filter(
+            TalepFormu.durum.in_(['bekliyor', 'fiyatlandirildi'])
+        ).order_by(TalepFormu.created_at.asc()).limit(8).all()
+
+        return render_template('dashboard.html',
+            gm_stats=gm_stats,
+            dept_stats=dept_stats,
+            bekleyen_talepler=bekleyen_talepler,
+            talepler=[], kalan_gunler={})
+
     if current_user.role == 'departman_yoneticisi':
         talepler = TalepFormu.query.options(selectinload(TalepFormu.kalemler)).filter_by(
             department_id=current_user.department_id
@@ -60,9 +122,8 @@ def dashboard():
     else:
         talepler = TalepFormu.query.options(selectinload(TalepFormu.kalemler)).filter_by(
             talep_eden_id=current_user.id
-        ).order_by(TalepFormu.created_at.desc()).limit(10).all()
+        ).order_by(TalepFormu.created_at.desc()).all()
 
-    bugun = date.today()
     kalan_gunler = {}
     for talep in talepler:
         if talep.durum == 'yolda' and talep.yolda_tarihi:
@@ -71,7 +132,19 @@ def dashboard():
                 bitis = talep.yolda_tarihi.date() + timedelta(days=termin)
                 kalan_gunler[talep.id] = (bitis - bugun).days
 
-    return render_template('dashboard.html', talepler=talepler, kalan_gunler=kalan_gunler)
+    stats = {
+        'toplam': len(talepler),
+        'bekleyen': sum(1 for t in talepler if t.durum in ('bekliyor', 'fiyatlandirildi')),
+        'yolda': sum(1 for t in talepler if t.durum == 'yolda'),
+        'onaylandi': sum(1 for t in talepler if t.durum == 'onaylandi'),
+        'teslim': sum(1 for t in talepler if t.durum == 'teslim_alindi'),
+    }
+
+    return render_template('dashboard.html',
+        talepler=talepler,
+        kalan_gunler=kalan_gunler,
+        stats=stats,
+        gm_stats=None)
 
 @main.route('/arama')
 @login_required
