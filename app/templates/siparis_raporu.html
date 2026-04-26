@@ -209,6 +209,9 @@
           <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500">Miktar</th>
           <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500">Toplam</th>
           <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500">Durum</th>
+          {% if current_user.role in ['satinalma', 'admin'] %}
+          <th class="px-4 py-3 text-center text-xs font-semibold text-gray-400"></th>
+          {% endif %}
         </tr>
       </thead>
       <tbody>
@@ -251,6 +254,15 @@
             {% elif t.durum == 'iptal' %}<span class="badge bg-red-100 text-red-700">İptal</span>
             {% else %}<span class="badge bg-gray-100 text-gray-600">{{ t.durum }}</span>{% endif %}
           </td>
+          {% if current_user.role in ['satinalma', 'admin'] %}
+          <td class="px-4 py-2.5 text-center">
+            <button type="button"
+              onclick="modalAc({{ k.id }}, '{{ k.malzeme_adi|replace("'", "\\'") }}', {{ k.miktar or 0 }}, {{ k.br_fiyat or 0 }})"
+              class="text-xs text-gray-400 hover:text-blue-600 border border-gray-200 hover:border-blue-300 px-2 py-1 rounded transition-colors">
+              Düzenle
+            </button>
+          </td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -264,6 +276,52 @@
   <p class="text-gray-500 font-medium">Sonuç bulunamadı</p>
   <p class="text-sm text-gray-400 mt-1">Filtre kriterlerini değiştirip tekrar deneyin.</p>
 </div>
+{% endif %}
+
+{% if current_user.role in ['satinalma', 'admin'] %}
+<!-- Kalem Düzenleme Modalı -->
+<div id="kalemModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+    <h3 class="font-semibold text-gray-800 mb-1">Kalem Düzenle</h3>
+    <p id="modalMalzeme" class="text-xs text-gray-400 mb-4"></p>
+    <form id="kalemForm" method="POST">
+      <input type="hidden" name="next" value="{{ request.url }}">
+      <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Birim Fiyat</label>
+        <input type="number" step="0.01" min="0" name="br_fiyat" id="modalBrFiyat"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
+          placeholder="0.00">
+      </div>
+      <div class="mb-4">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Miktar</label>
+        <input type="number" step="0.001" min="0.001" name="miktar" id="modalMiktar"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
+          placeholder="0">
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button type="button" onclick="modalKapat()"
+          class="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">İptal</button>
+        <button type="submit"
+          class="px-4 py-2 erlau-green text-white rounded-lg text-sm font-medium hover:opacity-90">Kaydet</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function modalAc(kalemId, malzemeAdi, miktar, brFiyat) {
+  document.getElementById('modalMalzeme').textContent = malzemeAdi;
+  document.getElementById('modalMiktar').value = miktar || '';
+  document.getElementById('modalBrFiyat').value = brFiyat || '';
+  document.getElementById('kalemForm').action = '/satinalma/kalem/' + kalemId + '/duzenle';
+  document.getElementById('kalemModal').classList.remove('hidden');
+}
+function modalKapat() {
+  document.getElementById('kalemModal').classList.add('hidden');
+}
+document.getElementById('kalemModal').addEventListener('click', function(e) {
+  if (e.target === this) modalKapat();
+});
+</script>
 {% endif %}
 
 {% endblock %}

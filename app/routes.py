@@ -918,7 +918,8 @@ def kalem_duzenle(kalem_id):
 
     db.session.commit()
     flash('Kalem güncellendi.', 'success')
-    return redirect(url_for('main.talep_detay', talep_id=talep.id))
+    next_url = request.form.get('next', '')
+    return redirect(next_url if next_url else url_for('main.talep_detay', talep_id=talep.id))
 
 @satin_alma.route('/siparis/<int:talep_id>')
 @login_required
