@@ -26,9 +26,16 @@
   </div>
 </div>
 
-<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-  <div class="px-6 py-4 border-b border-gray-100">
-    <h2 class="font-medium text-gray-800">Son Taleplerim</h2>
+<div class="card overflow-hidden">
+  <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+    <h2 class="font-medium text-gray-800 flex-shrink-0">Son Taleplerim</h2>
+    <form method="GET" action="{{ url_for('main.arama') }}" style="max-width:360px;width:100%">
+      <div style="position:relative">
+        <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:#9ca3af" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <input type="text" name="q" placeholder="Ürün adı, sipariş no, marka, açıklama..."
+          style="width:100%;border:1.5px solid #e5e7eb;border-radius:8px;padding:7px 12px 7px 32px;font-size:13px;color:#374151;background:#f9fafb;box-sizing:border-box">
+      </div>
+    </form>
   </div>
   {% if talepler %}
   <table class="w-full text-sm">

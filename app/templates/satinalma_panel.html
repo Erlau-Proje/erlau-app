@@ -67,6 +67,9 @@
               {% if talep.durum in ['bekliyor', 'fiyatlandirildi'] %}
               <a href="{{ url_for('satin_alma.fiyatlandir', talep_id=talep.id) }}" class="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700">Fiyatlandır</a>
               {% endif %}
+              {% if talep.durum in ['fiyatlandirildi', 'onaylandi', 'yolda'] %}
+              <a href="{{ url_for('satin_alma.siparis_ozet', talep_id=talep.id) }}" class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">Sipariş</a>
+              {% endif %}
               {% if talep.durum != 'teslim_alindi' %}
               <form method="POST" action="{{ url_for('satin_alma.durum_guncelle', talep_id=talep.id) }}" class="inline flex items-center gap-1">
                 <select name="durum" class="text-xs border border-gray-300 rounded px-1 py-1 bg-white">

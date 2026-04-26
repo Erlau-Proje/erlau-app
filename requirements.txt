@@ -10,6 +10,9 @@ gunicorn==25.3.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
+anthropic==0.97.0
+Flask-Migrate==4.1.0
+openpyxl==3.1.5
 packaging==26.2
 pillow==12.2.0
 reportlab==4.4.10

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="max-w-xl mx-auto">
+  <div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-800">Fatura Yükle</h1>
+    <p class="text-sm text-gray-500 mt-1">PDF faturayı yükleyin, AI otomatik olarak analiz edecek.</p>
+  </div>
+
+  <div class="card p-6">
+    <form method="POST" enctype="multipart/form-data">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">PDF Dosyası <span class="text-red-500">*</span></label>
+          <input type="file" name="pdf_dosya" accept=".pdf" required
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <p class="text-xs text-gray-400 mt-1">Sadece .pdf formatı desteklenmektedir.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Tedarikçi <span class="text-gray-400 font-normal">(AI öğrenmesi için seçin)</span></label>
+          <select name="tedarikci_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">Seçin veya AI bulsun</option>
+            {% for t in tedarikciler %}
+            <option value="{{ t.id }}">{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-700">
+          <p class="font-medium mb-1">🤖 AI nasıl çalışır?</p>
+          <ul class="space-y-1 text-xs">
+            <li>• Fatura PDF'ini okuyup kalem kalem analiz eder</li>
+            <li>• Tedarikçi seçerseniz önceki faturalardan öğrendiği formatı kullanır</li>
+            <li>• Siz kontrol edip düzelttikçe hata oranı azalır</li>
+          </ul>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <a href="{{ url_for('muhasebe.fatura_listesi') }}" class="btn-secondary flex-1 justify-center">İptal</a>
+          <button type="submit" class="btn-primary flex-1 justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12"/></svg>
+            Yükle ve Analiz Et
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

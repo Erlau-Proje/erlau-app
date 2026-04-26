@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-800">Fatura Yönetimi</h1>
+    <p class="text-sm text-gray-500 mt-1">PDF fatura yükleme, AI analizi ve ödeme takibi</p>
+  </div>
+  <a href="{{ url_for('muhasebe.fatura_yukle') }}" class="btn-primary">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12"/></svg>
+    Fatura Yükle
+  </a>
+</div>
+
+<!-- Özet -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="card p-4 text-center">
+    <div class="text-2xl font-bold erlau-green-text">{{ ozet.toplam }}</div>
+    <div class="text-xs text-gray-500 mt-1">Toplam Fatura</div>
+  </div>
+  <div class="card p-4 text-center">
+    <div class="text-2xl font-bold text-yellow-500">{{ ozet.bekliyor }}</div>
+    <div class="text-xs text-gray-500 mt-1">Bekleyen</div>
+  </div>
+  <div class="card p-4 text-center">
+    <div class="text-2xl font-bold text-green-600">{{ ozet.odendi }}</div>
+    <div class="text-xs text-gray-500 mt-1">Ödendi</div>
+  </div>
+  <div class="card p-4 text-center">
+    <div class="text-2xl font-bold text-blue-600">{{ '{:,.0f}'.format(ozet.toplam_tutar) }} ₺</div>
+    <div class="text-xs text-gray-500 mt-1">Toplam Tutar</div>
+  </div>
+</div>
+
+<!-- Filtre -->
+<div class="card p-4 mb-5">
+  <form method="GET" class="flex gap-3 flex-wrap items-end">
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Durum</label>
+      <select name="durum" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <option value="">Tümü</option>
+        <option value="bekliyor" {% if durum_filtre=='bekliyor' %}selected{% endif %}>Bekliyor</option>
+        <option value="onaylandi" {% if durum_filtre=='onaylandi' %}selected{% endif %}>Onaylandı</option>
+        <option value="odendi" {% if durum_filtre=='odendi' %}selected{% endif %}>Ödendi</option>
+        <option value="iptal" {% if durum_filtre=='iptal' %}selected{% endif %}>İptal</option>
+        <option value="iade" {% if durum_filtre=='iade' %}selected{% endif %}>İade</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Ara</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="Fatura no veya tedarikçi..."
+        class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-56">
+    </div>
+    <button type="submit" class="btn-primary">Filtrele</button>
+    <a href="{{ url_for('muhasebe.fatura_listesi') }}" class="btn-secondary">Sıfırla</a>
+  </form>
+</div>
+
+<!-- Liste -->
+<div class="card overflow-hidden">
+  <table class="w-full text-sm">
+    <thead style="background:#f8fafc">
+      <tr>
+        <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500">Fatura No</th>
+        <th class="px-5 py-3 text-left text-xs font-semibold text-gray-500">Tedarikçi</th>
+        <th class="px-5 py-3 text-center text-xs font-semibold text-gray-500">Fatura Tarihi</th>
+        <th class="px-5 py-3 text-center text-xs font-semibold text-gray-500">Vade</th>
+        <th class="px-5 py-3 text-right text-xs font-semibold text-gray-500">Tutar</th>
+        <th class="px-5 py-3 text-center text-xs font-semibold text-gray-500">AI Güven</th>
+        <th class="px-5 py-3 text-center text-xs font-semibold text-gray-500">Sipariş</th>
+        <th class="px-5 py-3 text-center text-xs font-semibold text-gray-500">Durum</th>
+        <th class="px-5 py-3 text-center text-xs font-semibold text-gray-500">İşlem</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in faturalar %}
+      <tr style="border-top:1px solid #f1f5f9" class="hover:bg-gray-50 transition-colors">
+        <td class="px-5 py-3 font-medium erlau-green-text">{{ f.fatura_no or '—' }}</td>
+        <td class="px-5 py-3 text-gray-700">{{ f.tedarikci.name if f.tedarikci else f.tedarikci_adi_ham or '—' }}</td>
+        <td class="px-5 py-3 text-center text-gray-500 text-xs">{{ f.fatura_tarihi.strftime('%d.%m.%Y') if f.fatura_tarihi else '—' }}</td>
+        <td class="px-5 py-3 text-center text-xs">
+          {% if f.vade_tarihi %}
+            {% set kalan = (f.vade_tarihi - today).days %}
+            {% if f.durum not in ['odendi','iptal','iade'] %}
+              {% if kalan < 0 %}<span class="text-red-600 font-medium">{{ kalan|abs }} gün gecikti</span>
+              {% elif kalan <= 3 %}<span class="text-orange-500 font-medium">{{ kalan }} gün</span>
+              {% else %}<span class="text-gray-500">{{ f.vade_tarihi.strftime('%d.%m.%Y') }}</span>{% endif %}
+            {% else %}<span class="text-gray-400">{{ f.vade_tarihi.strftime('%d.%m.%Y') }}</span>{% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td class="px-5 py-3 text-right font-medium">{{ '{:,.2f}'.format(f.genel_toplam) if f.genel_toplam else '—' }} {{ f.para_birimi }}</td>
+        <td class="px-5 py-3 text-center">
+          {% if f.ai_guvenskoru %}
+            {% set skor = (f.ai_guvenskoru * 100)|int %}
+            <div style="display:flex;align-items:center;gap:4px;justify-content:center">
+              <div style="width:40px;height:5px;background:#e5e7eb;border-radius:9px;overflow:hidden">
+                <div style="width:{{ skor }}%;height:100%;background:{% if skor >= 80 %}#22c55e{% elif skor >= 50 %}#f59e0b{% else %}#ef4444{% endif %};border-radius:9px"></div>
+              </div>
+              <span class="text-xs text-gray-500">{{ skor }}%</span>
+            </div>
+          {% else %}—{% endif %}
+        </td>
+        <td class="px-5 py-3 text-center text-xs">
+          {% if f.talep %}<a href="{{ url_for('main.talep_detay', talep_id=f.talep.id) }}" class="erlau-green-text hover:underline">{{ f.talep.siparis_no }}</a>
+          {% else %}<span class="text-gray-400">Eşleşmedi</span>{% endif %}
+        </td>
+        <td class="px-5 py-3 text-center">
+          {% if f.durum == 'bekliyor' %}<span class="badge bg-yellow-100 text-yellow-700">Bekliyor</span>
+          {% elif f.durum == 'onaylandi' %}<span class="badge bg-blue-100 text-blue-700">Onaylandı</span>
+          {% elif f.durum == 'odendi' %}<span class="badge bg-green-100 text-green-700">Ödendi</span>
+          {% elif f.durum == 'iptal' %}<span class="badge bg-red-100 text-red-700">İptal</span>
+          {% elif f.durum == 'iade' %}<span class="badge bg-orange-100 text-orange-700">İade</span>{% endif %}
+        </td>
+        <td class="px-5 py-3 text-center">
+          <a href="{{ url_for('muhasebe.fatura_detay', fatura_id=f.id) }}" class="text-xs text-blue-600 hover:underline">Detay</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="px-5 py-16 text-center text-gray-400">Fatura bulunamadı.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

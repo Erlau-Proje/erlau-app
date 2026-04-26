@@ -1,42 +1,40 @@
 # TODO.md — Eksik ve Geliştirilmesi Gerekenler
 
 ## KRİTİK (Düzeltilmesi Gereken)
-- [ ] TalepFormu'ndan kullanim_amaci, kullanilan_alan, proje_makine kaldırılmalı
-- [ ] routes.py yeni_talep → TalepFormu oluştururken bu 3 alan hala yazılıyor
-- [ ] talep_pdf → talep.kullanim_amaci yerine TalepKalem'den okunmalı
-- [ ] SECRET_KEY hardcoded → environment variable'a alınmalı
-- [ ] forms.py boş ama Flask-WTF kurulu → ya kullanılmalı ya kaldırılmalı
-- [ ] guncelle.sh var mı doğrula: cat /root/guncelle.sh
+- [x] TalepFormu'ndan kullanim_amaci, kullanilan_alan, proje_makine kaldırılmalı → zaten TalepKalem'de
+- [x] routes.py yeni_talep → TalepKalem objesine yazılıyor, TalepFormu'na değil
+- [x] talep_pdf → kalem.* ile okunuyor, talep.kullanim_amaci kullanılmıyor
+- [x] SECRET_KEY hardcoded → os.environ.get ile alınıyor
+- [x] forms.py boş ama Flask-WTF kurulu → hata vermiyor, ileride kullanılabilir, bırakıldı
+- [x] guncelle.sh → /root/guncelle.sh mevcut
 
 ## ÖNEMLİ EKSİKLER
-- [ ] Kullanıcı silme/düzenleme yok
-- [ ] Tedarikçi silme/düzenleme yok
-- [ ] Talep düzenleme yok
-- [ ] Talep silme yok
-- [ ] departman_yoneticisi onay yetkisi yok (iş akışı belirsiz)
-- [ ] gm onay yetkisi yok
-- [ ] PDF Türkçe karakter sorunu (Helvetica → Türkçe desteklemiyor)
-- [ ] Fiyat alanları (br_fiyat, toplam_fiyat) hiçbir formda dolmuyor
+- [x] Kullanıcı silme/düzenleme yok
+- [x] Tedarikçi silme/düzenleme yok
+- [x] Talep düzenleme yok
+- [x] Talep silme yok
+- [ ] ~~departman_yoneticisi online onay~~ → ERTELENDI: Şimdilik ıslak imza ile onay, ~1 ay sonra online onay akışı eklenecek
+- [ ] ~~gm online onay~~ → ERTELENDI: Şimdilik ıslak imza ile onay, ~1 ay sonra online onay akışı eklenecek
+- [x] PDF Türkçe karakter sorunu (Helvetica → Türkçe desteklemiyor)
+- [x] Fiyat alanları (br_fiyat, toplam_fiyat) hiçbir formda dolmuyor
 
 ## GELİŞTİRİLECEKLER
-- [ ] Fiyatlandırma ekranı (tedarikçi seç, fiyat, vade, termin)
-- [ ] Tedarikçi atama arayüzü
-- [ ] Departman yöneticisi onay adımı
-- [ ] GM online onay adımı
-- [ ] Filtreleme ve arama
+- [x] Fiyatlandırma ekranı (tedarikçi seç, fiyat, vade, termin)
+- [x] Tedarikçi atama arayüzü
+- [x] Filtreleme ve arama
 - [ ] Email/bildirim sistemi
-- [ ] Rapor ekranı (harcama istatistikleri)
-- [ ] Flask-Migrate kurulumu
+- [x] Rapor ekranı (harcama istatistikleri)
+- [x] Flask-Migrate kurulumu
 - [ ] PostgreSQL geçişi (SQLite production için yetersiz kalacak)
-- [ ] Kullanıcı şifre değiştirme
-- [ ] Tedarikçi Excel toplu aktarım
-- [ ] Outlook mail taslağı (Excel formatında sipariş)
-- [ ] PDF logo ekleme (Erlau_Eine_Marke_der_RUD_Gruppe_color.jpg)
+- [x] Kullanıcı şifre değiştirme + profil sayfası (unvan, telefon, doğum tarihi, istatistikler, son giriş, tablet PIN, bildirim tercihi)
+- [x] Tedarikçi Excel toplu aktarım
+- [x] Outlook mail taslağı (Excel formatında sipariş)
+- [x] PDF logo ekleme (vektör çizim ile yapıldı)
 - [ ] Günlük üretim takibi (tablet arayüzü)
 - [ ] CNC takım takibi (tablet arayüzü)
 - [ ] Muhasebe/fatura modülü
 
 ## TEKNİK BORÇ
-- [ ] TalepFormu.query.get_or_404() → db.get_or_404() kullanılmalı
-- [ ] Error handling yok (500 hataları ham görünüyor)
-- [ ] Logging yok
+- [x] TalepFormu.query.get_or_404() → db.get_or_404() kullanılmalı
+- [x] Error handling (404, 403, 500 özel hata sayfaları)
+- [x] Logging (logs/erlau.log, RotatingFileHandler, WARNING+)

@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
-from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci
+from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon
 from app.utils import generate_siparis_no
 from datetime import datetime, date, timedelta
 from functools import wraps
@@ -11,6 +11,7 @@ auth = Blueprint('auth', __name__)
 main = Blueprint('main', __name__)
 satin_alma = Blueprint('satin_alma', __name__, url_prefix='/satinalma')
 admin = Blueprint('admin', __name__, url_prefix='/admin')
+muhasebe = Blueprint('muhasebe', __name__, url_prefix='/muhasebe')
 
 def role_required(*roles):
     def decorator(f):
@@ -34,6 +35,8 @@ def login():
         user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password, password) and user.is_active:
             login_user(user)
+            user.son_giris = datetime.utcnow()
+            db.session.commit()
             return redirect(url_for('main.dashboard'))
         flash('E-posta veya şifre hatalı.', 'danger')
     return render_template('login.html')
@@ -68,6 +71,33 @@ def dashboard():
                 kalan_gunler[talep.id] = (bitis - bugun).days
 
     return render_template('dashboard.html', talepler=talepler, kalan_gunler=kalan_gunler)
+
+@main.route('/arama')
+@login_required
+def arama():
+    q = request.args.get('q', '').strip()
+    sonuclar = []
+    if q:
+        from sqlalchemy import or_
+        kalem_query = TalepKalem.query.join(TalepFormu).filter(
+            or_(
+                TalepKalem.malzeme_adi.ilike(f'%{q}%'),
+                TalepKalem.marka_model.ilike(f'%{q}%'),
+                TalepKalem.malzeme_turu.ilike(f'%{q}%'),
+                TalepKalem.aciklama.ilike(f'%{q}%'),
+                TalepKalem.kullanim_amaci.ilike(f'%{q}%'),
+                TalepKalem.teknik_resim_kodu.ilike(f'%{q}%'),
+                TalepKalem.standart.ilike(f'%{q}%'),
+                TalepFormu.siparis_no.ilike(f'%{q}%'),
+            )
+        )
+        if current_user.role not in ['satinalma', 'admin', 'gm']:
+            if current_user.role == 'departman_yoneticisi':
+                kalem_query = kalem_query.filter(TalepFormu.department_id == current_user.department_id)
+            else:
+                kalem_query = kalem_query.filter(TalepFormu.talep_eden_id == current_user.id)
+        sonuclar = kalem_query.order_by(TalepFormu.created_at.desc()).limit(50).all()
+    return render_template('arama.html', q=q, sonuclar=sonuclar)
 
 @main.route('/talep/yeni', methods=['GET', 'POST'])
 @login_required
@@ -121,13 +151,13 @@ def yeni_talep():
 @main.route('/talep/<int:talep_id>')
 @login_required
 def talep_detay(talep_id):
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     return render_template('talep_detay.html', talep=talep)
 
 @main.route('/talep/<int:talep_id>/duzenle', methods=['GET', 'POST'])
 @login_required
 def talep_duzenle(talep_id):
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     if talep.talep_eden_id != current_user.id and current_user.role != 'admin':
         flash('Bu talebi düzenleme yetkiniz yok.', 'danger')
         return redirect(url_for('main.dashboard'))
@@ -173,7 +203,7 @@ def talep_duzenle(talep_id):
 @main.route('/talep/<int:talep_id>/sil', methods=['POST'])
 @login_required
 def talep_sil(talep_id):
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     if talep.talep_eden_id != current_user.id and current_user.role != 'admin':
         flash('Bu talebi silme yetkiniz yok.', 'danger')
         return redirect(url_for('main.dashboard'))
@@ -184,6 +214,207 @@ def talep_sil(talep_id):
     db.session.commit()
     flash('Talep silindi.', 'success')
     return redirect(url_for('main.dashboard'))
+
+@satin_alma.route('/siparis-raporu')
+@login_required
+def siparis_raporu():
+    from sqlalchemy import func
+
+    # Filtreler
+    bas_str = request.args.get('bas_tarih', '')
+    bit_str = request.args.get('bit_tarih', '')
+    tur_filtre = request.args.get('malzeme_turu', '')
+    ted_filtre = request.args.get('tedarikci_id', '')
+    durum_filtre = request.args.get('durum', '')
+    hedef_filtre = request.args.get('hedef', '')
+    amac_filtre = request.args.get('kullanim_amaci', '')
+    alan_filtre = request.args.get('kullanilan_alan', '')
+    proje_filtre = request.args.get('proje_makine', '').strip()
+    export = request.args.get('export', '')
+
+    query = TalepKalem.query.join(TalepFormu)
+
+    # Rol bazlı kapsam
+    if current_user.role in ['satinalma', 'admin', 'gm']:
+        pass  # hepsini görür
+    elif current_user.role == 'departman_yoneticisi':
+        query = query.filter(TalepFormu.department_id == current_user.department_id)
+    else:
+        query = query.filter(TalepFormu.talep_eden_id == current_user.id)
+
+    if bas_str:
+        try:
+            bas = datetime.strptime(bas_str, '%Y-%m-%d')
+            query = query.filter(TalepFormu.created_at >= bas)
+        except ValueError:
+            pass
+    if bit_str:
+        try:
+            bit = datetime.strptime(bit_str, '%Y-%m-%d')
+            bit = bit.replace(hour=23, minute=59, second=59)
+            query = query.filter(TalepFormu.created_at <= bit)
+        except ValueError:
+            pass
+    if tur_filtre:
+        query = query.filter(TalepKalem.malzeme_turu == tur_filtre)
+    if ted_filtre:
+        query = query.filter(TalepKalem.tedarikci_id == int(ted_filtre))
+    if durum_filtre:
+        query = query.filter(TalepFormu.durum == durum_filtre)
+    if hedef_filtre:
+        query = query.filter(TalepKalem.hedef == hedef_filtre)
+    if amac_filtre:
+        query = query.filter(TalepKalem.kullanim_amaci == amac_filtre)
+    if alan_filtre:
+        query = query.filter(TalepKalem.kullanilan_alan == alan_filtre)
+    if proje_filtre:
+        query = query.filter(TalepKalem.proje_makine.ilike(f'%{proje_filtre}%'))
+
+    kalemler = query.order_by(TalepFormu.created_at.desc()).all()
+
+    # Excel export
+    if export == 'excel':
+        import io
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from flask import make_response
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Sipariş Raporu'
+        basliklar = ['Sipariş No', 'Tarih', 'Talep Eden', 'Departman', 'Malzeme Adı',
+                     'Marka/Model', 'Malzeme Türü', 'Kullanım Amacı', 'Kullanılan Alan',
+                     'Proje/Makine', 'Miktar', 'Birim', 'Br. Fiyat', 'Toplam', 'Para Birimi',
+                     'Tedarikçi', 'Vade (gün)', 'Termin (gün)', 'Durum']
+        yesil = PatternFill(fill_type='solid', fgColor='2d7a3a')
+        for col, b in enumerate(basliklar, 1):
+            c = ws.cell(row=1, column=col, value=b)
+            c.font = Font(bold=True, color='FFFFFF')
+            c.fill = yesil
+            c.alignment = Alignment(horizontal='center')
+            ws.column_dimensions[c.column_letter].width = 18
+        for i, k in enumerate(kalemler, 2):
+            t = k.talep
+            ws.append([
+                t.siparis_no,
+                t.created_at.strftime('%d.%m.%Y'),
+                t.talep_eden.name if t.talep_eden else '',
+                t.department.name if t.department else '',
+                k.malzeme_adi, k.marka_model or '',
+                k.malzeme_turu or '', k.kullanim_amaci or '',
+                k.kullanilan_alan or '', k.proje_makine or '',
+                k.miktar or '', k.birim or '',
+                k.br_fiyat or '', k.toplam_fiyat or '',
+                k.para_birimi or '',
+                k.tedarikci.name if k.tedarikci else '',
+                k.vade_gun or '', k.termin_gun or '',
+                t.durum
+            ])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        from flask import make_response
+        tarih = datetime.utcnow().strftime('%Y%m%d')
+        resp = make_response(buf.read())
+        resp.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        resp.headers['Content-Disposition'] = f'attachment; filename="siparis_raporu_{tarih}.xlsx"'
+        return resp
+
+    # Özet: türe göre
+    tur_ozet = {}
+    for k in kalemler:
+        tur = k.malzeme_turu or 'Belirtilmemiş'
+        if tur not in tur_ozet:
+            tur_ozet[tur] = {'adet': 0, 'toplam': 0, 'para': ''}
+        tur_ozet[tur]['adet'] += 1
+        if k.toplam_fiyat:
+            tur_ozet[tur]['toplam'] += k.toplam_fiyat
+            tur_ozet[tur]['para'] = k.para_birimi or ''
+
+    # Özet: tedarikçiye göre
+    ted_ozet = {}
+    for k in kalemler:
+        if k.tedarikci:
+            ad = k.tedarikci.name
+            if ad not in ted_ozet:
+                ted_ozet[ad] = {'adet': 0, 'toplam': 0, 'para': ''}
+            ted_ozet[ad]['adet'] += 1
+            if k.toplam_fiyat:
+                ted_ozet[ad]['toplam'] += k.toplam_fiyat
+                ted_ozet[ad]['para'] = k.para_birimi or ''
+
+    def distinct_vals(col):
+        return [v[0] for v in db.session.query(col).filter(col != None, col != '').distinct().order_by(col).all()]
+
+    turler = distinct_vals(TalepKalem.malzeme_turu)
+    hedefler = distinct_vals(TalepKalem.hedef)
+    amaclar = distinct_vals(TalepKalem.kullanim_amaci)
+    alanlar = distinct_vals(TalepKalem.kullanilan_alan)
+    tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
+
+    return render_template('siparis_raporu.html',
+        kalemler=kalemler, tur_ozet=tur_ozet, ted_ozet=ted_ozet,
+        turler=turler, hedefler=hedefler, amaclar=amaclar, alanlar=alanlar,
+        tedarikciler=tedarikciler,
+        bas_str=bas_str, bit_str=bit_str,
+        tur_filtre=tur_filtre, ted_filtre=ted_filtre, durum_filtre=durum_filtre,
+        hedef_filtre=hedef_filtre, amac_filtre=amac_filtre,
+        alan_filtre=alan_filtre, proje_filtre=proje_filtre
+    )
+
+@satin_alma.route('/raporlar')
+@login_required
+@role_required('satinalma', 'admin', 'gm')
+def raporlar():
+    from sqlalchemy import func, extract
+    from datetime import date
+
+    # Durum özeti
+    durum_rows = db.session.query(TalepFormu.durum, func.count(TalepFormu.id)).group_by(TalepFormu.durum).all()
+    durum_map = dict(durum_rows)
+
+    # Son 6 ay — talep sayısı
+    bugun = date.today()
+    aylar, ay_sayilari = [], []
+    for i in range(5, -1, -1):
+        ay = bugun.month - i
+        yil = bugun.year
+        while ay <= 0:
+            ay += 12
+            yil -= 1
+        sayi = TalepFormu.query.filter(
+            extract('month', TalepFormu.created_at) == ay,
+            extract('year', TalepFormu.created_at) == yil
+        ).count()
+        aylar.append(f"{ay:02d}/{yil}")
+        ay_sayilari.append(sayi)
+
+    # Departmana göre talep sayısı
+    dept_rows = db.session.query(Department.name, func.count(TalepFormu.id))\
+        .join(TalepFormu, TalepFormu.department_id == Department.id)\
+        .group_by(Department.name).order_by(func.count(TalepFormu.id).desc()).all()
+
+    # Malzeme türüne göre
+    tur_rows = db.session.query(TalepKalem.malzeme_turu, func.count(TalepKalem.id))\
+        .filter(TalepKalem.malzeme_turu != None)\
+        .group_by(TalepKalem.malzeme_turu).order_by(func.count(TalepKalem.id).desc()).all()
+
+    # Tedarikçiye göre harcama (TL)
+    ted_rows = db.session.query(Tedarikci.name, func.coalesce(func.sum(TalepKalem.toplam_fiyat), 0))\
+        .join(TalepKalem, TalepKalem.tedarikci_id == Tedarikci.id)\
+        .filter(TalepKalem.para_birimi == 'TL')\
+        .group_by(Tedarikci.name).order_by(func.sum(TalepKalem.toplam_fiyat).desc()).limit(10).all()
+
+    toplam_talep = TalepFormu.query.count()
+    toplam_kalem = TalepKalem.query.count()
+    toplam_tutar = db.session.query(func.coalesce(func.sum(TalepKalem.toplam_fiyat), 0))\
+        .filter(TalepKalem.para_birimi == 'TL').scalar() or 0
+
+    return render_template('raporlar.html',
+        durum_map=durum_map,
+        aylar=aylar, ay_sayilari=ay_sayilari,
+        dept_rows=dept_rows, tur_rows=tur_rows, ted_rows=ted_rows,
+        toplam_talep=toplam_talep, toplam_kalem=toplam_kalem, toplam_tutar=toplam_tutar
+    )
 
 @satin_alma.route('/panel')
 @login_required
@@ -211,7 +442,7 @@ def panel():
 @login_required
 @role_required('satinalma', 'admin')
 def onayla(talep_id):
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     talep.durum = 'onaylandi'
     db.session.commit()
     flash('Talep onaylandı.', 'success')
@@ -221,7 +452,7 @@ def onayla(talep_id):
 @login_required
 @role_required('satinalma', 'admin')
 def iptal(talep_id):
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     talep.durum = 'iptal'
     db.session.commit()
     flash('Talep iptal edildi.', 'warning')
@@ -261,7 +492,7 @@ def kullanici_ekle():
 @login_required
 @role_required('admin')
 def kullanici_duzenle(user_id):
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User, user_id)
     user.name = request.form.get('name')
     user.role = request.form.get('role')
     user.department_id = request.form.get('department_id') or None
@@ -274,7 +505,7 @@ def kullanici_duzenle(user_id):
 @login_required
 @role_required('admin')
 def kullanici_sil(user_id):
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User, user_id)
     if user.id == current_user.id:
         flash('Kendi hesabınızı silemezsiniz.', 'danger')
         return redirect(url_for('admin.kullanicilar'))
@@ -289,6 +520,76 @@ def kullanici_sil(user_id):
 def tedarikci_listesi():
     tedarikciler = Tedarikci.query.all()
     return render_template('tedarikci.html', tedarikciler=tedarikciler)
+
+@admin.route('/tedarikci/sablonu-indir')
+@login_required
+@role_required('admin', 'satinalma')
+def tedarikci_sablon_indir():
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from flask import make_response
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Tedarikçiler'
+    basliklar = ['Firma Adı*', 'Unvan', 'Vergi No', 'E-posta', 'Telefon', 'İletişim Kişisi', 'Adres', 'Para Birimi (TL/USD/EUR)', 'Vade Gün', 'Kategori']
+    for col, baslik in enumerate(basliklar, 1):
+        hucre = ws.cell(row=1, column=col, value=baslik)
+        hucre.font = Font(bold=True, color='FFFFFF')
+        hucre.fill = PatternFill(fill_type='solid', fgColor='2d7a3a')
+        hucre.alignment = Alignment(horizontal='center')
+        ws.column_dimensions[hucre.column_letter].width = 20
+    ornek = ['Örnek A.Ş.', 'Makine Tedarikçisi', '1234567890', 'info@ornek.com', '0212 000 00 00', 'Ahmet Yılmaz', 'İstanbul', 'TL', '30', 'Makine']
+    for col, deger in enumerate(ornek, 1):
+        ws.cell(row=2, column=col, value=deger)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    resp = make_response(buf.read())
+    resp.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    resp.headers['Content-Disposition'] = 'attachment; filename=tedarikci_sablonu.xlsx'
+    return resp
+
+@admin.route('/tedarikci/excel-yukle', methods=['POST'])
+@login_required
+@role_required('admin', 'satinalma')
+def tedarikci_excel_yukle():
+    from openpyxl import load_workbook
+    dosya = request.files.get('excel_dosya')
+    if not dosya or not dosya.filename.endswith('.xlsx'):
+        flash('Geçerli bir .xlsx dosyası seçin.', 'danger')
+        return redirect(url_for('admin.tedarikci_listesi'))
+    try:
+        wb = load_workbook(dosya)
+        ws = wb.active
+        eklenen, atlanan = 0, 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row[0]:
+                continue
+            name = str(row[0]).strip()
+            vergi_no = str(row[2]).strip() if row[2] else None
+            if Tedarikci.query.filter_by(name=name).first():
+                atlanan += 1
+                continue
+            t = Tedarikci(
+                name=name,
+                unvan=str(row[1]).strip() if row[1] else None,
+                vergi_no=vergi_no,
+                email=str(row[3]).strip() if row[3] else None,
+                telefon=str(row[4]).strip() if row[4] else None,
+                iletisim_kisi=str(row[5]).strip() if row[5] else None,
+                adres=str(row[6]).strip() if row[6] else None,
+                para_birimi=str(row[7]).strip() if row[7] else 'TL',
+                vade_gun=int(row[8]) if row[8] else 30,
+                kategori=str(row[9]).strip() if row[9] else None,
+            )
+            db.session.add(t)
+            eklenen += 1
+        db.session.commit()
+        flash(f'{eklenen} tedarikçi eklendi. {atlanan} kayıt zaten mevcut olduğu için atlandı.', 'success')
+    except Exception as e:
+        flash(f'Dosya okunamadı: {e}', 'danger')
+    return redirect(url_for('admin.tedarikci_listesi'))
 
 @admin.route('/tedarikci/ekle', methods=['POST'])
 @login_required
@@ -315,7 +616,7 @@ def tedarikci_ekle():
 @login_required
 @role_required('admin', 'satinalma')
 def tedarikci_duzenle(t_id):
-    t = Tedarikci.query.get_or_404(t_id)
+    t = db.get_or_404(Tedarikci, t_id)
     t.name = request.form.get('name')
     t.unvan = request.form.get('unvan')
     t.vergi_no = request.form.get('vergi_no')
@@ -334,7 +635,7 @@ def tedarikci_duzenle(t_id):
 @login_required
 @role_required('admin', 'satinalma')
 def tedarikci_sil(t_id):
-    t = Tedarikci.query.get_or_404(t_id)
+    t = db.get_or_404(Tedarikci, t_id)
     t.is_active = False
     db.session.commit()
     flash(f'{t.name} pasife alındı.', 'warning')
@@ -365,6 +666,75 @@ def _register_fonts():
     except Exception:
         pass
 
+@main.route('/profil', methods=['GET', 'POST'])
+@login_required
+def profil():
+    if request.method == 'POST':
+        aksiyon = request.form.get('aksiyon')
+        if aksiyon == 'profil_guncelle':
+            current_user.name = request.form.get('name') or current_user.name
+            current_user.unvan = request.form.get('unvan') or None
+            current_user.telefon = request.form.get('telefon') or None
+            dogum_str = request.form.get('dogum_tarihi')
+            if dogum_str:
+                try:
+                    from datetime import date
+                    current_user.dogum_tarihi = date.fromisoformat(dogum_str)
+                except ValueError:
+                    pass
+            current_user.unvan_pdf_goster = request.form.get('unvan_pdf_goster') == '1'
+            current_user.bildirim_email = request.form.get('bildirim_email') == '1'
+            pin = request.form.get('tablet_pin', '').strip()
+            if pin and pin.isdigit() and len(pin) == 4:
+                current_user.tablet_pin = pin
+            elif pin == '':
+                current_user.tablet_pin = None
+            db.session.commit()
+            flash('Profil güncellendi.', 'success')
+        elif aksiyon == 'sifre_degistir':
+            mevcut = request.form.get('mevcut_sifre')
+            yeni = request.form.get('yeni_sifre')
+            tekrar = request.form.get('yeni_sifre_tekrar')
+            if not check_password_hash(current_user.password, mevcut):
+                flash('Mevcut şifre hatalı.', 'danger')
+            elif len(yeni) < 6:
+                flash('Yeni şifre en az 6 karakter olmalıdır.', 'danger')
+            elif yeni != tekrar:
+                flash('Yeni şifreler eşleşmiyor.', 'danger')
+            else:
+                current_user.password = generate_password_hash(yeni)
+                current_user.sifre_degisim_tarihi = datetime.utcnow()
+                db.session.commit()
+                flash('Şifreniz başarıyla değiştirildi.', 'success')
+    from sqlalchemy import func
+    toplam = TalepFormu.query.filter_by(talep_eden_id=current_user.id).count()
+    durum_sayilari = dict(
+        db.session.query(TalepFormu.durum, func.count(TalepFormu.id))
+        .filter_by(talep_eden_id=current_user.id)
+        .group_by(TalepFormu.durum).all()
+    )
+    bu_ay_baslangic = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    bu_ay = TalepFormu.query.filter(
+        TalepFormu.talep_eden_id == current_user.id,
+        TalepFormu.created_at >= bu_ay_baslangic
+    ).count()
+    return render_template('profil.html', toplam=toplam, durum_sayilari=durum_sayilari, bu_ay=bu_ay)
+
+@admin.route('/kullanici/<int:user_id>/sifre-sifirla', methods=['POST'])
+@login_required
+@role_required('admin')
+def kullanici_sifre_sifirla(user_id):
+    user = db.get_or_404(User, user_id)
+    yeni = request.form.get('yeni_sifre')
+    if not yeni or len(yeni) < 6:
+        flash('Şifre en az 6 karakter olmalıdır.', 'danger')
+    else:
+        user.password = generate_password_hash(yeni)
+        user.sifre_degisim_tarihi = datetime.utcnow()
+        db.session.commit()
+        flash(f'{user.name} şifresi sıfırlandı.', 'success')
+    return redirect(url_for('admin.kullanicilar'))
+
 @main.route('/talep/<int:talep_id>/pdf')
 @login_required
 def talep_pdf(talep_id):
@@ -372,7 +742,7 @@ def talep_pdf(talep_id):
     FONT = 'DejaVu' if _fonts_registered else 'Helvetica'
     FONT_BOLD = 'DejaVu-Bold' if _fonts_registered else 'Helvetica-Bold'
 
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
         rightMargin=1.5*cm, leftMargin=1.5*cm,
@@ -452,7 +822,7 @@ def talep_pdf(talep_id):
 
     imza_data = [
         ['Talebi Oluşturan', 'Departman Müdürü Onayı', 'Genel Müdür Onayı'],
-        ['\n\n\n' + (talep.talep_eden.name if talep.talep_eden else ''), '\n\n\nAd Soyad', '\n\n\nAd Soyad'],
+        ['\n\n\n' + (talep.talep_eden.name if talep.talep_eden else '') + ('\n' + talep.talep_eden.unvan if talep.talep_eden and talep.talep_eden.unvan and talep.talep_eden.unvan_pdf_goster else ''), '\n\n\nAd Soyad', '\n\n\nAd Soyad'],
         ['İmza / Tarih', 'İmza / Tarih', 'İmza / Tarih'],
     ]
     imza_table = Table(imza_data, colWidths=[8*cm, 8*cm, 8*cm])
@@ -479,7 +849,7 @@ def talep_pdf(talep_id):
 @login_required
 @role_required('satinalma', 'admin')
 def fiyatlandir(talep_id):
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
     if request.method == 'POST':
         for kalem in talep.kalemler:
@@ -499,11 +869,129 @@ def fiyatlandir(talep_id):
         return redirect(url_for('satin_alma.panel'))
     return render_template('fiyatlandir.html', talep=talep, tedarikciler=tedarikciler)
 
+@satin_alma.route('/siparis/<int:talep_id>')
+@login_required
+@role_required('satinalma', 'admin')
+def siparis_ozet(talep_id):
+    talep = db.get_or_404(TalepFormu, talep_id)
+    gruplar = {}
+    atamasiz = []
+    for kalem in talep.kalemler:
+        if kalem.tedarikci:
+            tid = kalem.tedarikci_id
+            if tid not in gruplar:
+                gruplar[tid] = {'tedarikci': kalem.tedarikci, 'kalemler': [], 'toplam': 0}
+            gruplar[tid]['kalemler'].append(kalem)
+            if kalem.toplam_fiyat:
+                gruplar[tid]['toplam'] += kalem.toplam_fiyat
+        else:
+            atamasiz.append(kalem)
+    cc_emails = [u.email for u in User.query.filter(
+        User.role == 'satinalma', User.id != current_user.id, User.is_active == True
+    ).all()]
+    cc = ','.join(cc_emails)
+    return render_template('siparis_ozet.html', talep=talep, gruplar=gruplar, atamasiz=atamasiz, cc=cc)
+
+@satin_alma.route('/siparis/<int:talep_id>/excel/<int:tedarikci_id>')
+@login_required
+@role_required('satinalma', 'admin')
+def siparis_excel(talep_id, tedarikci_id):
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    talep = db.get_or_404(TalepFormu, talep_id)
+    tedarikci = db.get_or_404(Tedarikci, tedarikci_id)
+    kalemler = [k for k in talep.kalemler if k.tedarikci_id == tedarikci_id]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Sipariş'
+
+    yesil = PatternFill(fill_type='solid', fgColor='2d7a3a')
+    acik = PatternFill(fill_type='solid', fgColor='f0f7f1')
+    kalin = Font(bold=True)
+    beyaz_kalin = Font(bold=True, color='FFFFFF')
+    ince = Border(
+        left=Side(style='thin', color='CCCCCC'), right=Side(style='thin', color='CCCCCC'),
+        top=Side(style='thin', color='CCCCCC'), bottom=Side(style='thin', color='CCCCCC')
+    )
+    orta = Alignment(horizontal='center', vertical='center')
+
+    # Başlık
+    ws.merge_cells('A1:J1')
+    ws['A1'] = 'ERLAU — SİPARİŞ FORMU'
+    ws['A1'].font = Font(bold=True, size=14, color='2d7a3a')
+    ws['A1'].alignment = orta
+    ws.row_dimensions[1].height = 28
+
+    # Bilgi satırları
+    bilgiler = [
+        ('Sipariş No', talep.siparis_no), ('Tarih', datetime.utcnow().strftime('%d.%m.%Y')),
+        ('Tedarikçi', tedarikci.name), ('İletişim Kişisi', tedarikci.iletisim_kisi or '-'),
+        ('E-posta', tedarikci.email or '-'), ('Telefon', tedarikci.telefon or '-'),
+    ]
+    for i, (label, val) in enumerate(bilgiler, 2):
+        ws.cell(row=i, column=1, value=label).font = kalin
+        ws.cell(row=i, column=2, value=val)
+    ws.row_dimensions[8].height = 8
+
+    # Tablo başlığı
+    basliklar = ['#', 'Malzeme Adı', 'Marka/Model', 'Tür', 'Birim', 'Miktar', 'Br. Fiyat', 'Toplam', 'Para Birimi', 'Termin (gün)']
+    for col, b in enumerate(basliklar, 1):
+        c = ws.cell(row=9, column=col, value=b)
+        c.font = beyaz_kalin
+        c.fill = yesil
+        c.alignment = orta
+        c.border = ince
+
+    genislikler = [4, 30, 20, 15, 8, 8, 12, 12, 12, 12]
+    for i, g in enumerate(genislikler, 1):
+        ws.column_dimensions[get_column_letter(i)].width = g
+
+    # Kalemler
+    toplam_genel = 0
+    for idx, k in enumerate(kalemler, 1):
+        row = 9 + idx
+        fill = acik if idx % 2 == 0 else PatternFill()
+        satirlar = [idx, k.malzeme_adi, k.marka_model or '', k.malzeme_turu or '',
+                    k.birim or '', k.miktar or '', k.br_fiyat or '', k.toplam_fiyat or '', k.para_birimi or '', k.termin_gun or '']
+        for col, val in enumerate(satirlar, 1):
+            c = ws.cell(row=row, column=col, value=val)
+            c.border = ince
+            if fill.fill_type:
+                c.fill = fill
+        if k.toplam_fiyat:
+            toplam_genel += k.toplam_fiyat
+
+    # Toplam satırı
+    t_row = 9 + len(kalemler) + 1
+    ws.cell(row=t_row, column=7, value='TOPLAM').font = kalin
+    ws.cell(row=t_row, column=8, value=toplam_genel).font = kalin
+    ws.cell(row=t_row, column=9, value=kalemler[0].para_birimi if kalemler else '').font = kalin
+
+    # Not alanı
+    ws.cell(row=t_row+2, column=1, value='Not / Açıklama:').font = kalin
+    ws.merge_cells(f'B{t_row+2}:J{t_row+3}')
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    from flask import make_response
+    resp = make_response(buf.read())
+    resp.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    tr_map = str.maketrans('çğıöşüÇĞİÖŞÜ', 'cgiosucgiosu')
+    guvenli_ad = tedarikci.name.translate(tr_map).replace(' ', '_')
+    from urllib.parse import quote
+    utf8_ad = quote(f'siparis_{talep.siparis_no}_{tedarikci.name}.xlsx')
+    resp.headers['Content-Disposition'] = f"attachment; filename=\"siparis_{talep.siparis_no}_{guvenli_ad}.xlsx\"; filename*=UTF-8''{utf8_ad}"
+    return resp
+
 @satin_alma.route('/yolda/<int:talep_id>', methods=['POST'])
 @login_required
 @role_required('satinalma', 'admin')
 def yolda(talep_id):
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     talep.durum = 'yolda'
     db.session.commit()
     flash('Sipariş yolda olarak işaretlendi.', 'success')
@@ -513,7 +1001,7 @@ def yolda(talep_id):
 @login_required
 @role_required('satinalma', 'admin')
 def teslim(talep_id):
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     talep.durum = 'teslim_alindi'
     db.session.commit()
     flash('Sipariş teslim alındı olarak işaretlendi.', 'success')
@@ -523,7 +1011,7 @@ def teslim(talep_id):
 @login_required
 @role_required('satinalma', 'admin')
 def durum_guncelle(talep_id):
-    talep = TalepFormu.query.get_or_404(talep_id)
+    talep = db.get_or_404(TalepFormu, talep_id)
     yeni_durum = request.form.get('durum')
     gecerli_durumlar = ['bekliyor', 'fiyatlandirildi', 'onaylandi', 'yolda', 'teslim_alindi', 'iptal']
     if yeni_durum in gecerli_durumlar:
@@ -571,3 +1059,262 @@ def kullanim_sikligi_api():
               .filter(TalepFormu.durum == 'teslim_alindi')
               .count())
     return jsonify({'toplam': toplam})
+
+# ─── MUHASEBE ────────────────────────────────────────────────────────────────
+
+IZINLI_MUHASEBE = ['muhasebe', 'satinalma', 'admin']
+
+@muhasebe.route('/faturalar')
+@login_required
+@role_required('muhasebe', 'satinalma', 'admin')
+def fatura_listesi():
+    durum_filtre = request.args.get('durum', '')
+    q = request.args.get('q', '').strip()
+    query = Fatura.query
+    if durum_filtre:
+        query = query.filter_by(durum=durum_filtre)
+    if q:
+        from sqlalchemy import or_
+        query = query.filter(or_(
+            Fatura.fatura_no.ilike(f'%{q}%'),
+            Fatura.tedarikci_adi_ham.ilike(f'%{q}%'),
+        ))
+    faturalar = query.order_by(Fatura.yukleme_tarihi.desc()).all()
+    ozet = {
+        'toplam': len(faturalar),
+        'bekliyor': sum(1 for f in faturalar if f.durum == 'bekliyor'),
+        'odendi': sum(1 for f in faturalar if f.durum == 'odendi'),
+        'iptal_iade': sum(1 for f in faturalar if f.durum in ['iptal', 'iade']),
+        'toplam_tutar': sum(f.genel_toplam or 0 for f in faturalar if f.durum not in ['iptal', 'iade']),
+    }
+    return render_template('fatura_listesi.html', faturalar=faturalar, ozet=ozet,
+                           durum_filtre=durum_filtre, q=q, today=date.today())
+
+@muhasebe.route('/fatura/yukle', methods=['GET', 'POST'])
+@login_required
+@role_required('muhasebe', 'admin')
+def fatura_yukle():
+    if request.method == 'POST':
+        dosya = request.files.get('pdf_dosya')
+        if not dosya or not dosya.filename.endswith('.pdf'):
+            flash('Geçerli bir PDF dosyası seçin.', 'danger')
+            return redirect(request.url)
+        import os
+        from werkzeug.utils import secure_filename
+        dosya_adi = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{secure_filename(dosya.filename)}"
+        kayit_dizini = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'faturalar')
+        os.makedirs(kayit_dizini, exist_ok=True)
+        tam_yol = os.path.join(kayit_dizini, dosya_adi)
+        dosya.save(tam_yol)
+
+        try:
+            from app.fatura_ai import pdf_oku
+            # Tedarikçi hafızası var mı kontrol et
+            ted_id = request.form.get('tedarikci_id')
+            ornek = None
+            if ted_id:
+                sablon = TedarikciSablon.query.filter_by(tedarikci_id=int(ted_id)).first()
+                if sablon:
+                    ornek = sablon.ornek_json
+            ai_sonuc = pdf_oku(tam_yol, ornek)
+        except Exception as e:
+            os.remove(tam_yol)
+            flash(f'AI analizi başarısız: {e}', 'danger')
+            return redirect(request.url)
+
+        import json
+        fatura = Fatura(
+            fatura_no=ai_sonuc.get('fatura_no'),
+            tedarikci_adi_ham=ai_sonuc.get('tedarikci_adi'),
+            ara_toplam=ai_sonuc.get('ara_toplam'),
+            kdv_tutari=ai_sonuc.get('kdv_tutari'),
+            genel_toplam=ai_sonuc.get('genel_toplam'),
+            para_birimi=ai_sonuc.get('para_birimi', 'TL'),
+            dosya_yolu=dosya_adi,
+            ai_ham_veri=json.dumps(ai_sonuc, ensure_ascii=False),
+            ai_guvenskoru=ai_sonuc.get('guven_skoru', 0.5),
+            yukleyen_id=current_user.id,
+            durum='bekliyor',
+        )
+        if ai_sonuc.get('fatura_tarihi'):
+            try:
+                from datetime import date
+                fatura.fatura_tarihi = date.fromisoformat(ai_sonuc['fatura_tarihi'])
+            except: pass
+        if ai_sonuc.get('vade_tarihi'):
+            try:
+                from datetime import date
+                fatura.vade_tarihi = date.fromisoformat(ai_sonuc['vade_tarihi'])
+            except: pass
+        if ted_id:
+            fatura.tedarikci_id = int(ted_id)
+        db.session.add(fatura)
+        db.session.flush()
+
+        for k in ai_sonuc.get('kalemler', []):
+            fk = FaturaKalem(
+                fatura_id=fatura.id,
+                malzeme_adi=k.get('malzeme_adi'),
+                miktar=k.get('miktar'),
+                birim=k.get('birim'),
+                br_fiyat=k.get('br_fiyat'),
+                kdv_orani=k.get('kdv_orani'),
+                toplam_fiyat=k.get('toplam_fiyat'),
+            )
+            db.session.add(fk)
+
+        db.session.commit()
+        flash(f'Fatura yüklendi ve AI analiz etti. Lütfen kontrol edin.', 'success')
+        return redirect(url_for('muhasebe.fatura_detay', fatura_id=fatura.id))
+
+    tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
+    return render_template('fatura_yukle.html', tedarikciler=tedarikciler)
+
+@muhasebe.route('/fatura/<int:fatura_id>')
+@login_required
+@role_required('muhasebe', 'satinalma', 'admin')
+def fatura_detay(fatura_id):
+    fatura = db.get_or_404(Fatura, fatura_id)
+    talepler = TalepFormu.query.filter(
+        TalepFormu.durum.in_(['onaylandi', 'yolda', 'teslim_alindi'])
+    ).order_by(TalepFormu.created_at.desc()).limit(50).all()
+    tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
+    return render_template('fatura_detay.html', fatura=fatura, talepler=talepler, tedarikciler=tedarikciler)
+
+@muhasebe.route('/fatura/<int:fatura_id>/guncelle', methods=['POST'])
+@login_required
+@role_required('muhasebe', 'satinalma', 'admin')
+def fatura_guncelle(fatura_id):
+    fatura = db.get_or_404(Fatura, fatura_id)
+    fatura.fatura_no = request.form.get('fatura_no')
+    fatura.tedarikci_adi_ham = request.form.get('tedarikci_adi_ham')
+    fatura.ara_toplam = request.form.get('ara_toplam') or None
+    fatura.kdv_tutari = request.form.get('kdv_tutari') or None
+    fatura.genel_toplam = request.form.get('genel_toplam') or None
+    fatura.para_birimi = request.form.get('para_birimi', 'TL')
+    fatura.notlar = request.form.get('notlar')
+    ted_id = request.form.get('tedarikci_id')
+    fatura.tedarikci_id = int(ted_id) if ted_id else None
+    tarih_str = request.form.get('fatura_tarihi')
+    vade_str = request.form.get('vade_tarihi')
+    if tarih_str:
+        try:
+            from datetime import date
+            fatura.fatura_tarihi = date.fromisoformat(tarih_str)
+        except: pass
+    if vade_str:
+        try:
+            from datetime import date
+            fatura.vade_tarihi = date.fromisoformat(vade_str)
+        except: pass
+
+    # Kalemleri güncelle
+    for kalem in fatura.kalemler:
+        prefix = f'kalem_{kalem.id}_'
+        kalem.malzeme_adi = request.form.get(prefix + 'malzeme_adi', kalem.malzeme_adi)
+        kalem.miktar = request.form.get(prefix + 'miktar') or kalem.miktar
+        kalem.br_fiyat = request.form.get(prefix + 'br_fiyat') or kalem.br_fiyat
+        kalem.toplam_fiyat = request.form.get(prefix + 'toplam_fiyat') or kalem.toplam_fiyat
+
+    # Tedarikçi hafızasını güncelle
+    if fatura.tedarikci_id:
+        import json
+        sablon = TedarikciSablon.query.filter_by(tedarikci_id=fatura.tedarikci_id).first()
+        if not sablon:
+            sablon = TedarikciSablon(tedarikci_id=fatura.tedarikci_id)
+            db.session.add(sablon)
+        sablon.ornek_json = json.dumps({
+            'fatura_no': fatura.fatura_no,
+            'fatura_tarihi': str(fatura.fatura_tarihi),
+            'tedarikci_adi': fatura.tedarikci_adi_ham,
+            'genel_toplam': fatura.genel_toplam,
+            'para_birimi': fatura.para_birimi,
+            'kalemler': [{'malzeme_adi': k.malzeme_adi, 'miktar': k.miktar,
+                          'birim': k.birim, 'br_fiyat': k.br_fiyat} for k in fatura.kalemler]
+        }, ensure_ascii=False)
+        sablon.guncelleme_tarihi = datetime.utcnow()
+
+    db.session.commit()
+    flash('Fatura güncellendi ve tedarikçi hafızası iyileştirildi.', 'success')
+    return redirect(url_for('muhasebe.fatura_detay', fatura_id=fatura.id))
+
+@muhasebe.route('/fatura/<int:fatura_id>/durum', methods=['POST'])
+@login_required
+@role_required('muhasebe', 'satinalma', 'admin')
+def fatura_durum(fatura_id):
+    fatura = db.get_or_404(Fatura, fatura_id)
+    yeni_durum = request.form.get('durum')
+    if yeni_durum in ['bekliyor', 'onaylandi', 'odendi', 'iptal', 'iade']:
+        fatura.durum = yeni_durum
+        if yeni_durum == 'odendi':
+            from datetime import date
+            fatura.odeme_tarihi = date.today()
+        # Onaylanan faturalarda eşleşmeleri hafızaya kaydet
+        if yeni_durum in ['onaylandi', 'odendi']:
+            from app.fatura_ai import hafizaya_kaydet
+            for kalem in fatura.kalemler:
+                if kalem.eslesme_durumu in ['eslesti', 'fiyat_farki'] and kalem.talep_kalem_id:
+                    talep_kalemi = db.get_or_404(FaturaKalem, kalem.id)
+                    if kalem.malzeme_adi:
+                        from app.models import TalepKalem
+                        tk = TalepKalem.query.get(kalem.talep_kalem_id)
+                        if tk:
+                            hafizaya_kaydet(kalem.malzeme_adi, tk.malzeme_adi)
+        db.session.commit()
+        flash(f'Fatura durumu güncellendi: {yeni_durum}', 'success')
+    return redirect(url_for('muhasebe.fatura_detay', fatura_id=fatura.id))
+
+@muhasebe.route('/fatura/<int:fatura_id>/esles', methods=['POST'])
+@login_required
+@role_required('muhasebe', 'satinalma', 'admin')
+def fatura_esles(fatura_id):
+    fatura = db.get_or_404(Fatura, fatura_id)
+    talep_id = request.form.get('talep_id')
+    if talep_id:
+        talep = db.get_or_404(TalepFormu, int(talep_id))
+        fatura.talep_id = talep.id
+        from app.fatura_ai import siparis_eslestir
+        eslesme = siparis_eslestir(
+            [{'malzeme_adi': k.malzeme_adi, 'br_fiyat': k.br_fiyat, 'miktar': k.miktar} for k in fatura.kalemler],
+            talep.kalemler
+        )
+        from app.fatura_ai import hafizaya_kaydet
+        for i, kalem in enumerate(fatura.kalemler):
+            if i < len(eslesme):
+                kalem.talep_kalem_id = eslesme[i]['talep_kalem_id']
+                kalem.eslesme_durumu = eslesme[i]['eslesme_durumu']
+                kalem.eslesme_notu = eslesme[i]['eslesme_notu']
+                # Eşleşen kalemleri hafızaya kaydet
+                if eslesme[i]['talep_kalem_id'] and kalem.malzeme_adi:
+                    from app.models import TalepKalem
+                    tk = TalepKalem.query.get(eslesme[i]['talep_kalem_id'])
+                    if tk:
+                        hafizaya_kaydet(kalem.malzeme_adi, tk.malzeme_adi)
+        db.session.commit()
+        flash(f'Fatura {talep.siparis_no} ile eşleştirildi.', 'success')
+    return redirect(url_for('muhasebe.fatura_detay', fatura_id=fatura.id))
+
+@muhasebe.route('/fatura/<int:fatura_id>/sil', methods=['POST'])
+@login_required
+@role_required('muhasebe', 'satinalma', 'admin')
+def fatura_sil(fatura_id):
+    fatura = db.get_or_404(Fatura, fatura_id)
+    import os
+    if fatura.dosya_yolu:
+        tam_yol = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'faturalar', fatura.dosya_yolu)
+        if os.path.exists(tam_yol):
+            os.remove(tam_yol)
+    db.session.delete(fatura)
+    db.session.commit()
+    flash('Fatura silindi.', 'warning')
+    return redirect(url_for('muhasebe.fatura_listesi'))
+
+@muhasebe.route('/fatura/<int:fatura_id>/pdf')
+@login_required
+@role_required('muhasebe', 'satinalma', 'admin')
+def fatura_pdf_indir(fatura_id):
+    fatura = db.get_or_404(Fatura, fatura_id)
+    import os
+    from flask import send_file
+    tam_yol = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'faturalar', fatura.dosya_yolu)
+    return send_file(tam_yol, as_attachment=False, mimetype='application/pdf')

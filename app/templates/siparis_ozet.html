@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-800">Sipariş Özeti</h1>
+    <p class="text-sm text-gray-500 mt-1">{{ talep.siparis_no }} — {{ talep.talep_eden.name if talep.talep_eden else '-' }} — {{ talep.created_at.strftime('%d.%m.%Y') }}</p>
+  </div>
+  <a href="{{ url_for('satin_alma.panel') }}" class="text-sm text-gray-500 hover:text-gray-700">← Panele Dön</a>
+</div>
+
+{% if atamasiz %}
+<div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+  <svg class="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+  <div>
+    <p class="text-sm font-medium text-yellow-800">{{ atamasiz|length }} kalem henüz tedarikçiye atanmamış</p>
+    <p class="text-xs text-yellow-600 mt-0.5">Bu kalemler sipariş listesine dahil edilmedi. Önce fiyatlandırma ekranından tedarikçi atayın.</p>
+    <ul class="mt-2 space-y-1">
+      {% for k in atamasiz %}
+      <li class="text-xs text-yellow-700">• {{ k.malzeme_adi }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% if not gruplar %}
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-12 text-center text-gray-400">
+  Henüz tedarikçi atanmış kalem yok. Fiyatlandırma ekranından tedarikçi atayın.
+</div>
+{% endif %}
+
+{% for tid, grup in gruplar.items() %}
+{% set ted = grup.tedarikci %}
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm mb-6">
+
+  <!-- Tedarikçi başlık -->
+  <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+    <div>
+      <h2 class="font-semibold text-gray-800">{{ ted.name }}</h2>
+      <p class="text-xs text-gray-500 mt-0.5">
+        {% if ted.iletisim_kisi %}{{ ted.iletisim_kisi }}{% endif %}
+        {% if ted.telefon %} · {{ ted.telefon }}{% endif %}
+        {% if ted.email %} · {{ ted.email }}{% endif %}
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      {% if grup.toplam %}
+      <span class="text-sm font-semibold erlau-green-text mr-2">
+        {{ '{:,.2f}'.format(grup.toplam) }} {{ grup.kalemler[0].para_birimi or '₺' }}
+      </span>
+      {% endif %}
+      <a href="{{ url_for('satin_alma.siparis_excel', talep_id=talep.id, tedarikci_id=ted.id) }}"
+        class="flex items-center gap-1 border border-green-600 text-green-700 px-3 py-1.5 rounded-lg text-sm hover:bg-green-50">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        Excel İndir
+      </a>
+      {% if ted.email %}
+      {% set konu = "Sipariş - " ~ talep.siparis_no ~ " - " ~ ted.name %}
+      {% set govde = "Sayın " ~ (ted.iletisim_kisi or "İlgili") ~ ",%0D%0A%0D%0ASipariş formumuzu ekte bulabilirsiniz.%0D%0A%0D%0ASaygılarımızla,%0D%0AErlau Satın Alma" %}
+      {% set mailto_url = "mailto:" ~ ted.email ~ "?subject=" ~ konu ~ "&body=" ~ govde ~ ("&cc=" ~ cc if cc else "") %}
+      <a href="{{ mailto_url }}"
+        class="flex items-center gap-1 erlau-green text-white px-3 py-1.5 rounded-lg text-sm hover:opacity-90">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        Mail Aç
+      </a>
+      {% else %}
+      <span class="text-xs text-gray-400 italic">Mail adresi yok</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Kalemler -->
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">#</th>
+        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Malzeme</th>
+        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Marka/Model</th>
+        <th class="px-4 py-2 text-center text-xs font-medium text-gray-500">Miktar</th>
+        <th class="px-4 py-2 text-center text-xs font-medium text-gray-500">Br. Fiyat</th>
+        <th class="px-4 py-2 text-center text-xs font-medium text-gray-500">Toplam</th>
+        <th class="px-4 py-2 text-center text-xs font-medium text-gray-500">Termin</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-50">
+      {% for k in grup.kalemler %}
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-2 text-gray-400">{{ loop.index }}</td>
+        <td class="px-4 py-2 font-medium text-gray-800">{{ k.malzeme_adi }}</td>
+        <td class="px-4 py-2 text-gray-500">{{ k.marka_model or '-' }}</td>
+        <td class="px-4 py-2 text-center">{{ k.miktar or '-' }} {{ k.birim or '' }}</td>
+        <td class="px-4 py-2 text-center">{{ '{:,.2f}'.format(k.br_fiyat) if k.br_fiyat else '-' }}</td>
+        <td class="px-4 py-2 text-center font-medium">{{ '{:,.2f}'.format(k.toplam_fiyat) if k.toplam_fiyat else '-' }} {{ k.para_birimi or '' }}</td>
+        <td class="px-4 py-2 text-center text-gray-500">{{ k.termin_gun ~ ' gün' if k.termin_gun else '-' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+{% endblock %}

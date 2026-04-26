@@ -6,7 +6,22 @@
       "Bash(git commit -m ' *)",
       "Bash(journalctl -u erlau -n 30 --no-pager)",
       "Bash(curl -sL \"https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2\" -o dejavu.tar.bz2)",
-      "Bash(tar xjf *)"
+      "Bash(tar xjf *)",
+      "Bash(git restore *)",
+      "Bash(git -C /root/erlau-app log --oneline -8)",
+      "Read(//root/.claude/**)",
+      "Read(//root/**)",
+      "Bash(python -c \"from app import create_app; app = create_app\\(\\); print\\('OK'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(systemctl status *)",
+      "Bash(systemctl restart *)",
+      "Bash(python -)",
+      "Bash(sqlite3 /root/erlau-app/instance/erlau.db)",
+      "Bash(journalctl -u erlau -n 3 --no-pager)",
+      "Bash(python -c \"from app import create_app; app = create_app\\(\\); rules = [str\\(r\\) for r in app.url_map.iter_rules\\(\\) if 'rapor' in str\\(r\\)]; print\\(rules\\)\")",
+      "Bash(venv/bin/pip show *)",
+      "Bash(venv/bin/pip install *)",
+      "Bash(systemctl is-active *)"
     ]
   }
 }
