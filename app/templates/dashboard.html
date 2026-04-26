@@ -2,6 +2,7 @@
 {% block content %}
 
 {% if gm_stats %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- ═══════════════════════════════════════════════════════ GM DASHBOARD -->
 <div class="flex items-center justify-between mb-6">
   <div>
@@ -34,9 +35,15 @@
   </div>
 </div>
 
+<!-- Aylık Trend Grafiği -->
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-6">
+  <h2 class="font-medium text-gray-700 text-sm mb-4">Departmana Göre Aylık Sipariş Trendi — Son 6 Ay</h2>
+  <canvas id="trendChart" height="90"></canvas>
+</div>
+
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
 
-  <!-- Departman Kırılımı -->
+  <!-- Departman Durumu -->
   <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
     <div class="px-5 py-4 border-b border-gray-50">
       <h2 class="font-medium text-gray-700 text-sm">Departman Durumu</h2>
@@ -47,18 +54,11 @@
         <div class="flex-1 min-w-0">
           <p class="text-sm font-medium text-gray-700 truncate">{{ ds.dept.name }}</p>
           <div class="flex gap-3 mt-1">
-            {% if ds.bekleyen %}
-            <span class="text-xs text-yellow-600">{{ ds.bekleyen }} bekliyor</span>
-            {% endif %}
-            {% if ds.yolda %}
-            <span class="text-xs text-blue-500">{{ ds.yolda }} yolda</span>
-            {% endif %}
-            {% if ds.teslim %}
-            <span class="text-xs text-green-600">{{ ds.teslim }} teslim</span>
-            {% endif %}
+            {% if ds.bekleyen %}<span class="text-xs text-yellow-600">{{ ds.bekleyen }} bekliyor</span>{% endif %}
+            {% if ds.yolda %}<span class="text-xs text-blue-500">{{ ds.yolda }} yolda</span>{% endif %}
+            {% if ds.teslim %}<span class="text-xs text-green-600">{{ ds.teslim }} teslim</span>{% endif %}
           </div>
         </div>
-        <!-- Mini progress bar — toplam görsel -->
         <div class="text-right flex-shrink-0">
           <span class="text-lg font-bold text-gray-700">{{ ds.toplam }}</span>
           <p class="text-xs text-gray-400">toplam</p>
@@ -70,30 +70,64 @@
     </div>
   </div>
 
-  <!-- En Uzun Bekleyen Onaylar -->
+  <!-- Ortalama Onay Bekleme Süresi -->
   <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-    <div class="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
-      <h2 class="font-medium text-gray-700 text-sm">En Uzun Bekleyen Onaylar</h2>
-      {% if gm_stats.bekleyen > 8 %}
-      <span class="text-xs text-gray-400">+{{ gm_stats.bekleyen - 8 }} daha</span>
+    <div class="px-5 py-4 border-b border-gray-50">
+      <h2 class="font-medium text-gray-700 text-sm">Ortalama Onay Bekleme Süresi</h2>
+      <p class="text-xs text-gray-400 mt-0.5">Şu an bekleyen siparişler için</p>
+    </div>
+    {% if bekleme_stats %}
+    <div class="divide-y divide-gray-50">
+      {% for b in bekleme_stats %}
+      <div class="px-5 py-3.5 flex items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-gray-700 truncate">{{ b.dept.name }}</p>
+          <p class="text-xs text-gray-400 mt-0.5">{{ b.sayi }} sipariş bekliyor</p>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <span class="text-xl font-bold {% if b.gun > 7 %}text-red-500{% elif b.gun > 3 %}text-orange-500{% else %}text-green-600{% endif %}">
+            {{ b.gun }}
+          </span>
+          <p class="text-xs text-gray-400">gün</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-5 py-10 text-center">
+      <p class="text-sm text-gray-400">Bekleyen sipariş yok</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+  <!-- Gecikmiş Siparişler -->
+  <div class="bg-white rounded-xl border {% if gecikis_listesi %}border-red-100{% else %}border-gray-100{% endif %} shadow-sm overflow-hidden">
+    <div class="px-5 py-4 border-b {% if gecikis_listesi %}border-red-50 bg-red-50{% else %}border-gray-50{% endif %} flex items-center justify-between">
+      <h2 class="font-medium {% if gecikis_listesi %}text-red-700{% else %}text-gray-700{% endif %} text-sm">
+        Gecikmiş Siparişler
+      </h2>
+      {% if gecikis_listesi %}
+      <span class="text-xs font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">{{ gecikis_listesi|length }}</span>
       {% endif %}
     </div>
-    {% if bekleyen_talepler %}
+    {% if gecikis_listesi %}
     <div class="divide-y divide-gray-50">
-      {% for talep in bekleyen_talepler %}
-      {% set bekleme = (now - talep.created_at).days if now is defined else 0 %}
-      <div class="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+      {% for g in gecikis_listesi %}
+      <div class="px-5 py-3 flex items-center gap-3 hover:bg-gray-50">
         <div class="flex-1 min-w-0">
-          <a href="{{ url_for('main.talep_detay', talep_id=talep.id) }}"
-            class="text-sm font-medium erlau-green-text hover:underline">{{ talep.siparis_no }}</a>
+          <a href="{{ url_for('main.talep_detay', talep_id=g.talep.id) }}"
+            class="text-sm font-medium erlau-green-text hover:underline">{{ g.talep.siparis_no }}</a>
           <p class="text-xs text-gray-400 mt-0.5">
-            {{ talep.department.name if talep.department else '—' }} ·
-            {{ talep.talep_eden.name if talep.talep_eden else '—' }}
+            {{ g.talep.department.name if g.talep.department else '—' }}
           </p>
         </div>
         <div class="text-right flex-shrink-0">
-          <p class="text-xs text-gray-500">{{ talep.created_at.strftime('%d.%m.%Y') }}</p>
-          <p class="text-xs text-gray-400">{{ talep.kalemler|length }} kalem</p>
+          <span class="text-sm font-bold text-red-600">{{ g.gecikme }} gün</span>
+          <p class="text-xs text-gray-400">gecikti</p>
         </div>
       </div>
       {% endfor %}
@@ -101,12 +135,101 @@
     {% else %}
     <div class="px-5 py-10 text-center">
       <p class="text-2xl mb-2">✓</p>
-      <p class="text-sm text-gray-500 font-medium">Bekleyen onay yok</p>
+      <p class="text-sm text-gray-500 font-medium">Gecikmiş sipariş yok</p>
     </div>
     {% endif %}
   </div>
 
+  <!-- En Aktif 10 Tedarikçi -->
+  <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-50">
+      <h2 class="font-medium text-gray-700 text-sm">En Aktif Tedarikçiler</h2>
+      <p class="text-xs text-gray-400 mt-0.5">Toplam kalem sayısına göre ilk 10</p>
+    </div>
+    {% if top_tedarikci %}
+    <div class="divide-y divide-gray-50">
+      {% set max_kalem = top_tedarikci[0].kalem_sayi %}
+      {% for t in top_tedarikci %}
+      <div class="px-5 py-2.5">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-medium text-gray-700 truncate flex-1 mr-3">{{ loop.index }}. {{ t.name }}</span>
+          <span class="text-xs text-gray-500 flex-shrink-0">{{ t.kalem_sayi }} kalem · {{ t.siparis_sayi }} sipariş</span>
+        </div>
+        <div class="w-full bg-gray-100 rounded-full h-1.5">
+          <div class="erlau-green h-1.5 rounded-full" style="width: {{ (t.kalem_sayi / max_kalem * 100)|int }}%"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="px-5 py-10 text-sm text-gray-400 text-center">Henüz tedarikçi atanmamış</p>
+    {% endif %}
+  </div>
+
 </div>
+
+<!-- En Uzun Bekleyen Onaylar -->
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+  <div class="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+    <h2 class="font-medium text-gray-700 text-sm">En Uzun Bekleyen Onaylar</h2>
+    {% if gm_stats.bekleyen > 8 %}
+    <span class="text-xs text-gray-400">+{{ gm_stats.bekleyen - 8 }} daha var</span>
+    {% endif %}
+  </div>
+  {% if bekleyen_talepler %}
+  <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-50">
+    {% for talep in bekleyen_talepler %}
+    <div class="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 border-b border-gray-50">
+      <div class="flex-1 min-w-0">
+        <a href="{{ url_for('main.talep_detay', talep_id=talep.id) }}"
+          class="text-sm font-medium erlau-green-text hover:underline">{{ talep.siparis_no }}</a>
+        <p class="text-xs text-gray-400 mt-0.5">
+          {{ talep.department.name if talep.department else '—' }} ·
+          {{ talep.talep_eden.name if talep.talep_eden else '—' }}
+        </p>
+      </div>
+      <div class="text-right flex-shrink-0">
+        <p class="text-xs text-gray-500">{{ talep.created_at.strftime('%d.%m.%Y') }}</p>
+        <p class="text-xs text-gray-400">{{ talep.kalemler|length }} kalem</p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="px-5 py-10 text-center">
+    <p class="text-2xl mb-2">✓</p>
+    <p class="text-sm text-gray-500 font-medium">Bekleyen onay yok</p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+const trendData = {{ trend_json | safe }};
+new Chart(document.getElementById('trendChart'), {
+  type: 'bar',
+  data: {
+    labels: trendData.labels,
+    datasets: trendData.datasets.map(d => ({
+      label: d.label,
+      data: d.data,
+      backgroundColor: d.backgroundColor + 'cc',
+      borderColor: d.backgroundColor,
+      borderWidth: 1,
+      borderRadius: 4,
+    }))
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12 } }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+      y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: '#f1f5f9' } }
+    }
+  }
+});
+</script>
 <!-- ══════════════════════════════════════════ / GM DASHBOARD -->
 
 {% else %}

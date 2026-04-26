@@ -58,31 +58,30 @@ def dashboard():
     bugun = date.today()
 
     if current_user.role == 'gm':
+        import json as _json
         ay_baslangic = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        alti_ay_once = datetime.utcnow() - timedelta(days=182)
 
-        # Tüm durumları tek sorguda say
+        # ── KPI ──────────────────────────────────────────────────────────────
         durum_sayilari = dict(db.session.query(
             TalepFormu.durum, func.count(TalepFormu.id)
         ).group_by(TalepFormu.durum).all())
 
         bu_ay_toplam = TalepFormu.query.filter(TalepFormu.created_at >= ay_baslangic).count()
         bu_ay_teslim = TalepFormu.query.filter(
-            TalepFormu.created_at >= ay_baslangic,
-            TalepFormu.durum == 'teslim_alindi'
+            TalepFormu.created_at >= ay_baslangic, TalepFormu.durum == 'teslim_alindi'
         ).count()
 
         gm_stats = {
             'bu_ay': bu_ay_toplam,
-            'bekleyen': (durum_sayilari.get('bekliyor', 0) + durum_sayilari.get('fiyatlandirildi', 0)),
+            'bekleyen': durum_sayilari.get('bekliyor', 0) + durum_sayilari.get('fiyatlandirildi', 0),
             'yolda': durum_sayilari.get('yolda', 0),
             'bu_ay_teslim': bu_ay_teslim,
         }
 
-        # Departman kırılımı — tek GROUP BY sorgusu
+        # ── DEPARTMAN KIRILIMİ ───────────────────────────────────────────────
         dept_rows = db.session.query(
-            TalepFormu.department_id,
-            TalepFormu.durum,
-            func.count(TalepFormu.id).label('sayi')
+            TalepFormu.department_id, TalepFormu.durum, func.count(TalepFormu.id).label('sayi')
         ).group_by(TalepFormu.department_id, TalepFormu.durum).all()
 
         dept_map = {}
@@ -102,7 +101,89 @@ def dashboard():
             for d in departmanlar if dept_map.get(d.id, {}).get('toplam', 0) > 0
         ]
 
-        # En uzun bekleyen 8 talep
+        # ── AYLIK TREND (son 6 ay, departmana göre) ──────────────────────────
+        trend_rows = db.session.query(
+            func.strftime('%Y', TalepFormu.created_at).label('yil'),
+            func.strftime('%m', TalepFormu.created_at).label('ay'),
+            TalepFormu.department_id,
+            func.count(TalepFormu.id).label('sayi')
+        ).filter(TalepFormu.created_at >= alti_ay_once
+        ).group_by('yil', 'ay', TalepFormu.department_id).all()
+
+        # Son 6 ayın etiketlerini üret
+        ay_adlari = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz',
+                     'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+        bugun_dt = datetime.utcnow()
+        son_6_ay = []
+        for i in range(5, -1, -1):
+            d = bugun_dt - timedelta(days=30 * i)
+            son_6_ay.append((d.year, d.month))
+
+        trend_labels = [f"{ay_adlari[ay-1]} {yil}" for yil, ay in son_6_ay]
+
+        trend_map = {}
+        for row in trend_rows:
+            key = (int(row.yil), int(row.ay))
+            trend_map.setdefault(row.department_id, {})[key] = row.sayi
+
+        renk_paleti = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+        trend_datasets = []
+        for i, ds in enumerate(dept_stats):
+            dept_id = ds['dept'].id
+            if dept_id in trend_map:
+                trend_datasets.append({
+                    'label': ds['dept'].name,
+                    'data': [trend_map[dept_id].get((y, m), 0) for y, m in son_6_ay],
+                    'backgroundColor': renk_paleti[i % len(renk_paleti)],
+                })
+
+        trend_json = _json.dumps({'labels': trend_labels, 'datasets': trend_datasets})
+
+        # ── ORTALAMA ONAY BEKLEME SÜRESİ (aktif bekleyenler) ─────────────────
+        bekleme_rows = db.session.query(
+            TalepFormu.department_id,
+            func.avg(func.julianday('now') - func.julianday(TalepFormu.created_at)).label('ort_gun'),
+            func.count(TalepFormu.id).label('sayi')
+        ).filter(TalepFormu.durum.in_(['bekliyor', 'fiyatlandirildi'])
+        ).group_by(TalepFormu.department_id).all()
+
+        bekleme_map = {r.department_id: {'gun': round(r.ort_gun or 0), 'sayi': r.sayi}
+                       for r in bekleme_rows}
+        bekleme_stats = [
+            {'dept': ds['dept'], **bekleme_map[ds['dept'].id]}
+            for ds in dept_stats if ds['dept'].id in bekleme_map
+        ]
+        bekleme_stats.sort(key=lambda x: x['gun'], reverse=True)
+
+        # ── GECİKMİŞ SİPARİŞLER ──────────────────────────────────────────────
+        yolda_talepler = TalepFormu.query.options(
+            selectinload(TalepFormu.kalemler)
+        ).filter(
+            TalepFormu.durum == 'yolda',
+            TalepFormu.yolda_tarihi != None
+        ).all()
+
+        gecikis_listesi = []
+        for t in yolda_talepler:
+            if not t.kalemler:
+                continue
+            termin = max((k.termin_gun or 0) for k in t.kalemler)
+            if termin > 0:
+                bitis = t.yolda_tarihi.date() + timedelta(days=termin)
+                if bitis < bugun:
+                    gecikis_listesi.append({'talep': t, 'gecikme': (bugun - bitis).days})
+        gecikis_listesi.sort(key=lambda x: x['gecikme'], reverse=True)
+
+        # ── EN AKTİF 10 TEDARİKÇİ ────────────────────────────────────────────
+        top_tedarikci = db.session.query(
+            Tedarikci.name,
+            func.count(TalepKalem.id).label('kalem_sayi'),
+            func.count(func.distinct(TalepKalem.talep_id)).label('siparis_sayi')
+        ).join(TalepKalem, TalepKalem.tedarikci_id == Tedarikci.id
+        ).group_by(Tedarikci.id, Tedarikci.name
+        ).order_by(func.count(TalepKalem.id).desc()).limit(10).all()
+
+        # ── EN UZUN BEKLEYEN ONAYLAR ──────────────────────────────────────────
         bekleyen_talepler = TalepFormu.query.options(
             selectinload(TalepFormu.kalemler)
         ).filter(
@@ -113,6 +194,10 @@ def dashboard():
             gm_stats=gm_stats,
             dept_stats=dept_stats,
             bekleyen_talepler=bekleyen_talepler,
+            trend_json=trend_json,
+            bekleme_stats=bekleme_stats,
+            gecikis_listesi=gecikis_listesi,
+            top_tedarikci=top_tedarikci,
             talepler=[], kalan_gunler={})
 
     if current_user.role == 'departman_yoneticisi':
@@ -294,8 +379,9 @@ def talep_sil(talep_id):
 def siparis_raporu():
     from sqlalchemy import func
 
-    # Filtreler
-    bas_str = request.args.get('bas_tarih', '')
+    # Filtreler — tarih boşsa son 6 ay varsayılan
+    _varsayilan_bas = (datetime.utcnow() - timedelta(days=182)).strftime('%Y-%m-%d')
+    bas_str = request.args.get('bas_tarih', _varsayilan_bas)
     bit_str = request.args.get('bit_tarih', '')
     tur_filtre = request.args.get('malzeme_turu', '')
     ted_filtre = request.args.get('tedarikci_id', '')
