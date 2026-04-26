@@ -1184,8 +1184,61 @@ def fatura_detay(fatura_id):
         TalepFormu.durum.in_(['onaylandi', 'yolda', 'teslim_alindi'])
     ).order_by(TalepFormu.created_at.desc()).limit(50).all()
     tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
+    talep_kalemleri = fatura.talep.kalemler if fatura.talep else []
     from datetime import date
-    return render_template('fatura_detay.html', fatura=fatura, talepler=talepler, tedarikciler=tedarikciler, today=date.today())
+    return render_template('fatura_detay.html', fatura=fatura, talepler=talepler,
+                           tedarikciler=tedarikciler, today=date.today(),
+                           talep_kalemleri=talep_kalemleri)
+
+@muhasebe.route('/fatura/<int:fatura_id>/kalem-esles', methods=['POST'])
+@login_required
+@role_required('muhasebe', 'satinalma', 'admin')
+def fatura_kalem_esles_manuel(fatura_id):
+    fatura = db.get_or_404(Fatura, fatura_id)
+    from app.models import TalepKalem
+    from app.fatura_ai import net_birim_fiyat, hafizaya_kaydet
+
+    for fk in fatura.kalemler:
+        tk_id_str = request.form.get(f'kalem_{fk.id}_talep_kalem_id', '')
+        tk_id = int(tk_id_str) if tk_id_str.isdigit() else None
+        fk.talep_kalem_id = tk_id
+
+        if tk_id:
+            tk = TalepKalem.query.get(tk_id)
+            if tk:
+                fatura_net = net_birim_fiyat({
+                    'br_fiyat': fk.br_fiyat,
+                    'liste_fiyati': fk.liste_fiyati,
+                    'iskonto_orani': fk.iskonto_orani,
+                    'iskonto_tutari': fk.iskonto_tutari,
+                    'miktar': fk.miktar,
+                    'toplam_fiyat': fk.toplam_fiyat,
+                    'kdv_orani': fk.kdv_orani,
+                })
+                siparis_net = tk.br_fiyat or 0
+                if siparis_net > 0 and fatura_net > 0:
+                    fark = abs(fatura_net - siparis_net)
+                    yuzde = fark / siparis_net * 100
+                    if yuzde > 5:
+                        fk.eslesme_durumu = 'fiyat_farki'
+                        fk.eslesme_notu = (f"Siparişteki net br. fiyat: {siparis_net:.2f} | "
+                                           f"Faturadaki net br. fiyat: {fatura_net:.2f} | Fark: %{yuzde:.1f}")
+                    else:
+                        fk.eslesme_durumu = 'eslesti'
+                        fk.eslesme_notu = 'Manuel eşleştirme'
+                else:
+                    fk.eslesme_durumu = 'eslesti'
+                    fk.eslesme_notu = 'Manuel eşleştirme'
+                if fk.malzeme_adi and tk.malzeme_adi:
+                    hafizaya_kaydet(fk.malzeme_adi, tk.malzeme_adi)
+        else:
+            fk.eslesme_durumu = 'eslesmiyor'
+            fk.eslesme_notu = ''
+
+    db.session.commit()
+    flash('Kalem eşleştirmeleri kaydedildi ve hafızaya öğretildi.', 'success')
+    return redirect(url_for('muhasebe.fatura_detay', fatura_id=fatura_id))
+
 
 @muhasebe.route('/fatura/<int:fatura_id>/guncelle', methods=['POST'])
 @login_required
