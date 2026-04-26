@@ -1184,7 +1184,8 @@ def fatura_detay(fatura_id):
         TalepFormu.durum.in_(['onaylandi', 'yolda', 'teslim_alindi'])
     ).order_by(TalepFormu.created_at.desc()).limit(50).all()
     tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
-    return render_template('fatura_detay.html', fatura=fatura, talepler=talepler, tedarikciler=tedarikciler)
+    from datetime import date
+    return render_template('fatura_detay.html', fatura=fatura, talepler=talepler, tedarikciler=tedarikciler, today=date.today())
 
 @muhasebe.route('/fatura/<int:fatura_id>/guncelle', methods=['POST'])
 @login_required
