@@ -3,7 +3,7 @@
 
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-semibold text-gray-800">Satın Alma Paneli</h1>
-  <span class="text-sm text-gray-400">{{ talepler|length }} talep</span>
+  <span class="text-sm text-gray-400">{{ pagination.total }} talep</span>
 </div>
 
 <!-- Filtreler -->
@@ -199,4 +199,30 @@
     </tbody>
   </table>
 </div>
+
+{% if pagination.pages > 1 %}
+<div class="flex items-center justify-between mt-4">
+  <span class="text-xs text-gray-400">
+    Sayfa {{ pagination.page }} / {{ pagination.pages }} &nbsp;·&nbsp; Toplam {{ pagination.total }} talep
+  </span>
+  <div class="flex gap-1">
+    {% if pagination.has_prev %}
+    <a href="{{ url_for('satin_alma.panel', page=pagination.prev_num, durum=secili_durum, dept=dept_filtre, q=arama) }}"
+       class="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">← Önceki</a>
+    {% endif %}
+    {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+      {% if p %}
+        <a href="{{ url_for('satin_alma.panel', page=p, durum=secili_durum, dept=dept_filtre, q=arama) }}"
+           class="px-3 py-1.5 text-xs border rounded-lg {% if p == pagination.page %}erlau-green text-white border-transparent{% else %}border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">{{ p }}</a>
+      {% else %}
+        <span class="px-2 py-1.5 text-xs text-gray-300">…</span>
+      {% endif %}
+    {% endfor %}
+    {% if pagination.has_next %}
+    <a href="{{ url_for('satin_alma.panel', page=pagination.next_num, durum=secili_durum, dept=dept_filtre, q=arama) }}"
+       class="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Sonraki →</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 {% endblock %}

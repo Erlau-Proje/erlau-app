@@ -38,7 +38,15 @@
               <p class="font-medium">{{ kalem.malzeme_adi }}</p>
               <p class="text-xs text-gray-400">{{ kalem.marka_model or '' }}</p>
             </td>
-            <td class="px-4 py-3 text-center text-gray-600">{{ kalem.miktar }} {{ kalem.birim }}</td>
+            <td class="px-4 py-3 text-center">
+              <div class="flex items-center justify-center gap-1">
+                <input type="number" step="0.001" min="0.001" name="kalem_{{ kalem.id }}_miktar"
+                  value="{{ kalem.miktar or '' }}"
+                  class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-center"
+                  oninput="hesapla({{ kalem.id }})">
+                <span class="text-xs text-gray-400">{{ kalem.birim }}</span>
+              </div>
+            </td>
             <td class="px-4 py-3">
               <select name="kalem_{{ kalem.id }}_tedarikci_id" class="w-full border border-gray-200 rounded px-2 py-1 text-xs min-w-32">
                 <option value="">— Seç —</option>
@@ -52,7 +60,7 @@
                 value="{{ kalem.br_fiyat or '' }}"
                 class="w-28 border border-gray-200 rounded px-2 py-1 text-xs"
                 placeholder="0.00"
-                oninput="hesapla({{ kalem.id }}, {{ kalem.miktar or 0 }})">
+                oninput="hesapla({{ kalem.id }})">
             </td>
             <td class="px-4 py-3">
               <select name="kalem_{{ kalem.id }}_para_birimi" class="border border-gray-200 rounded px-2 py-1 text-xs">
@@ -110,19 +118,27 @@
 </form>
 
 <script>
-const kalemMiktarlar = {
-  {% for kalem in talep.kalemler %}
-  {{ kalem.id }}: {{ kalem.miktar or 0 }},
-  {% endfor %}
-};
-
-function hesapla(kalemId, miktar) {
+function hesapla(kalemId) {
   const brFiyatEl = document.querySelector(`input[name="kalem_${kalemId}_br_fiyat"]`);
+  const miktarEl = document.querySelector(`input[name="kalem_${kalemId}_miktar"]`);
   const toplamEl = document.getElementById(`toplam_${kalemId}`);
-  const brFiyat = parseFloat(brFiyatEl.value) || 0;
+  const brFiyat = parseFloat(brFiyatEl?.value) || 0;
+  const miktar = parseFloat(miktarEl?.value) || 0;
   const toplam = brFiyat * miktar;
   toplamEl.textContent = toplam > 0 ? toplam.toFixed(2) : '—';
   genelToplamHesapla();
+}
+
+function genelToplamHesapla() {
+  let genel = 0;
+  document.querySelectorAll('input[name$="_br_fiyat"]').forEach(el => {
+    const id = el.name.replace('kalem_', '').replace('_br_fiyat', '');
+    const miktarEl = document.querySelector(`input[name="kalem_${id}_miktar"]`);
+    const brFiyat = parseFloat(el.value) || 0;
+    const miktar = parseFloat(miktarEl?.value) || 0;
+    genel += brFiyat * miktar;
+  });
+  document.getElementById('genel_toplam').textContent = genel > 0 ? genel.toFixed(2) : '—';
 }
 
 document.querySelectorAll('td[data-malzeme]').forEach(td => {
@@ -131,15 +147,5 @@ document.querySelectorAll('td[data-malzeme]').forEach(td => {
     .then(r => r.json())
     .then(d => { if (d && d.toplam > 0) td.textContent = d.toplam + 'x'; });
 });
-
-function genelToplamHesapla() {
-  let genel = 0;
-  for (const [id, miktar] of Object.entries(kalemMiktarlar)) {
-    const brFiyatEl = document.querySelector(`input[name="kalem_${id}_br_fiyat"]`);
-    const brFiyat = parseFloat(brFiyatEl?.value) || 0;
-    genel += brFiyat * miktar;
-  }
-  document.getElementById('genel_toplam').textContent = genel > 0 ? genel.toFixed(2) : '—';
-}
 </script>
 {% endblock %}

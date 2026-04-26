@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.orm import selectinload
 from app import db
 from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon
 from app.utils import generate_siparis_no
@@ -53,11 +54,11 @@ def dashboard():
     if current_user.role in ['satinalma', 'admin']:
         return redirect(url_for('satin_alma.panel'))
     if current_user.role == 'departman_yoneticisi':
-        talepler = TalepFormu.query.filter_by(
+        talepler = TalepFormu.query.options(selectinload(TalepFormu.kalemler)).filter_by(
             department_id=current_user.department_id
         ).order_by(TalepFormu.created_at.desc()).all()
     else:
-        talepler = TalepFormu.query.filter_by(
+        talepler = TalepFormu.query.options(selectinload(TalepFormu.kalemler)).filter_by(
             talep_eden_id=current_user.id
         ).order_by(TalepFormu.created_at.desc()).limit(10).all()
 
@@ -232,7 +233,11 @@ def siparis_raporu():
     proje_filtre = request.args.get('proje_makine', '').strip()
     export = request.args.get('export', '')
 
-    query = TalepKalem.query.join(TalepFormu)
+    query = TalepKalem.query.join(TalepFormu).options(
+        selectinload(TalepKalem.talep).selectinload(TalepFormu.talep_eden),
+        selectinload(TalepKalem.talep).selectinload(TalepFormu.department),
+        selectinload(TalepKalem.tedarikci)
+    )
 
     # Rol bazlı kapsam
     if current_user.role in ['satinalma', 'admin', 'gm']:
@@ -423,7 +428,8 @@ def panel():
     durum = request.args.get('durum', 'hepsi')
     dept = request.args.get('dept', '')
     arama = request.args.get('q', '').strip()
-    q = TalepFormu.query
+    page = request.args.get('page', 1, type=int)
+    q = TalepFormu.query.options(selectinload(TalepFormu.kalemler))
     if durum != 'hepsi':
         q = q.filter_by(durum=durum)
     if dept:
@@ -434,9 +440,15 @@ def panel():
             TalepFormu.siparis_no.ilike(f'%{arama}%'),
             TalepFormu.kalemler.any(TalepKalem.malzeme_adi.ilike(f'%{arama}%'))
         ))
-    talepler = q.order_by(TalepFormu.created_at.desc()).all()
+    pagination = q.order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=50, error_out=False)
     departmanlar = Department.query.all()
-    return render_template('satinalma_panel.html', talepler=talepler, departmanlar=departmanlar, secili_durum=durum, arama=arama)
+    return render_template('satinalma_panel.html',
+        talepler=pagination.items,
+        pagination=pagination,
+        departmanlar=departmanlar,
+        secili_durum=durum,
+        arama=arama,
+        dept_filtre=dept)
 
 @satin_alma.route('/onayla/<int:talep_id>', methods=['POST'])
 @login_required
@@ -855,9 +867,12 @@ def fiyatlandir(talep_id):
         for kalem in talep.kalemler:
             prefix = f'kalem_{kalem.id}_'
             br_fiyat = request.form.get(prefix + 'br_fiyat')
+            miktar = request.form.get(prefix + 'miktar')
             kalem.tedarikci_id = request.form.get(prefix + 'tedarikci_id') or None
             kalem.br_fiyat = float(br_fiyat) if br_fiyat else None
-            kalem.toplam_fiyat = kalem.br_fiyat * kalem.miktar if kalem.br_fiyat and kalem.miktar else None
+            if miktar:
+                kalem.miktar = float(miktar)
+            kalem.toplam_fiyat = round(kalem.br_fiyat * kalem.miktar, 2) if kalem.br_fiyat and kalem.miktar else None
             kalem.para_birimi = request.form.get(prefix + 'para_birimi', 'TL')
             vade = request.form.get(prefix + 'vade_gun')
             termin = request.form.get(prefix + 'termin_gun')
@@ -868,6 +883,42 @@ def fiyatlandir(talep_id):
         flash('Fiyatlandırma kaydedildi.', 'success')
         return redirect(url_for('satin_alma.panel'))
     return render_template('fiyatlandir.html', talep=talep, tedarikciler=tedarikciler)
+
+@satin_alma.route('/kalem/<int:kalem_id>/duzenle', methods=['POST'])
+@login_required
+def kalem_duzenle(kalem_id):
+    kalem = db.get_or_404(TalepKalem, kalem_id)
+    talep = kalem.talep
+    is_satinalma = current_user.role in ['satinalma', 'admin']
+    is_talep_eden = talep.talep_eden_id == current_user.id
+
+    if not is_satinalma and not is_talep_eden:
+        flash('Bu işlem için yetkiniz yok.', 'danger')
+        return redirect(url_for('main.talep_detay', talep_id=talep.id))
+
+    if is_satinalma:
+        br_fiyat_str = request.form.get('br_fiyat', '').strip()
+        if br_fiyat_str:
+            try:
+                kalem.br_fiyat = float(br_fiyat_str)
+            except ValueError:
+                flash('Geçersiz birim fiyat.', 'danger')
+                return redirect(url_for('main.talep_detay', talep_id=talep.id))
+
+    miktar_str = request.form.get('miktar', '').strip()
+    if miktar_str:
+        try:
+            kalem.miktar = float(miktar_str)
+        except ValueError:
+            flash('Geçersiz miktar.', 'danger')
+            return redirect(url_for('main.talep_detay', talep_id=talep.id))
+
+    if kalem.br_fiyat and kalem.miktar:
+        kalem.toplam_fiyat = round(kalem.br_fiyat * kalem.miktar, 2)
+
+    db.session.commit()
+    flash('Kalem güncellendi.', 'success')
+    return redirect(url_for('main.talep_detay', talep_id=talep.id))
 
 @satin_alma.route('/siparis/<int:talep_id>')
 @login_required

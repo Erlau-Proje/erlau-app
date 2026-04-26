@@ -64,6 +64,9 @@
           <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Tedarikçi</th>
           <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">Br. Fiyat</th>
           <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">Toplam</th>
+          {% if current_user.role in ['satinalma', 'admin'] or talep.talep_eden_id == current_user.id %}
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-400"></th>
+          {% endif %}
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-50">
@@ -89,10 +92,64 @@
           <td class="px-4 py-3 text-right font-medium text-green-700 text-xs">
             {% if kalem.toplam_fiyat %}{{ "%.2f"|format(kalem.toplam_fiyat) }} {{ kalem.para_birimi }}{% else %}—{% endif %}
           </td>
+          {% if current_user.role in ['satinalma', 'admin'] or talep.talep_eden_id == current_user.id %}
+          <td class="px-4 py-3 text-center">
+            <button type="button" onclick="modalAc({{ kalem.id }}, '{{ kalem.malzeme_adi|replace("'", "\\'") }}', {{ kalem.miktar or 0 }}, {{ kalem.br_fiyat or 0 }})"
+              class="text-xs text-gray-400 hover:text-blue-600 border border-gray-200 hover:border-blue-300 px-2 py-1 rounded transition-colors">
+              Düzenle
+            </button>
+          </td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+<!-- Kalem Düzenleme Modalı -->
+<div id="kalemModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+    <h3 class="font-semibold text-gray-800 mb-1">Kalem Düzenle</h3>
+    <p id="modalMalzeme" class="text-xs text-gray-400 mb-4"></p>
+    <form id="kalemForm" method="POST">
+      {% if current_user.role in ['satinalma', 'admin'] %}
+      <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Birim Fiyat</label>
+        <input type="number" step="0.01" min="0" name="br_fiyat" id="modalBrFiyat"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
+          placeholder="0.00">
+      </div>
+      {% endif %}
+      <div class="mb-4">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Miktar</label>
+        <input type="number" step="0.001" min="0.001" name="miktar" id="modalMiktar"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
+          placeholder="0">
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button type="button" onclick="modalKapat()"
+          class="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">İptal</button>
+        <button type="submit"
+          class="px-4 py-2 erlau-green text-white rounded-lg text-sm font-medium hover:opacity-90">Kaydet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function modalAc(kalemId, malzemeAdi, miktar, brFiyat) {
+  document.getElementById('modalMalzeme').textContent = malzemeAdi;
+  document.getElementById('modalMiktar').value = miktar || '';
+  const brFiyatEl = document.getElementById('modalBrFiyat');
+  if (brFiyatEl) brFiyatEl.value = brFiyat || '';
+  document.getElementById('kalemForm').action = '/satinalma/kalem/' + kalemId + '/duzenle';
+  document.getElementById('kalemModal').classList.remove('hidden');
+}
+function modalKapat() {
+  document.getElementById('kalemModal').classList.add('hidden');
+}
+document.getElementById('kalemModal').addEventListener('click', function(e) {
+  if (e.target === this) modalKapat();
+});
+</script>
 {% endblock %}
