@@ -118,11 +118,11 @@ def dashboard():
     if current_user.role == 'departman_yoneticisi':
         talepler = TalepFormu.query.options(selectinload(TalepFormu.kalemler)).filter_by(
             department_id=current_user.department_id
-        ).order_by(TalepFormu.created_at.desc()).all()
+        ).order_by(TalepFormu.created_at.desc()).limit(50).all()
     else:
         talepler = TalepFormu.query.options(selectinload(TalepFormu.kalemler)).filter_by(
             talep_eden_id=current_user.id
-        ).order_by(TalepFormu.created_at.desc()).all()
+        ).order_by(TalepFormu.created_at.desc()).limit(50).all()
 
     kalan_gunler = {}
     for talep in talepler:
