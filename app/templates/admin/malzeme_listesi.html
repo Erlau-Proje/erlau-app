@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div>
+      <h1 style="font-size:22px;font-weight:700;color:#1e293b">Malzeme Listesi</h1>
+      <p style="font-size:13px;color:#64748b;margin-top:2px">Toplam {{ malzemeler|length }} malzeme</p>
+    </div>
+    <button onclick="yeniModal()" class="btn-primary">
+      <svg style="width:15px;height:15px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Yeni Malzeme
+    </button>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Stok Kodu</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Malzeme Adı</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Birim</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Kategori</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Durum</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">İşlem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in malzemeler %}
+        <tr id="row-{{ m.id }}" style="border-bottom:1px solid #f1f5f9;transition:background .1s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+          <td style="padding:11px 16px;color:#64748b;font-family:monospace;font-size:12px">{{ m.stok_kodu }}</td>
+          <td style="padding:11px 16px;color:#1e293b;font-weight:500" ondblclick="duzenleModu(this, {{ m.id }}, 'malzeme_adi')">{{ m.malzeme_adi }}</td>
+          <td style="padding:11px 16px;color:#475569" ondblclick="duzenleModu(this, {{ m.id }}, 'birim')">{{ m.birim or '—' }}</td>
+          <td style="padding:11px 16px;color:#475569" ondblclick="duzenleModu(this, {{ m.id }}, 'kategori')">{{ m.kategori or '—' }}</td>
+          <td style="padding:11px 16px">
+            <span style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;
+              {% if m.is_active %}background:#f0fdf4;color:#166534{% else %}background:#f1f5f9;color:#94a3b8{% endif %}">
+              {{ 'Aktif' if m.is_active else 'Pasif' }}
+            </span>
+          </td>
+          <td style="padding:11px 16px">
+            {% if m.is_active %}
+            <button onclick="silMalzeme({{ m.id }})" style="font-size:12px;color:#ef4444;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='none'">Pasif Yap</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="padding:40px;text-align:center;color:#94a3b8">Henüz malzeme eklenmemiş.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Yeni Malzeme Modal -->
+<div id="yeniModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;display:none;align-items:center;justify-content:center">
+  <div class="card" style="width:440px;padding:28px">
+    <h2 style="font-size:17px;font-weight:700;color:#1e293b;margin-bottom:20px">Yeni Malzeme Ekle</h2>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Malzeme Adı *</label>
+        <input id="inp-adi" type="text" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px" placeholder="örn. Civata M8x20">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Birim</label>
+          <input id="inp-birim" type="text" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px" placeholder="Adet, Kg, m...">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Kategori</label>
+          <input id="inp-kategori" type="text" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px" placeholder="Bağlantı elemanı...">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Açıklama</label>
+        <textarea id="inp-aciklama" rows="2" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+      <button onclick="modalKapat()" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;cursor:pointer;background:#fff">İptal</button>
+      <button onclick="kaydetMalzeme()" class="btn-primary">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function yeniModal() { document.getElementById('yeniModal').style.display = 'flex'; document.getElementById('inp-adi').focus(); }
+function modalKapat() { document.getElementById('yeniModal').style.display = 'none'; }
+
+async function kaydetMalzeme() {
+  const adi = document.getElementById('inp-adi').value.trim();
+  if (!adi) { alert('Malzeme adı zorunludur.'); return; }
+  const fd = new FormData();
+  fd.append('malzeme_adi', adi);
+  fd.append('birim', document.getElementById('inp-birim').value.trim());
+  fd.append('kategori', document.getElementById('inp-kategori').value.trim());
+  fd.append('aciklama', document.getElementById('inp-aciklama').value.trim());
+  const r = await fetch('{{ url_for("admin.malzeme_ekle") }}', { method:'POST', body:fd });
+  const d = await r.json();
+  if (d.ok) { location.reload(); } else { alert(d.hata); }
+}
+
+function duzenleModu(td, id, alan) {
+  const eskiDeger = td.innerText === '—' ? '' : td.innerText;
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.value = eskiDeger;
+  inp.style.cssText = 'width:100%;padding:4px 8px;border:1px solid #2d7a3a;border-radius:6px;font-size:13px';
+  td.innerHTML = ''; td.appendChild(inp); inp.focus(); inp.select();
+
+  async function kaydet() {
+    const fd = new FormData();
+    fd.append('alan', alan); fd.append('deger', inp.value.trim());
+    await fetch(`/admin/malzeme/${id}/duzenle`, { method:'POST', body:fd });
+    td.innerText = inp.value.trim() || '—';
+  }
+  inp.addEventListener('blur', kaydet);
+  inp.addEventListener('keydown', e => { if(e.key==='Enter') inp.blur(); if(e.key==='Escape') { td.innerText=eskiDeger||'—'; } });
+}
+
+async function silMalzeme(id) {
+  if (!confirm('Bu malzemeyi pasif yapmak istediğinizden emin misiniz?')) return;
+  const fd = new FormData();
+  await fetch(`/admin/malzeme/${id}/sil`, { method:'POST', body:fd });
+  document.getElementById('row-'+id).remove();
+}
+
+document.addEventListener('keydown', e => { if(e.key==='Escape') modalKapat(); });
+</script>
+{% endblock %}

@@ -3,8 +3,8 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import selectinload
 from app import db
-from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon
-from app.utils import generate_siparis_no
+from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun
+from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu
 from datetime import datetime, date, timedelta
 from functools import wraps
 
@@ -1649,3 +1649,161 @@ def fatura_pdf_indir(fatura_id):
     from flask import send_file
     tam_yol = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'faturalar', fatura.dosya_yolu)
     return send_file(tam_yol, as_attachment=False, mimetype='application/pdf')
+
+
+# ---------------------------------------------------------------------------
+# G-004: MALZEME LİSTESİ
+# ---------------------------------------------------------------------------
+
+@admin.route('/malzemeler')
+@login_required
+@role_required('admin')
+def malzeme_listesi():
+    malzemeler = Malzeme.query.order_by(Malzeme.stok_kodu).all()
+    return render_template('admin/malzeme_listesi.html', malzemeler=malzemeler)
+
+@admin.route('/malzeme/ekle', methods=['POST'])
+@login_required
+@role_required('admin')
+def malzeme_ekle():
+    adi = request.form.get('malzeme_adi', '').strip()
+    if not adi:
+        return jsonify({'ok': False, 'hata': 'Malzeme adı boş olamaz'}), 400
+    m = Malzeme(
+        stok_kodu=generate_stok_kodu(),
+        malzeme_adi=adi,
+        birim=request.form.get('birim', '').strip(),
+        kategori=request.form.get('kategori', '').strip(),
+        aciklama=request.form.get('aciklama', '').strip(),
+    )
+    db.session.add(m)
+    db.session.commit()
+    return jsonify({'ok': True, 'id': m.id, 'stok_kodu': m.stok_kodu})
+
+@admin.route('/malzeme/<int:m_id>/duzenle', methods=['POST'])
+@login_required
+@role_required('admin')
+def malzeme_duzenle(m_id):
+    m = db.get_or_404(Malzeme, m_id)
+    alan = request.form.get('alan')
+    deger = request.form.get('deger', '').strip()
+    if alan in ('malzeme_adi', 'birim', 'kategori', 'aciklama'):
+        setattr(m, alan, deger)
+        db.session.commit()
+    return jsonify({'ok': True})
+
+@admin.route('/malzeme/<int:m_id>/sil', methods=['POST'])
+@login_required
+@role_required('admin')
+def malzeme_sil(m_id):
+    m = db.get_or_404(Malzeme, m_id)
+    m.is_active = False
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+# ---------------------------------------------------------------------------
+# G-004: ÜRÜN LİSTESİ
+# ---------------------------------------------------------------------------
+
+@admin.route('/urunler')
+@login_required
+@role_required('admin')
+def urun_listesi():
+    urunler = Urun.query.order_by(Urun.urun_kodu).all()
+    return render_template('admin/urun_listesi.html', urunler=urunler)
+
+@admin.route('/urun/ekle', methods=['POST'])
+@login_required
+@role_required('admin')
+def urun_ekle():
+    adi = request.form.get('urun_adi', '').strip()
+    if not adi:
+        return jsonify({'ok': False, 'hata': 'Ürün adı boş olamaz'}), 400
+    u = Urun(
+        urun_kodu=generate_urun_kodu(),
+        urun_adi=adi,
+        proje=request.form.get('proje', '').strip(),
+        makine=request.form.get('makine', '').strip(),
+        aciklama=request.form.get('aciklama', '').strip(),
+    )
+    db.session.add(u)
+    db.session.commit()
+    return jsonify({'ok': True, 'id': u.id, 'urun_kodu': u.urun_kodu})
+
+@admin.route('/urun/<int:u_id>/duzenle', methods=['POST'])
+@login_required
+@role_required('admin')
+def urun_duzenle(u_id):
+    u = db.get_or_404(Urun, u_id)
+    alan = request.form.get('alan')
+    deger = request.form.get('deger', '').strip()
+    if alan in ('urun_adi', 'proje', 'makine', 'aciklama'):
+        setattr(u, alan, deger)
+        db.session.commit()
+    return jsonify({'ok': True})
+
+@admin.route('/urun/<int:u_id>/sil', methods=['POST'])
+@login_required
+@role_required('admin')
+def urun_sil(u_id):
+    u = db.get_or_404(Urun, u_id)
+    u.is_active = False
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+# ---------------------------------------------------------------------------
+# G-004: AUTOCOMPLETE API (G-003 için)
+# ---------------------------------------------------------------------------
+
+api = Blueprint('api', __name__, url_prefix='/api')
+
+@api.route('/malzeme-ara')
+@login_required
+def malzeme_ara():
+    q = request.args.get('q', '').strip()
+    if len(q) < 3:
+        return jsonify([])
+    sonuclar = Malzeme.query.filter(
+        Malzeme.malzeme_adi.ilike(f'%{q}%'),
+        Malzeme.is_active == True
+    ).limit(10).all()
+    return jsonify([{
+        'id': m.id,
+        'stok_kodu': m.stok_kodu,
+        'malzeme_adi': m.malzeme_adi,
+        'birim': m.birim or ''
+    } for m in sonuclar])
+
+@api.route('/urun-ara')
+@login_required
+def urun_ara():
+    q = request.args.get('q', '').strip()
+    if len(q) < 3:
+        return jsonify([])
+    sonuclar = Urun.query.filter(
+        Urun.urun_adi.ilike(f'%{q}%'),
+        Urun.is_active == True
+    ).limit(10).all()
+    return jsonify([{
+        'id': u.id,
+        'urun_kodu': u.urun_kodu,
+        'urun_adi': u.urun_adi,
+        'proje': u.proje or '',
+        'makine': u.makine or ''
+    } for u in sonuclar])
+
+@api.route('/urun-ekle', methods=['POST'])
+@login_required
+def urun_otomatik_ekle():
+    adi = (request.json or {}).get('urun_adi', '').strip()
+    if not adi:
+        return jsonify({'ok': False}), 400
+    mevcut = Urun.query.filter_by(urun_adi=adi).first()
+    if mevcut:
+        return jsonify({'ok': True, 'id': mevcut.id, 'urun_kodu': mevcut.urun_kodu})
+    u = Urun(urun_kodu=generate_urun_kodu(), urun_adi=adi)
+    db.session.add(u)
+    db.session.commit()
+    return jsonify({'ok': True, 'id': u.id, 'urun_kodu': u.urun_kodu})
