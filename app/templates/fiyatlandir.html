@@ -28,6 +28,7 @@
             <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Termin (gün)</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-blue-500">Son Alım</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-gray-400">Alım Sayısı</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-purple-500">Çoklu Teklif</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -93,6 +94,19 @@
               {% endif %}
             </td>
             <td class="px-4 py-3 text-center text-xs text-gray-400" data-malzeme="{{ kalem.malzeme_adi }}">—</td>
+            <td class="px-4 py-3 text-center">
+              {% set mevcut_teklif = kalem.teklif_gruplari[0] if kalem.teklif_gruplari else none %}
+              {% if mevcut_teklif %}
+                <a href="{{ url_for('satin_alma.teklif_detay', grup_id=mevcut_teklif.id) }}"
+                   class="text-xs text-purple-600 hover:underline">
+                  {{ mevcut_teklif.kalemler|length }} teklif →
+                </a>
+              {% else %}
+                <form method="POST" action="{{ url_for('satin_alma.teklif_yeni', kalem_id=kalem.id) }}">
+                  <button class="text-xs text-purple-500 hover:text-purple-700 border border-purple-200 px-2 py-0.5 rounded">+ Teklif Al</button>
+                </form>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>

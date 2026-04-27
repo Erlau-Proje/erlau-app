@@ -3,8 +3,8 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import selectinload
 from app import db
-from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi
-from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu, generate_plan_no
+from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi, TeklifGrubu, TeklifKalem
+from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu, generate_plan_no, generate_teklif_no
 from datetime import datetime, date, timedelta
 from functools import wraps
 
@@ -1216,6 +1216,101 @@ def kullanim_sikligi_api():
               .filter(TalepFormu.durum == 'teslim_alindi')
               .count())
     return jsonify({'toplam': toplam})
+
+# ─── TEKLİF SİSTEMİ ──────────────────────────────────────────────────────────
+
+@satin_alma.route('/teklifler')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_listesi():
+    gruplar = (TeklifGrubu.query
+               .options(selectinload(TeklifGrubu.talep_kalem), selectinload(TeklifGrubu.kalemler))
+               .order_by(TeklifGrubu.created_at.desc())
+               .all())
+    return render_template('teklifler.html', gruplar=gruplar)
+
+
+@satin_alma.route('/teklif/yeni/<int:kalem_id>', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_yeni(kalem_id):
+    kalem = TalepKalem.query.get_or_404(kalem_id)
+    mevcut = TeklifGrubu.query.filter_by(talep_kalem_id=kalem_id).first()
+    if mevcut:
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=mevcut.id))
+    grup = TeklifGrubu(teklif_no=generate_teklif_no(), talep_kalem_id=kalem_id)
+    db.session.add(grup)
+    db.session.commit()
+    return redirect(url_for('satin_alma.teklif_detay', grup_id=grup.id))
+
+
+@satin_alma.route('/teklif/<int:grup_id>')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_detay(grup_id):
+    grup = (TeklifGrubu.query
+            .options(selectinload(TeklifGrubu.kalemler).selectinload(TeklifKalem.tedarikci),
+                     selectinload(TeklifGrubu.talep_kalem))
+            .get_or_404(grup_id))
+    tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
+    return render_template('teklif_detay.html', grup=grup, tedarikciler=tedarikciler)
+
+
+@satin_alma.route('/teklif/<int:grup_id>/ekle', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_kalem_ekle(grup_id):
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    birim_fiyat = request.form.get('birim_fiyat')
+    vade_gun = request.form.get('vade_gun')
+    kalem = TeklifKalem(
+        grup_id=grup_id,
+        tedarikci_id=request.form.get('tedarikci_id') or None,
+        birim_fiyat=float(birim_fiyat) if birim_fiyat else None,
+        para_birimi=request.form.get('para_birimi', 'TL'),
+        vade_gun=int(vade_gun) if vade_gun else None,
+        notlar=request.form.get('notlar'),
+        kaynak='manuel',
+    )
+    db.session.add(kalem)
+    if grup.durum == 'bekliyor':
+        grup.durum = 'teklif_alindi'
+    db.session.commit()
+    return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
+
+@satin_alma.route('/teklif/<int:grup_id>/sec/<int:kalem_id>', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_sec(grup_id, kalem_id):
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    for k in grup.kalemler:
+        k.secildi = False
+    kazanan = TeklifKalem.query.get_or_404(kalem_id)
+    kazanan.secildi = True
+    grup.durum = 'secildi'
+    talep_kalem = grup.talep_kalem
+    talep_kalem.br_fiyat = kazanan.birim_fiyat
+    talep_kalem.para_birimi = kazanan.para_birimi
+    talep_kalem.vade_gun = kazanan.vade_gun
+    talep_kalem.tedarikci_id = kazanan.tedarikci_id
+    if kazanan.birim_fiyat and talep_kalem.miktar:
+        talep_kalem.toplam_fiyat = kazanan.birim_fiyat * talep_kalem.miktar
+    db.session.commit()
+    flash('Teklif seçildi, sipariş kalemi güncellendi.', 'success')
+    return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
+
+@satin_alma.route('/teklif/kalem/<int:kalem_id>/sil', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_kalem_sil(kalem_id):
+    kalem = TeklifKalem.query.get_or_404(kalem_id)
+    grup_id = kalem.grup_id
+    db.session.delete(kalem)
+    db.session.commit()
+    return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
 
 # ─── MUHASEBE ────────────────────────────────────────────────────────────────
 
