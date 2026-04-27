@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div>
+      <a href="{{ url_for('bakim.bakim_dashboard') }}" style="font-size:13px;color:#64748b;text-decoration:none">← Panele Dön</a>
+      <h1 style="font-size:22px;font-weight:700;color:#1e293b;margin-top:8px">Periyodik Bakım Planları</h1>
+    </div>
+    <button onclick="document.getElementById('ekleForm').style.display='block'" class="btn-primary">
+      <svg style="width:15px;height:15px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Yeni Plan
+    </button>
+  </div>
+
+  <div id="ekleForm" style="display:none;margin-bottom:20px">
+    <div class="card" style="padding:20px">
+      <h3 style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:14px">Yeni Bakım Planı</h3>
+      <form method="POST">
+        <input type="hidden" name="eylem" value="ekle">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr) auto;gap:14px;align-items:flex-end">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Makine *</label>
+            <select name="makine_id" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+              <option value="">Seçin...</option>
+              {% for m in makineler %}<option value="{{ m.id }}">{{ m.makine_adi }}</option>{% endfor %}
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Bakım Adı *</label>
+            <input type="text" name="bakim_adi" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px" placeholder="örn. Yağ değişimi">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Periyot (gün) *</label>
+            <input type="number" name="periyot_gun" min="1" required value="30" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Son Bakım Tarihi</label>
+            <input type="date" name="son_bakim_tarihi" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Açıklama</label>
+          <input type="text" name="aciklama" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button type="submit" class="btn-primary">Ekle</button>
+          <button type="button" onclick="document.getElementById('ekleForm').style.display='none'" style="padding:8px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;cursor:pointer;background:#fff">İptal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Makine</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Bakım Adı</th>
+          <th style="padding:12px 16px;text-align:center;font-weight:600;color:#475569">Periyot</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Son Bakım</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Sonraki Bakım</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">İşlem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in planlar %}
+        {% set bugun = today if today is defined else none %}
+        <tr style="border-bottom:1px solid #f1f5f9">
+          <td style="padding:11px 16px;color:#1e293b;font-weight:500">{{ p.makine.makine_adi if p.makine else '—' }}</td>
+          <td style="padding:11px 16px;color:#475569">{{ p.bakim_adi }}</td>
+          <td style="padding:11px 16px;text-align:center;color:#64748b">{{ p.periyot_gun }} gün</td>
+          <td style="padding:11px 16px;color:#475569">{{ p.son_bakim_tarihi.strftime('%d.%m.%Y') if p.son_bakim_tarihi else '—' }}</td>
+          <td style="padding:11px 16px">
+            {% if p.sonraki_bakim_tarihi %}
+            <span style="font-weight:500;color:#1e293b">{{ p.sonraki_bakim_tarihi.strftime('%d.%m.%Y') }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td style="padding:11px 16px">
+            <form method="POST" style="display:inline">
+              <input type="hidden" name="eylem" value="sil">
+              <input type="hidden" name="plan_id" value="{{ p.id }}">
+              <button type="submit" onclick="return confirm('Planı kaldırmak istiyor musunuz?')" style="font-size:12px;color:#ef4444;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px">Kaldır</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="padding:40px;text-align:center;color:#94a3b8">Henüz bakım planı oluşturulmamış.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

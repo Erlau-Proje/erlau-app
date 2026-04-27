@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content" style="max-width:620px">
+  <div style="margin-bottom:24px">
+    <a href="{{ url_for('bakim.bakim_dashboard') }}" style="font-size:13px;color:#64748b;text-decoration:none">← Panele Dön</a>
+    <h1 style="font-size:22px;font-weight:700;color:#1e293b;margin-top:8px">Bakım Kaydı Ekle</h1>
+  </div>
+  <div class="card" style="padding:28px">
+    <form method="POST">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Tarih</label>
+            <input type="date" name="tarih" value="{{ bugun }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Bakım Türü</label>
+            <select name="bakim_turu" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+              <option value="gunluk">Günlük</option>
+              <option value="periyodik">Periyodik</option>
+              <option value="ariza">Arıza</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Makine *</label>
+          <select name="makine_id" id="makineSelect" required onchange="makineSecildi(this)" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            <option value="">Seçin...</option>
+            {% for m in makineler %}<option value="{{ m.id }}">{{ m.makine_adi }} ({{ m.makine_kodu }})</option>{% endfor %}
+          </select>
+        </div>
+        <div id="planDiv" style="display:none">
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Bakım Planı (opsiyonel)</label>
+          <select name="bakim_plani_id" id="planSelect" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            <option value="">— Plan seçin —</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Yapılan İşler *</label>
+          <textarea name="yapilan_isler" rows="4" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical" placeholder="Yapılan bakım işlemlerini yazın..."></textarea>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Süre (dakika)</label>
+          <input type="number" name="sure_dakika" min="1" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px" placeholder="örn. 45">
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <a href="{{ url_for('bakim.bakim_dashboard') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;text-decoration:none;color:#475569">İptal</a>
+          <button type="submit" class="btn-primary">Kaydet</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+async function makineSecildi(sel) {
+  const makineId = sel.value;
+  const planDiv = document.getElementById('planDiv');
+  const planSelect = document.getElementById('planSelect');
+  if (!makineId) { planDiv.style.display = 'none'; return; }
+  const data = await fetch(`/bakim/makine/${makineId}/planlar`).then(r => r.json());
+  planSelect.innerHTML = '<option value="">— Plan seçin —</option>' +
+    data.map(p => `<option value="${p.id}">${p.bakim_adi} (${p.periyot_gun} günlük, sonraki: ${p.sonraki || '—'})</option>`).join('');
+  planDiv.style.display = data.length ? 'block' : 'none';
+}
+</script>
+{% endblock %}

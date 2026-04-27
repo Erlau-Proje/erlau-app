@@ -130,7 +130,7 @@
 
 ---
 
-### [G-008] CODEX — Planlama Modülü Arayüzü `[BEKLIYOR — G-002 SONRASI]`
+### [G-008] CODEX — Planlama Modülü Arayüzü `[TAMAMLANDI]`
 **Dosya:** `app/routes.py` (planlama blueprint ekle), `app/templates/planlama/`
 **Açıklama:**
 - Blueprint: `planlama = Blueprint('planlama', __name__, url_prefix='/planlama')`
@@ -142,7 +142,7 @@
 - `/planlama/planlar` → Geçmiş planlar listesi (plan_no, tarih aralığı, durum, toplam adet)
 - Erişim: rol in ['planlama', 'departman_yoneticisi'] AND department in ['Planlama ve Tedarik Zinciri']
 - `create_app()` içine blueprint'i kaydet
-**Durum:** `[ ] Bekliyor`
+**Durum:** `[✅] Tamamlandı`
 
 ---
 
@@ -164,5 +164,5 @@
 | G-005 | Çoklu Teklif Sistemi | Claude | ⬜ Bekliyor (G-004 sonrası) |
 | G-006 | Üretim Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
 | G-007 | Bakım Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
-| G-008 | Planlama Arayüzü | Codex | ⬜ Bekliyor (G-002 sonrası) |
+| G-008 | Planlama Arayüzü | Codex | ✅ Tamamlandı |
 | G-009 | AI Teklif Analizi | Claude | ⬜ Bekliyor (G-005 sonrası) |

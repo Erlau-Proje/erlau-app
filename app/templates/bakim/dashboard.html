@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div>
+      <h1 style="font-size:22px;font-weight:700;color:#1e293b">Bakım Paneli</h1>
+      <p style="font-size:13px;color:#64748b;margin-top:2px">{{ bugun.strftime('%d %B %Y') }}</p>
+    </div>
+    <a href="{{ url_for('bakim.bakim_kayit') }}" class="btn-primary">
+      <svg style="width:15px;height:15px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Bakım Kaydı Ekle
+    </a>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <!-- Bugünkü bakımlar -->
+    <div>
+      <h2 style="font-size:14px;font-weight:600;color:#475569;margin-bottom:12px">Bugünkü Bakımlar ({{ bugunki_kayitlar|length }})</h2>
+      {% if bugunki_kayitlar %}
+      <div style="display:flex;flex-direction:column;gap:8px">
+        {% for k in bugunki_kayitlar %}
+        <div class="card" style="padding:14px 16px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <p style="font-size:13px;font-weight:600;color:#1e293b">{{ k.makine.makine_adi if k.makine else '—' }}</p>
+            <span style="padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;
+              {% if k.bakim_turu=='periyodik' %}background:#eff6ff;color:#1d4ed8
+              {% elif k.bakim_turu=='ariza' %}background:#fef2f2;color:#991b1b
+              {% else %}background:#f0fdf4;color:#166534{% endif %}">
+              {{ k.bakim_turu|capitalize }}
+            </span>
+          </div>
+          {% if k.yapilan_isler %}
+          <p style="font-size:12px;color:#64748b;margin-top:4px">{{ k.yapilan_isler[:80] }}{% if k.yapilan_isler|length > 80 %}…{% endif %}</p>
+          {% endif %}
+          <p style="font-size:11px;color:#94a3b8;margin-top:4px">{{ k.giren_personel.name if k.giren_personel else '' }}{% if k.sure_dakika %} · {{ k.sure_dakika }} dk{% endif %}</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="card" style="padding:32px;text-align:center;color:#94a3b8">
+        <p style="font-size:13px">Bugün bakım kaydı yok.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Yaklaşan periyodik bakımlar -->
+    <div>
+      <h2 style="font-size:14px;font-weight:600;color:#475569;margin-bottom:12px">Yaklaşan Bakımlar (7 gün) ({{ yaklasan|length }})</h2>
+      {% if yaklasan %}
+      <div style="display:flex;flex-direction:column;gap:8px">
+        {% for p in yaklasan %}
+        {% set kalan = (p.sonraki_bakim_tarihi - bugun).days %}
+        <div class="card" style="padding:14px 16px;border-left:3px solid {% if kalan == 0 %}#ef4444{% elif kalan <= 2 %}#f59e0b{% else %}#3b82f6{% endif %}">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <p style="font-size:13px;font-weight:600;color:#1e293b">{{ p.makine.makine_adi if p.makine else '—' }}</p>
+            <span style="font-size:12px;font-weight:600;color:{% if kalan==0 %}#ef4444{% elif kalan<=2 %}#f59e0b{% else %}#3b82f6{% endif %}">
+              {% if kalan == 0 %}Bugün!{% else %}{{ kalan }} gün{% endif %}
+            </span>
+          </div>
+          <p style="font-size:12px;color:#64748b;margin-top:3px">{{ p.bakim_adi }} · Her {{ p.periyot_gun }} günde bir</p>
+          <p style="font-size:11px;color:#94a3b8;margin-top:2px">{{ p.sonraki_bakim_tarihi.strftime('%d.%m.%Y') }}</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="card" style="padding:32px;text-align:center;color:#94a3b8">
+        <p style="font-size:13px">7 gün içinde periyodik bakım yok.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:20px">
+    <a href="{{ url_for('bakim.bakim_plan') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">📋 Bakım Planları</a>
+    <a href="{{ url_for('bakim.bakim_takvim') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">📅 Takvim</a>
+    <a href="{{ url_for('bakim.makine_listesi') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">⚙️ Makineler</a>
+    <a href="{{ url_for('bakim.bakim_raporlar') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">📊 Raporlar</a>
+  </div>
+</div>
+{% endblock %}

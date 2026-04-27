@@ -52,6 +52,28 @@
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/></svg>
         Sipariş Raporu
       </a>
+      {% if current_user.role in ['planlama', 'departman_yoneticisi', 'admin'] %}
+      <div class="sidebar-section" style="margin-top:8px">Planlama</div>
+      <a href="{{ url_for('planlama.planlama_dashboard') }}" class="sidebar-link {% if request.endpoint == 'planlama.planlama_dashboard' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M5 11h14M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg>
+        Planlama Paneli
+      </a>
+      <a href="{{ url_for('planlama.yeni_plan') }}" class="sidebar-link {% if request.endpoint == 'planlama.yeni_plan' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Yeni Plan
+      </a>
+      {% endif %}
+      {% if current_user.role in ['bakim', 'departman_yoneticisi', 'gm', 'admin'] %}
+      <div class="sidebar-section" style="margin-top:8px">Bakım</div>
+      <a href="{{ url_for('bakim.bakim_dashboard') }}" class="sidebar-link {% if 'bakim' in (request.endpoint or '') %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317a1.75 1.75 0 013.35 0l.216.887a1.75 1.75 0 002.61 1.08l.78-.474a1.75 1.75 0 012.369 2.369l-.474.78a1.75 1.75 0 001.08 2.61l.887.216a1.75 1.75 0 010 3.35l-.887.216a1.75 1.75 0 00-1.08 2.61l.474.78a1.75 1.75 0 01-2.369 2.369l-.78-.474a1.75 1.75 0 00-2.61 1.08l-.216.887a1.75 1.75 0 01-3.35 0l-.216-.887a1.75 1.75 0 00-2.61-1.08l-.78.474a1.75 1.75 0 01-2.369-2.369l.474-.78a1.75 1.75 0 00-1.08-2.61l-.887-.216a1.75 1.75 0 010-3.35l.887-.216a1.75 1.75 0 001.08-2.61l-.474-.78A1.75 1.75 0 016.72 5.81l.78.474a1.75 1.75 0 002.61-1.08l.216-.887z"/><circle cx="12" cy="12" r="3"/></svg>
+        Bakım Paneli
+      </a>
+      <a href="{{ url_for('bakim.bakim_raporlar') }}" class="sidebar-link {% if request.endpoint == 'bakim.bakim_raporlar' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Bakım Raporları
+      </a>
+      {% endif %}
       {% if current_user.role in ['uretim', 'departman_yoneticisi', 'gm', 'admin'] %}
       <div class="sidebar-section" style="margin-top:8px">Üretim</div>
       <a href="{{ url_for('uretim.uretim_dashboard') }}" class="sidebar-link {% if 'uretim' in (request.endpoint or '') %}active{% endif %}">
