@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content" style="max-width:600px">
+  <div style="margin-bottom:24px">
+    <a href="{{ url_for('uretim.uretim_dashboard') }}" style="font-size:13px;color:#64748b;text-decoration:none">← Panele Dön</a>
+    <h1 style="font-size:22px;font-weight:700;color:#1e293b;margin-top:8px">Arıza Kaydı</h1>
+  </div>
+  <div class="card" style="padding:28px">
+    <form method="POST">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Tarih</label>
+            <input type="date" name="tarih" value="{{ bugun }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">İstasyon *</label>
+            <select name="istasyon_id" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+              <option value="">Seçin...</option>
+              {% for i in istasyonlar %}<option value="{{ i.id }}">{{ i.istasyon_adi }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Başlangıç Saati</label>
+            <input type="time" name="baslangic_saati" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Bitiş Saati</label>
+            <input type="time" name="bitis_saati" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Arıza Açıklaması *</label>
+          <textarea name="aciklama" rows="4" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical" placeholder="Arıza detayını yazın..."></textarea>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <a href="{{ url_for('uretim.uretim_dashboard') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;text-decoration:none;color:#475569">İptal</a>
+          <button type="submit" style="background:#ef4444;color:#fff;padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">Kaydet</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

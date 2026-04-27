@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div>
+      <a href="{{ url_for('uretim.uretim_dashboard') }}" style="font-size:13px;color:#64748b;text-decoration:none">← Panele Dön</a>
+      <h1 style="font-size:22px;font-weight:700;color:#1e293b;margin-top:8px">İş İstasyonları</h1>
+    </div>
+    <button onclick="document.getElementById('ekleForm').style.display='block'" class="btn-primary">
+      <svg style="width:15px;height:15px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Yeni İstasyon
+    </button>
+  </div>
+
+  <div id="ekleForm" style="display:none;margin-bottom:20px">
+    <div class="card" style="padding:20px">
+      <h3 style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:14px">Yeni İstasyon Ekle</h3>
+      <form method="POST" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <input type="hidden" name="eylem" value="ekle">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">İstasyon Adı *</label>
+          <input type="text" name="istasyon_adi" required style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;width:240px" placeholder="örn. Kaynak İstasyonu 1">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Açıklama</label>
+          <input type="text" name="aciklama" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;width:220px">
+        </div>
+        <button type="submit" class="btn-primary">Ekle</button>
+        <button type="button" onclick="document.getElementById('ekleForm').style.display='none'" style="padding:8px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;cursor:pointer;background:#fff">İptal</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Kod</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">İstasyon Adı</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Açıklama</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">Durum</th>
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:#475569">İşlem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in istasyonlar %}
+        <tr style="border-bottom:1px solid #f1f5f9">
+          <td style="padding:11px 16px;color:#64748b;font-family:monospace;font-size:12px">{{ i.istasyon_kodu }}</td>
+          <td style="padding:11px 16px;color:#1e293b;font-weight:500">{{ i.istasyon_adi }}</td>
+          <td style="padding:11px 16px;color:#475569">{{ i.aciklama or '—' }}</td>
+          <td style="padding:11px 16px">
+            <span style="padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;{% if i.is_active %}background:#f0fdf4;color:#166534{% else %}background:#f1f5f9;color:#94a3b8{% endif %}">
+              {{ 'Aktif' if i.is_active else 'Pasif' }}
+            </span>
+          </td>
+          <td style="padding:11px 16px">
+            {% if i.is_active %}
+            <form method="POST" style="display:inline">
+              <input type="hidden" name="eylem" value="sil">
+              <input type="hidden" name="istasyon_id" value="{{ i.id }}">
+              <button type="submit" onclick="return confirm('Pasif yapmak istediğinizden emin misiniz?')" style="font-size:12px;color:#ef4444;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px">Pasif Yap</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="padding:40px;text-align:center;color:#94a3b8">Henüz istasyon tanımlanmamış.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

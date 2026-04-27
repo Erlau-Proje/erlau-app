@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content" style="max-width:640px">
+  <div style="margin-bottom:24px">
+    <a href="{{ url_for('uretim.uretim_dashboard') }}" style="font-size:13px;color:#64748b;text-decoration:none">← Panele Dön</a>
+    <h1 style="font-size:22px;font-weight:700;color:#1e293b;margin-top:8px">Üretim Girişi</h1>
+  </div>
+
+  <div class="card" style="padding:28px">
+    <form method="POST">
+      <div style="display:flex;flex-direction:column;gap:18px">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Tarih</label>
+            <input type="date" name="tarih" value="{{ bugun }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">İş İstasyonu *</label>
+            <select name="istasyon_id" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+              <option value="">Seçin...</option>
+              {% for i in istasyonlar %}
+              <option value="{{ i.id }}">{{ i.istasyon_adi }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        {% if plan_satirlari %}
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Plandan Seç (opsiyonel)</label>
+          <select name="plan_satir_id" id="planSatir" onchange="planSecildi(this)" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            <option value="">— Plan satırı seçin —</option>
+            {% for s in plan_satirlari %}
+            <option value="{{ s.id }}" data-urun="{{ s.urun_id or '' }}" data-planlanan="{{ s.planlanan_adet }}">
+              {{ s.istasyon.istasyon_adi if s.istasyon else '?' }} / {{ s.urun.urun_adi if s.urun else '?' }} → {{ s.planlanan_adet }} adet
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% else %}
+        <input type="hidden" name="plan_satir_id" value="">
+        {% endif %}
+
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Ürün</label>
+          <select name="urun_id" id="urunSelect" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            <option value="">— Seçin —</option>
+            {% for u in urunler %}
+            <option value="{{ u.id }}">{{ u.urun_adi }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">
+              Planlanan Adet
+              <span id="planlananBilgi" style="font-weight:400;color:#94a3b8"></span>
+            </label>
+            <input type="number" id="planlananAdet" readonly style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#f8fafc;color:#94a3b8" placeholder="Plandan gelir">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Gerçekleşen Adet *</label>
+            <input type="number" name="gerceklesen_adet" min="0" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px" placeholder="0">
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Fire Adet</label>
+          <input type="number" name="fire_adet" min="0" value="0" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        </div>
+
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Açıklama</label>
+          <textarea name="aciklama" rows="2" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical" placeholder="Varsa not ekleyin..."></textarea>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:4px">
+          <a href="{{ url_for('uretim.uretim_dashboard') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;text-decoration:none;color:#475569">İptal</a>
+          <button type="submit" class="btn-primary">Kaydet</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function planSecildi(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const urunId = opt.dataset.urun;
+  const planlanan = opt.dataset.planlanan;
+  if (urunId) document.getElementById('urunSelect').value = urunId;
+  document.getElementById('planlananAdet').value = planlanan || '';
+  document.getElementById('planlananBilgi').textContent = planlanan ? `(hedef: ${planlanan})` : '';
+}
+</script>
+{% endblock %}

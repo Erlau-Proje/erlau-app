@@ -52,6 +52,17 @@
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/></svg>
         Sipariş Raporu
       </a>
+      {% if current_user.role in ['uretim', 'departman_yoneticisi', 'gm', 'admin'] %}
+      <div class="sidebar-section" style="margin-top:8px">Üretim</div>
+      <a href="{{ url_for('uretim.uretim_dashboard') }}" class="sidebar-link {% if 'uretim' in (request.endpoint or '') %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 21V9l5 3V9l5 3V5a2 2 0 012-2h2a2 2 0 012 2v16H4z"/></svg>
+        Üretim Paneli
+      </a>
+      <a href="{{ url_for('uretim.uretim_raporlar') }}" class="sidebar-link {% if request.endpoint == 'uretim.uretim_raporlar' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Üretim Raporları
+      </a>
+      {% endif %}
       {% if current_user.role in ['satinalma', 'admin', 'gm'] %}
       <div class="sidebar-section" style="margin-top:8px">Satın Alma</div>
       <a href="{{ url_for('satin_alma.panel') }}" class="sidebar-link {% if request.endpoint == 'satin_alma.panel' %}active{% endif %}">
