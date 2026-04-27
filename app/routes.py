@@ -25,7 +25,12 @@ def role_required(*roles):
         return decorated_function
     return decorator
 
-@auth.route('/', methods=['GET', 'POST'])
+@auth.route('/', methods=['GET'])
+def portal():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+    return render_template('portal.html')
+
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
