@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-800">Planlama Paneli</h1>
+    <p class="text-sm text-gray-500 mt-1">Haftalık üretim planlarını yönetin.</p>
+  </div>
+  <div class="flex gap-2">
+    <a href="{{ url_for('planlama.plan_listesi') }}" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Tüm Planlar</a>
+    <a href="{{ url_for('planlama.yeni_plan') }}" class="btn-primary">Yeni Plan</a>
+  </div>
+</div>
+
+<div class="card p-6 mb-5">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h2 class="font-semibold text-gray-800">Aktif Plan</h2>
+      {% if aktif %}
+      <p class="text-sm text-gray-500 mt-1">{{ aktif.plan_no }} · Hafta {{ aktif.hafta }} / {{ aktif.yil }}</p>
+      {% endif %}
+    </div>
+    {% if aktif %}
+    <span class="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">Aktif</span>
+    {% endif %}
+  </div>
+
+  {% if aktif and aktif_ozet %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-xs text-gray-500">
+        <tr>
+          <th class="px-3 py-2 text-left">Ürün</th>
+          <th class="px-3 py-2 text-left">İstasyon</th>
+          <th class="px-3 py-2 text-right">Pzt</th>
+          <th class="px-3 py-2 text-right">Sal</th>
+          <th class="px-3 py-2 text-right">Çar</th>
+          <th class="px-3 py-2 text-right">Per</th>
+          <th class="px-3 py-2 text-right">Cum</th>
+          <th class="px-3 py-2 text-right">Toplam</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in aktif_ozet %}
+        <tr class="border-t border-gray-100">
+          <td class="px-3 py-2 font-medium text-gray-800">{{ row.urun.urun_adi if row.urun else '-' }}</td>
+          <td class="px-3 py-2 text-gray-600">{{ row.istasyon.istasyon_adi if row.istasyon else '-' }}</td>
+          <td class="px-3 py-2 text-right">{{ row.pzt }}</td>
+          <td class="px-3 py-2 text-right">{{ row.sal }}</td>
+          <td class="px-3 py-2 text-right">{{ row.car }}</td>
+          <td class="px-3 py-2 text-right">{{ row.per }}</td>
+          <td class="px-3 py-2 text-right">{{ row.cum }}</td>
+          <td class="px-3 py-2 text-right font-semibold text-gray-800">{{ row.toplam }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% elif aktif %}
+  <p class="text-sm text-gray-500">Aktif plan var ancak henüz satır bulunmuyor.</p>
+  {% else %}
+  <p class="text-sm text-gray-500">Aktif üretim planı bulunmuyor.</p>
+  {% endif %}
+</div>
+
+<div class="card p-6">
+  <h2 class="font-semibold text-gray-800 mb-4">Son 5 Plan</h2>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-xs text-gray-500">
+        <tr>
+          <th class="px-3 py-2 text-left">Plan No</th>
+          <th class="px-3 py-2 text-left">Hafta</th>
+          <th class="px-3 py-2 text-left">Tarih Aralığı</th>
+          <th class="px-3 py-2 text-left">Durum</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for plan in planlar %}
+        <tr class="border-t border-gray-100">
+          <td class="px-3 py-2 font-medium text-gray-800">{{ plan.plan_no }}</td>
+          <td class="px-3 py-2">{{ plan.hafta }} / {{ plan.yil }}</td>
+          <td class="px-3 py-2">{{ plan.baslangic_tarihi.strftime('%d.%m.%Y') if plan.baslangic_tarihi else '-' }} - {{ plan.bitis_tarihi.strftime('%d.%m.%Y') if plan.bitis_tarihi else '-' }}</td>
+          <td class="px-3 py-2">{{ plan.durum }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="px-3 py-4 text-center text-gray-400">Henüz plan oluşturulmadı.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
