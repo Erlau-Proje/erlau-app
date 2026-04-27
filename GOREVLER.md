@@ -160,7 +160,7 @@
 | G-001 | Portal Landing Page | Codex | ✅ Tamamlandı |
 | G-002 | DB Modelleri + utils | Claude | ✅ Tamamlandı |
 | G-003 | Autocomplete JS | Codex | ⬜ Bekliyor (G-004 sonrası) |
-| G-004 | Malzeme/Ürün CRUD | Gemini | ⬜ Bekliyor (G-002 sonrası) |
+| G-004 | Malzeme/Ürün CRUD | Claude | ✅ Tamamlandı |
 | G-005 | Çoklu Teklif Sistemi | Claude | ⬜ Bekliyor (G-004 sonrası) |
 | G-006 | Üretim Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
 | G-007 | Bakım Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
