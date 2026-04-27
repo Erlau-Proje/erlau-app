@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-800">Teklif Grupları</h1>
+    <p class="text-sm text-gray-500 mt-1">Çoklu tedarikçi teklifleri</p>
+  </div>
+  <a href="{{ url_for('satin_alma.panel') }}" class="text-sm text-gray-500 hover:underline">← Panele Dön</a>
+</div>
+
+<div class="card overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50 border-b border-gray-100">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Teklif No</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Malzeme</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Sipariş No</th>
+        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Teklif Sayısı</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Durum</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Tarih</th>
+        <th class="px-4 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for g in gruplar %}
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 font-mono text-xs text-gray-600">{{ g.teklif_no }}</td>
+        <td class="px-4 py-3 font-medium text-gray-800">{{ g.talep_kalem.malzeme_adi if g.talep_kalem else '—' }}</td>
+        <td class="px-4 py-3 text-gray-500 text-xs">{{ g.talep_kalem.talep.siparis_no if g.talep_kalem and g.talep_kalem.talep else '—' }}</td>
+        <td class="px-4 py-3 text-center">
+          <span class="bg-blue-50 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">{{ g.kalemler|length }}</span>
+        </td>
+        <td class="px-4 py-3">
+          {% if g.durum == 'secildi' %}
+            <span class="bg-green-50 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">Seçildi</span>
+          {% elif g.durum == 'teklif_alindi' %}
+            <span class="bg-yellow-50 text-yellow-700 text-xs font-medium px-2 py-0.5 rounded-full">Teklif Alındı</span>
+          {% else %}
+            <span class="bg-gray-100 text-gray-500 text-xs font-medium px-2 py-0.5 rounded-full">Bekliyor</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-xs text-gray-400">{{ g.created_at.strftime('%d.%m.%Y') }}</td>
+        <td class="px-4 py-3">
+          <a href="{{ url_for('satin_alma.teklif_detay', grup_id=g.id) }}" class="text-blue-600 hover:underline text-xs">Detay →</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" class="px-4 py-12 text-center text-gray-400">Henüz teklif grubu oluşturulmamış.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

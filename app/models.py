@@ -182,7 +182,7 @@ class TeklifGrubu(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     teklif_no = db.Column(db.String(30), unique=True, nullable=False)
     talep_kalem_id = db.Column(db.Integer, db.ForeignKey('talep_kalem.id'), nullable=False)
-    talep_kalem = db.relationship('TalepKalem', foreign_keys=[talep_kalem_id])
+    talep_kalem = db.relationship('TalepKalem', foreign_keys=[talep_kalem_id], backref='teklif_gruplari')
     durum = db.Column(db.String(30), default='bekliyor')  # bekliyor, teklif_alindi, secildi
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     kalemler = db.relationship('TeklifKalem', backref='grup', lazy=True, cascade='all, delete-orphan')
