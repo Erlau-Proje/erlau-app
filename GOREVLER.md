@@ -20,13 +20,13 @@
 
 ## FAZ 1 — Temel
 
-### [G-002] CLAUDE — Veritabanı Modelleri `[DEVAM EDİYOR]`
+### [G-002] CLAUDE — Veritabanı Modelleri `[TAMAMLANDI]`
 **Dosya:** `app/models.py`, `app/utils.py`
-**Durum:** `[✓] Claude üstlendi`
+**Durum:** `[✅] Tamamlandı — sunucuda test edildi`
 
 ---
 
-### [G-001] CODEX — Portal Landing Page `[BEKLIYOR]`
+### [G-001] CODEX — Portal Landing Page `[TAMAMLANDI]`
 **Dosya:** `app/templates/portal.html` (YENİ), `app/routes.py` (auth blueprint'e `/` route ekle)
 **Açıklama:**
 - IP:5000'e gelen kullanıcı bu sayfayı görür, login gerekmez
@@ -44,7 +44,7 @@
           return redirect(url_for('main.dashboard'))
       return render_template('portal.html')
   ```
-**Durum:** `[ ] Bekliyor`
+**Durum:** `[✅] Tamamlandı`
 
 ---
 
@@ -157,8 +157,8 @@
 
 | # | Görev | Sorumlu | Durum |
 |---|---|---|---|
-| G-001 | Portal Landing Page | Codex | ⬜ Bekliyor |
-| G-002 | DB Modelleri + utils | Claude | 🔄 Devam ediyor |
+| G-001 | Portal Landing Page | Codex | ✅ Tamamlandı |
+| G-002 | DB Modelleri + utils | Claude | ✅ Tamamlandı |
 | G-003 | Autocomplete JS | Codex | ⬜ Bekliyor (G-004 sonrası) |
 | G-004 | Malzeme/Ürün CRUD | Gemini | ⬜ Bekliyor (G-002 sonrası) |
 | G-005 | Çoklu Teklif Sistemi | Claude | ⬜ Bekliyor (G-004 sonrası) |
