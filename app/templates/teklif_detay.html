@@ -94,10 +94,34 @@
 </div>
 {% endif %}
 
+<!-- AI PDF Yükleme -->
+{% if grup.durum != 'secildi' %}
+<div class="card p-6 mb-4" style="border-left:3px solid #7c3aed">
+  <div class="flex items-center gap-3 mb-3">
+    <div style="background:#f5f3ff;border-radius:8px;padding:6px">
+      <svg style="width:18px;height:18px;color:#7c3aed" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+    </div>
+    <div>
+      <h2 class="font-medium text-gray-800">AI ile PDF Teklif Analizi</h2>
+      <p class="text-xs text-gray-400">Tedarikçiden gelen PDF teklifi yükleyin, AI fiyat ve koşulları otomatik çıkarsın</p>
+    </div>
+  </div>
+  <form method="POST" action="{{ url_for('satin_alma.teklif_ai_yukle', grup_id=grup.id) }}" enctype="multipart/form-data">
+    <div class="flex items-center gap-3">
+      <input type="file" name="teklif_pdf" accept=".pdf" required
+        class="text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-purple-200 file:text-xs file:font-medium file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+      <button type="submit" style="background:#7c3aed;color:#fff;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;border:none;cursor:pointer">
+        AI Analiz Et
+      </button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
 <!-- Yeni Teklif Ekleme Formu -->
 {% if grup.durum != 'secildi' %}
 <div class="card p-6">
-  <h2 class="font-medium text-gray-800 mb-4">Teklif Ekle</h2>
+  <h2 class="font-medium text-gray-800 mb-4">Manuel Teklif Ekle</h2>
   <form method="POST" action="{{ url_for('satin_alma.teklif_kalem_ekle', grup_id=grup.id) }}">
     <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
       <div class="md:col-span-2">

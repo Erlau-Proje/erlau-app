@@ -63,70 +63,26 @@
 
 ---
 
-### [G-005] CLAUDE — Çoklu Tedarikçi Teklif Sistemi `[BEKLIYOR — G-004 SONRASI]`
-**Dosya:** `app/routes.py`, `app/templates/`
-**Durum:** `[✓] Claude üstlendi`
+### [G-005] CLAUDE — Çoklu Tedarikçi Teklif Sistemi `[TAMAMLANDI]`
+**Dosya:** `app/routes.py`, `app/templates/teklifler.html`, `app/templates/teklif_detay.html`
+**Durum:** `[✅] Tamamlandı — deploy edildi`
 
 ---
 
 ## FAZ 3 — Yeni Modüller
 
-### [G-004] GEMINI — Malzeme + Ürün CRUD `[BEKLIYOR — G-002 SONRASI]`
-**Dosya:** `app/routes.py` (admin blueprint), yeni template'ler
-**Açıklama:**
-- `/admin/malzemeler` → Malzeme listesi sayfası
-  - Tablo: stok_kodu, malzeme_adi, birim, kategori, is_active, işlemler
-  - Her satır inline düzenlenebilir (double-click ile edit modu) VEYA modal
-  - Yeni malzeme ekle butonu (form: malzeme_adi, birim, kategori)
-  - Sil butonu (soft delete: is_active=False)
-  - stok_kodu otomatik: `utils.generate_stok_kodu()` çağır
-- `/admin/urunler` → Ürün listesi sayfası (aynı yapı)
-  - Tablo: urun_kodu, urun_adi, proje, makine, is_active, işlemler
-  - urun_kodu otomatik: `utils.generate_urun_kodu()` çağır
-- API endpoint'leri (JSON döndür):
-  - `GET /api/malzeme-ara?q=XXX` → `[{"id":1,"malzeme_adi":"Vida","birim":"Adet","stok_kodu":"MLZ-00001"}]`
-  - `GET /api/urun-ara?q=XXX` → `[{"id":1,"urun_adi":"Zincir A","urun_kodu":"URN-00001"}]`
-  - `POST /api/urun-ekle` body: `{"urun_adi":"XXX"}` → yeni Urun kaydı oluştur, JSON döndür
-- Sol menüde admin rolüne "Malzeme Listesi" ve "Ürün Listesi" linkleri ekle (`base.html`)
-**Durum:** `[ ] Bekliyor`
+### [G-004] ~~GEMINI~~ CLAUDE — Malzeme + Ürün CRUD `[TAMAMLANDI]`
+**Durum:** `[✅] Tamamlandı — Claude üstlendi, deploy edildi`
 
 ---
 
-### [G-006] GEMINI — Üretim Modülü `[BEKLIYOR — G-002 SONRASI]`
-**Dosya:** `app/routes.py` (uretim blueprint ekle), `app/templates/uretim/`
-**Açıklama:**
-- Blueprint: `uretim = Blueprint('uretim', __name__, url_prefix='/uretim')`
-- `/uretim/` → Dashboard: bugünkü plan + istasyon kartları + toplam planlanan/gerçekleşen
-- `/uretim/giris` → Günlük üretim giriş formu
-  - İstasyon seç, ürün seç, tarih (bugün default), planlanan adet (readonly, plandan gelir), gerçekleşen adet, fire, açıklama
-  - Kaydet → `UretimKaydi` oluştur
-- `/uretim/ariza` → Arıza kaydı formu (istasyon, başlangıç/bitiş saati, açıklama)
-- `/uretim/raporlar` → Planlanan vs Gerçekleşen tablosu
-  - Filtre: tarih aralığı, istasyon, ürün
-  - Grafik: Chart.js bar chart (CDN zaten var)
-  - Erişim: rol in ['uretim', 'departman_yoneticisi', 'gm', 'admin']
-- `/uretim/istasyonlar` → İstasyon CRUD (sadece rol='departman_yoneticisi' ve department='Üretim')
-- Sol menüde "Üretim Raporları" linki: tüm DY ve GM görebilir
-- `create_app()` içine blueprint'i kaydet
-**Durum:** `[ ] Bekliyor`
+### [G-006] ~~GEMINI~~ CLAUDE — Üretim Modülü `[TAMAMLANDI]`
+**Durum:** `[✅] Tamamlandı — Claude üstlendi, deploy edildi`
 
 ---
 
-### [G-007] GEMINI — Bakım Modülü `[BEKLIYOR — G-002 SONRASI]`
-**Dosya:** `app/routes.py` (bakim blueprint ekle), `app/templates/bakim/`
-**Açıklama:**
-- Blueprint: `bakim = Blueprint('bakim', __name__, url_prefix='/bakim')`
-- `/bakim/` → Dashboard: bugünkü bakımlar + yaklaşan periyodikler (7 gün içinde)
-- `/bakim/kayit` → Bakım kaydı formu (makine seç, tür: günlük/periyodik/arıza, tarih, yapılan işler, süre)
-- `/bakim/makineler` → Makine listesi CRUD (makine_kodu otomatik: `MKN-00001`)
-- `/bakim/plan` → Makine bazlı periyodik bakım planları (makine, bakım_adi, periyot_gun, son_bakim_tarihi)
-  - `sonraki_bakim_tarihi` = son_bakim_tarihi + periyot_gun (otomatik hesapla)
-- `/bakim/takvim` → Aylık takvim view (basit tablo: satır=makine, sütun=günler, hücreler renkli)
-- `/bakim/raporlar` → Makine bakım geçmişi, filtre: makine, tarih aralığı
-  - Erişim: rol in ['bakim', 'departman_yoneticisi', 'gm', 'admin']
-- Sol menüde "Bakım Raporları" linki: DY ve GM görebilir
-- `create_app()` içine blueprint'i kaydet
-**Durum:** `[ ] Bekliyor`
+### [G-007] ~~GEMINI~~ CLAUDE — Bakım Modülü `[TAMAMLANDI]`
+**Durum:** `[✅] Tamamlandı — Claude üstlendi, deploy edildi`
 
 ---
 
@@ -161,8 +117,8 @@
 | G-002 | DB Modelleri + utils | Claude | ✅ Tamamlandı |
 | G-003 | Autocomplete JS | Codex | ✅ Tamamlandı |
 | G-004 | Malzeme/Ürün CRUD | Claude | ✅ Tamamlandı |
-| G-005 | Çoklu Teklif Sistemi | Claude | ⬜ Bekliyor (G-004 sonrası) |
-| G-006 | Üretim Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
-| G-007 | Bakım Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
+| G-005 | Çoklu Teklif Sistemi | Claude | ✅ Tamamlandı |
+| G-006 | Üretim Modülü | Claude | ✅ Tamamlandı |
+| G-007 | Bakım Modülü | Claude | ✅ Tamamlandı |
 | G-008 | Planlama Arayüzü | Codex | ✅ Tamamlandı |
 | G-009 | AI Teklif Analizi | Claude | ⬜ Bekliyor (G-005 sonrası) |

@@ -280,16 +280,18 @@ def talep_duzenle(talep_id):
 @login_required
 def talep_sil(talep_id):
     talep = db.get_or_404(TalepFormu, talep_id)
-    if talep.talep_eden_id != current_user.id and current_user.role != 'admin':
+    is_satinalma = current_user.role in ('satinalma', 'admin')
+    if talep.talep_eden_id != current_user.id and not is_satinalma:
         flash('Bu talebi silme yetkiniz yok.', 'danger')
         return redirect(url_for('main.dashboard'))
-    if talep.durum != 'bekliyor':
+    if talep.durum != 'bekliyor' and not is_satinalma:
         flash('Sadece bekleyen talepler silinebilir.', 'danger')
         return redirect(url_for('main.dashboard'))
     db.session.delete(talep)
     db.session.commit()
     flash('Talep silindi.', 'success')
-    return redirect(url_for('main.dashboard'))
+    redirect_url = url_for('satin_alma.panel') if is_satinalma else url_for('main.dashboard')
+    return redirect(redirect_url)
 
 @satin_alma.route('/siparis-raporu')
 @login_required
@@ -1312,6 +1314,56 @@ def teklif_kalem_sil(kalem_id):
     return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
 
 
+@satin_alma.route('/teklif/<int:grup_id>/ai-yukle', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_ai_yukle(grup_id):
+    import os, tempfile
+    from app.teklif_ai import teklif_oku
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    dosya = request.files.get('teklif_pdf')
+    if not dosya or not dosya.filename.lower().endswith('.pdf'):
+        flash('Lütfen geçerli bir PDF dosyası yükleyin.', 'danger')
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
+    malzeme_adi = grup.talep_kalem.malzeme_adi if grup.talep_kalem else None
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    try:
+        dosya.save(tmp.name)
+        veri = teklif_oku(tmp.name, malzeme_adi=malzeme_adi)
+    except Exception as e:
+        flash(f'AI analiz hatası: {e}', 'danger')
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+    finally:
+        os.unlink(tmp.name)
+
+    tedarikci_id = None
+    tedarikci_adi = veri.get('tedarikci_adi') or ''
+    if tedarikci_adi:
+        from sqlalchemy import func
+        t = Tedarikci.query.filter(
+            func.lower(Tedarikci.name).contains(tedarikci_adi.lower()[:20])
+        ).first()
+        if t:
+            tedarikci_id = t.id
+
+    kalem = TeklifKalem(
+        grup_id=grup_id,
+        tedarikci_id=tedarikci_id,
+        birim_fiyat=veri.get('birim_fiyat'),
+        para_birimi=veri.get('para_birimi') or 'TL',
+        vade_gun=veri.get('vade_gun'),
+        notlar=(veri.get('notlar') or '') + (f' [AI — tedarikçi: {tedarikci_adi}]' if tedarikci_adi and not tedarikci_id else ''),
+        kaynak='pdf',
+    )
+    db.session.add(kalem)
+    if grup.durum == 'bekliyor':
+        grup.durum = 'teklif_alindi'
+    db.session.commit()
+    flash(f'AI teklif analizi tamamlandı — güven skoru: {veri.get("guven_skoru", 0):.0%}', 'success')
+    return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
+
 # ─── MUHASEBE ────────────────────────────────────────────────────────────────
 
 IZINLI_MUHASEBE = ['muhasebe', 'satinalma', 'admin']
@@ -1684,7 +1736,6 @@ def fatura_pdf_indir(fatura_id):
 
 @admin.route('/malzemeler')
 @login_required
-@role_required('admin')
 def malzeme_listesi():
     malzemeler = Malzeme.query.order_by(Malzeme.stok_kodu).all()
     return render_template('admin/malzeme_listesi.html', malzemeler=malzemeler)
@@ -1735,7 +1786,6 @@ def malzeme_sil(m_id):
 
 @admin.route('/urunler')
 @login_required
-@role_required('admin')
 def urun_listesi():
     urunler = Urun.query.order_by(Urun.urun_kodu).all()
     return render_template('admin/urun_listesi.html', urunler=urunler)
