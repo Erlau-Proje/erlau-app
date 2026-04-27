@@ -64,7 +64,7 @@
             <td class="px-2 py-2"><select name="hedef[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option value="siparis">Sipariş</option><option value="stok">Stok</option><option value="proje">Proje</option></select></td>
             <td class="px-2 py-2"><select name="kullanim_amaci[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option>Üretim</option><option>Bakım</option><option>Sarf Malzeme</option><option>Personel İhtiyacı</option><option>Diğer</option></select></td>
             <td class="px-2 py-2"><select name="kullanilan_alan[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option value="FA">FA</option><option value="OEA">OEA</option><option value="OEI">OEI</option><option value="OEF">OEF</option><option value="OES">OES</option><option value="Fason">Fason</option></select></td>
-            <td class="px-2 py-2"><input type="text" name="proje_makine[]" class="w-24 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Proje/Makine"></td>
+            <td class="px-2 py-2"><input type="text" name="proje_makine[]" class="proje-makine-input w-24 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Proje/Makine"></td>
             <td class="px-2 py-2"><input type="text" name="kw[]" class="w-14 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="KW18"></td>
             <td class="px-2 py-2"><input type="text" name="aciklama[]" class="w-28 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Not..."></td>
             <td class="px-2 py-2"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600 text-xs">✕</button></td>
@@ -80,7 +80,33 @@
   </div>
 </form>
 
+<div id="autocomplete-toast" class="fixed right-5 bottom-5 z-50 hidden rounded-lg bg-gray-900 px-4 py-2 text-sm text-white shadow-lg"></div>
+
 <script>
+const tbody = document.getElementById('malzeme-tbody');
+const dropdown = document.createElement('div');
+dropdown.className = 'hidden absolute z-50 max-h-60 w-72 overflow-auto rounded-lg border border-gray-200 bg-white py-1 text-xs shadow-xl';
+document.body.appendChild(dropdown);
+
+let activeAutocomplete = null;
+let activeIndex = -1;
+let debounceTimer = null;
+let urunKayitTimer = null;
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, function(ch) {
+    return ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[ch];
+  });
+}
+
+function showToast(message) {
+  const toast = document.getElementById('autocomplete-toast');
+  toast.textContent = message;
+  toast.classList.remove('hidden');
+  window.clearTimeout(showToast.timer);
+  showToast.timer = window.setTimeout(() => toast.classList.add('hidden'), 2200);
+}
+
 function sonAlimSorgula(input) {
   const tr = input.closest('tr');
   const cell = tr.querySelector('.son-alim-cell');
@@ -103,16 +129,209 @@ function sonAlimSorgula(input) {
     .catch(() => { cell.innerHTML = '<span class="text-xs text-gray-400 italic">—</span>'; });
 }
 
-document.getElementById('malzeme-tbody').addEventListener('blur', function(e) {
+function getBirimSelect(input) {
+  return input.closest('tr').querySelector('select[name="birim[]"]');
+}
+
+function positionDropdown(input) {
+  const rect = input.getBoundingClientRect();
+  dropdown.style.left = `${rect.left + window.scrollX}px`;
+  dropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
+  dropdown.style.width = `${Math.max(rect.width, 260)}px`;
+}
+
+function closeDropdown() {
+  dropdown.classList.add('hidden');
+  dropdown.innerHTML = '';
+  activeAutocomplete = null;
+  activeIndex = -1;
+}
+
+function renderDropdown(state) {
+  const isSameAutocomplete = activeAutocomplete &&
+    activeAutocomplete.input === state.input &&
+    activeAutocomplete.type === state.type &&
+    activeAutocomplete.query === state.query;
+  activeAutocomplete = state;
+  if (state.items.length) {
+    activeIndex = isSameAutocomplete ? Math.max(0, Math.min(activeIndex, state.items.length - 1)) : 0;
+  } else {
+    activeIndex = -1;
+  }
+  positionDropdown(state.input);
+
+  if (!state.items.length) {
+    if (state.type === 'urun' && state.query.length >= 3) {
+      dropdown.innerHTML = `<button type="button" data-create-urun="1" class="block w-full px-3 py-2 text-left text-gray-600 hover:bg-green-50 hover:text-green-700">"${escapeHtml(state.query)}" yeni ürün olarak eklensin</button>`;
+    } else {
+      dropdown.innerHTML = '<div class="px-3 py-2 text-gray-400">Sonuç bulunamadı</div>';
+    }
+    dropdown.classList.remove('hidden');
+    return;
+  }
+
+  dropdown.innerHTML = state.items.map((item, index) => {
+    const isActive = index === activeIndex;
+    if (state.type === 'malzeme') {
+      return `<button type="button" data-index="${index}" class="block w-full px-3 py-2 text-left ${isActive ? 'bg-green-50 text-green-800' : 'text-gray-700 hover:bg-gray-50'}">
+        <span class="font-medium">${escapeHtml(item.malzeme_adi)}</span>
+        <span class="ml-2 text-gray-400">${escapeHtml(item.stok_kodu || '')}</span>
+        ${item.birim ? `<span class="float-right text-gray-500">${escapeHtml(item.birim)}</span>` : ''}
+      </button>`;
+    }
+    return `<button type="button" data-index="${index}" class="block w-full px-3 py-2 text-left ${isActive ? 'bg-green-50 text-green-800' : 'text-gray-700 hover:bg-gray-50'}">
+      <span class="font-medium">${escapeHtml(item.urun_adi)}</span>
+      <span class="ml-2 text-gray-400">${escapeHtml(item.urun_kodu || '')}</span>
+    </button>`;
+  }).join('');
+  dropdown.classList.remove('hidden');
+}
+
+function selectAutocompleteItem(item) {
+  if (!activeAutocomplete || !item) {
+    return;
+  }
+  const { input, type } = activeAutocomplete;
+  if (type === 'malzeme') {
+    input.value = item.malzeme_adi || '';
+    const birimSelect = getBirimSelect(input);
+    if (birimSelect && item.birim) {
+      const option = Array.from(birimSelect.options).find(opt => opt.value === item.birim || opt.textContent === item.birim);
+      if (option) {
+        birimSelect.value = option.value;
+      }
+    }
+    sonAlimSorgula(input);
+  } else {
+    input.value = item.urun_adi || '';
+    input.dataset.urunSelected = '1';
+  }
+  closeDropdown();
+}
+
+function scheduleAutocomplete(input, type) {
+  const query = input.value.trim();
+  input.dataset.urunSelected = '';
+  window.clearTimeout(debounceTimer);
+  if (query.length < 3) {
+    closeDropdown();
+    return;
+  }
+  debounceTimer = window.setTimeout(() => {
+    const endpoint = type === 'malzeme' ? '/api/malzeme-ara' : '/api/urun-ara';
+    fetch(`${endpoint}?q=${encodeURIComponent(query)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(items => {
+        if (input.value.trim() !== query) {
+          return;
+        }
+        if (type === 'urun' && Array.isArray(items)) {
+          input.dataset.urunSelected = items.some(item => (item.urun_adi || '').toLowerCase() === query.toLowerCase()) ? '1' : '';
+        }
+        renderDropdown({ input, type, query, items: Array.isArray(items) ? items : [] });
+      })
+      .catch(() => closeDropdown());
+  }, 180);
+}
+
+function createUrunIfNeeded(input) {
+  const urunAdi = input.value.trim();
+  if (urunAdi.length < 3 || input.dataset.urunSelected === '1' || input.dataset.urunSaving === '1') {
+    return;
+  }
+  input.dataset.urunSaving = '1';
+  fetch('/api/urun-ekle', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({urun_adi: urunAdi})
+  })
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(data => {
+      if (data && data.ok) {
+        input.dataset.urunSelected = '1';
+        showToast('Yeni ürün eklendi');
+      }
+    })
+    .catch(() => showToast('Ürün eklenemedi'))
+    .finally(() => { input.dataset.urunSaving = ''; });
+}
+
+tbody.addEventListener('input', function(e) {
+  if (e.target.classList.contains('malzeme-adi-input')) {
+    scheduleAutocomplete(e.target, 'malzeme');
+  }
+  if (e.target.classList.contains('proje-makine-input')) {
+    scheduleAutocomplete(e.target, 'urun');
+    window.clearTimeout(urunKayitTimer);
+    urunKayitTimer = window.setTimeout(() => {
+      if (document.activeElement !== e.target) {
+        createUrunIfNeeded(e.target);
+      }
+    }, 500);
+  }
+});
+
+tbody.addEventListener('keydown', function(e) {
+  if (!activeAutocomplete || activeAutocomplete.input !== e.target || dropdown.classList.contains('hidden')) {
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    activeIndex = Math.min(activeIndex + 1, activeAutocomplete.items.length - 1);
+    renderDropdown(activeAutocomplete);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    activeIndex = Math.max(activeIndex - 1, 0);
+    renderDropdown(activeAutocomplete);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (activeIndex >= 0) {
+      selectAutocompleteItem(activeAutocomplete.items[activeIndex]);
+    } else if (activeAutocomplete.type === 'urun') {
+      createUrunIfNeeded(e.target);
+      closeDropdown();
+    }
+  } else if (e.key === 'Escape') {
+    closeDropdown();
+  }
+});
+
+dropdown.addEventListener('mousedown', function(e) {
+  e.preventDefault();
+  const createButton = e.target.closest('[data-create-urun]');
+  if (createButton && activeAutocomplete) {
+    createUrunIfNeeded(activeAutocomplete.input);
+    closeDropdown();
+    return;
+  }
+  const button = e.target.closest('[data-index]');
+  if (!button || !activeAutocomplete) {
+    return;
+  }
+  selectAutocompleteItem(activeAutocomplete.items[Number(button.dataset.index)]);
+});
+
+document.addEventListener('click', function(e) {
+  if (!dropdown.contains(e.target) && !e.target.classList.contains('malzeme-adi-input') && !e.target.classList.contains('proje-makine-input')) {
+    closeDropdown();
+  }
+});
+
+window.addEventListener('scroll', closeDropdown, true);
+window.addEventListener('resize', closeDropdown);
+
+tbody.addEventListener('blur', function(e) {
   if (e.target.classList.contains('malzeme-adi-input')) {
     sonAlimSorgula(e.target);
+  }
+  if (e.target.classList.contains('proje-makine-input')) {
+    window.setTimeout(() => createUrunIfNeeded(e.target), 120);
   }
 }, true);
 
 let satirSayisi = 1;
 function satirEkle() {
   satirSayisi++;
-  const tbody = document.getElementById('malzeme-tbody');
   const tr = document.createElement('tr');
   tr.className = 'border-t border-gray-100';
   tr.innerHTML = `
@@ -126,7 +345,7 @@ function satirEkle() {
     <td class="px-2 py-2"><select name="hedef[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option value="siparis">Sipariş</option><option value="stok">Stok</option><option value="proje">Proje</option></select></td>
     <td class="px-2 py-2"><select name="kullanim_amaci[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option>Üretim</option><option>Bakım</option><option>Sarf Malzeme</option><option>Personel İhtiyacı</option><option>Diğer</option></select></td>
     <td class="px-2 py-2"><select name="kullanilan_alan[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option value="FA">FA</option><option value="OEA">OEA</option><option value="OEI">OEI</option><option value="OEF">OEF</option><option value="OES">OES</option><option value="Fason">Fason</option></select></td>
-    <td class="px-2 py-2"><input type="text" name="proje_makine[]" class="w-24 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Proje/Makine"></td>
+    <td class="px-2 py-2"><input type="text" name="proje_makine[]" class="proje-makine-input w-24 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Proje/Makine"></td>
     <td class="px-2 py-2"><input type="text" name="kw[]" class="w-14 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="KW18"></td>
     <td class="px-2 py-2"><input type="text" name="aciklama[]" class="w-28 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Not..."></td>
     <td class="px-2 py-2"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600 text-xs">✕</button></td>`;
