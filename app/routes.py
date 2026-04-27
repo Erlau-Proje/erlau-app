@@ -29,8 +29,9 @@ def role_required(*roles):
     return decorator
 
 @auth.route('/', methods=['GET'])
+@auth.route('/portal', methods=['GET'])
 def portal():
-    if current_user.is_authenticated:
+    if current_user.is_authenticated and request.path == '/':
         return redirect(url_for('main.dashboard'))
     return render_template('portal.html')
 

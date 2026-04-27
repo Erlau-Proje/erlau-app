@@ -19,6 +19,7 @@
 - [x] Fiyat alanları (br_fiyat, toplam_fiyat) hiçbir formda dolmuyor
 
 ## GELİŞTİRİLECEKLER
+- [x] Portal'a geri dönüş navigasyonu (`/portal`, sidebar linki, logo linki)
 - [x] Fiyatlandırma ekranı (tedarikçi seç, fiyat, vade, termin)
 - [x] Tedarikçi atama arayüzü
 - [x] Filtreleme ve arama

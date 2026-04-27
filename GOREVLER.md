@@ -109,6 +109,19 @@
 
 ---
 
+## HIZLI İYİLEŞTİRMELER
+
+### [I-001] CODEX — Portal'a Geri Dönüş Navigasyonu `[TAMAMLANDI]`
+**Dosya:** `app/routes.py`, `app/templates/base.html`, `app/templates/portal.html`, `docs/PORTAL_NAVIGATION.md`
+**Açıklama:**
+- `/portal` route'u eklendi; giriş yapmış kullanıcılar da portal ekranına dönebilir.
+- Sol menüye "Uygulama Portalı" linki eklendi.
+- Sidebar logosu portal ekranına bağlandı.
+- Portal kartları giriş durumuna göre login veya ilgili modül paneline yönlendirir.
+**Durum:** `[✅] Tamamlandı`
+
+---
+
 ## DURUM ÖZETİ
 
 | # | Görev | Sorumlu | Durum |
