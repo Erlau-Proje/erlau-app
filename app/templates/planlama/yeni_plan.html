@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-800">Yeni Haftalık Plan</h1>
+    <p class="text-sm text-gray-500 mt-1">Ürün, istasyon ve gün bazında adetleri girin.</p>
+  </div>
+  <a href="{{ url_for('planlama.planlama_dashboard') }}" class="text-sm text-gray-500 hover:underline">Geri</a>
+</div>
+
+<form method="POST" id="plan-form">
+  <div class="card p-6 mb-5">
+    <h2 class="font-medium text-gray-800 mb-4">Plan Bilgileri</h2>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Hafta No</label>
+        <input type="number" name="hafta" value="{{ pzt.isocalendar()[1] }}" min="1" max="53" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Yıl</label>
+        <input type="number" name="yil" value="{{ pzt.year }}" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Başlangıç Tarihi</label>
+        <input type="date" name="baslangic_tarihi" id="baslangic_tarihi" value="{{ pzt.isoformat() }}" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Bitiş Tarihi</label>
+        <input type="date" name="bitis_tarihi" id="bitis_tarihi" value="{{ cum.isoformat() }}" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-6 mb-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="font-medium text-gray-800">Plan Satırları</h2>
+      <button type="button" onclick="satirEkle()" class="text-sm border border-green-600 text-green-700 px-3 py-1 rounded-lg hover:bg-green-50">+ Satır Ekle</button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-xs text-gray-500">
+          <tr>
+            <th class="px-2 py-2 text-left">Ürün</th>
+            <th class="px-2 py-2 text-left">İstasyon</th>
+            <th class="px-2 py-2 text-right">Pzt</th>
+            <th class="px-2 py-2 text-right">Sal</th>
+            <th class="px-2 py-2 text-right">Çar</th>
+            <th class="px-2 py-2 text-right">Per</th>
+            <th class="px-2 py-2 text-right">Cum</th>
+            <th class="px-2 py-2"></th>
+          </tr>
+        </thead>
+        <tbody id="plan-satirlari"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="flex justify-end gap-3">
+    <button type="submit" name="eylem" value="taslak" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Taslak Kaydet</button>
+    <button type="submit" name="eylem" value="aktif" class="erlau-green text-white px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90">Aktif Et</button>
+  </div>
+</form>
+
+<template id="satir-template">
+  <tr class="border-t border-gray-100">
+    <td class="px-2 py-2">
+      <select name="urun_id[]" required class="w-64 border border-gray-200 rounded px-2 py-1 text-xs">
+        <option value="">Ürün seçin</option>
+        {% for urun in urunler %}
+        <option value="{{ urun.id }}">{{ urun.urun_adi }}</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td class="px-2 py-2">
+      <select name="istasyon_id[]" class="w-48 border border-gray-200 rounded px-2 py-1 text-xs">
+        <option value="">İstasyon seçin</option>
+        {% for istasyon in istasyonlar %}
+        <option value="{{ istasyon.id }}">{{ istasyon.istasyon_adi }}</option>
+        {% endfor %}
+      </select>
+    </td>
+    <td class="px-2 py-2"><input type="number" name="adet_pzt[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
+    <td class="px-2 py-2"><input type="number" name="adet_sal[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
+    <td class="px-2 py-2"><input type="number" name="adet_car[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
+    <td class="px-2 py-2"><input type="number" name="adet_per[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
+    <td class="px-2 py-2"><input type="number" name="adet_cum[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
+    <td class="px-2 py-2"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600 text-xs">Sil</button></td>
+  </tr>
+</template>
+
+<script>
+function satirEkle() {
+  const tbody = document.getElementById('plan-satirlari');
+  const tpl = document.getElementById('satir-template');
+  tbody.appendChild(tpl.content.cloneNode(true));
+}
+
+function bitisGuncelle() {
+  const basInput = document.getElementById('baslangic_tarihi');
+  const bitInput = document.getElementById('bitis_tarihi');
+  if (!basInput.value) return;
+  const tarih = new Date(basInput.value + 'T00:00:00');
+  tarih.setDate(tarih.getDate() + 4);
+  bitInput.value = tarih.toISOString().slice(0, 10);
+}
+
+document.getElementById('baslangic_tarihi').addEventListener('change', bitisGuncelle);
+bitisGuncelle();
+satirEkle();
+</script>
+{% endblock %}

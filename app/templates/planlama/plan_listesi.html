@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-800">Planlar</h1>
+    <p class="text-sm text-gray-500 mt-1">Geçmiş ve aktif haftalık planlar.</p>
+  </div>
+  <a href="{{ url_for('planlama.yeni_plan') }}" class="btn-primary">Yeni Plan</a>
+</div>
+
+<div class="card p-6">
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-xs text-gray-500">
+        <tr>
+          <th class="px-3 py-2 text-left">Plan No</th>
+          <th class="px-3 py-2 text-left">Hafta</th>
+          <th class="px-3 py-2 text-left">Tarih Aralığı</th>
+          <th class="px-3 py-2 text-left">Durum</th>
+          <th class="px-3 py-2 text-right">Toplam Adet</th>
+          <th class="px-3 py-2 text-left">Planlayan</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for plan in planlar %}
+        {% set ns = namespace(toplam=0) %}
+        {% for satir in plan.satirlar %}
+          {% set ns.toplam = ns.toplam + (satir.planlanan_adet or 0) %}
+        {% endfor %}
+        <tr class="border-t border-gray-100">
+          <td class="px-3 py-2 font-medium text-gray-800">{{ plan.plan_no }}</td>
+          <td class="px-3 py-2">{{ plan.hafta }} / {{ plan.yil }}</td>
+          <td class="px-3 py-2">{{ plan.baslangic_tarihi.strftime('%d.%m.%Y') if plan.baslangic_tarihi else '-' }} - {{ plan.bitis_tarihi.strftime('%d.%m.%Y') if plan.bitis_tarihi else '-' }}</td>
+          <td class="px-3 py-2">
+            {% if plan.durum == 'aktif' %}
+            <span class="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">aktif</span>
+            {% elif plan.durum == 'tamamlandi' %}
+            <span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold">tamamlandi</span>
+            {% else %}
+            <span class="px-2 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">taslak</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2 text-right font-semibold">{{ ns.toplam }}</td>
+          <td class="px-3 py-2">{{ plan.planlayan.name if plan.planlayan else '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="px-3 py-4 text-center text-gray-400">Henüz plan oluşturulmadı.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
