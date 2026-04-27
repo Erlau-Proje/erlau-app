@@ -10,15 +10,41 @@
 
 ## 2. SUNUCU
 - IP: 178.104.49.105 (Hetzner CPX22, Nuremberg)
-- SSH: root@178.104.49.105
+- SSH direkt: `ssh root@178.104.49.105`
+- SSH alias: `ssh erlau` (config kurulduysa)
 - Uygulama: http://178.104.49.105:5000
 - Coolify: http://178.104.49.105:8000
 - Kod: /root/erlau-app
 - Veritabanı: /root/erlau-app/instance/erlau.db
 - Faturalar: /root/erlau-app/faturalar/
 - Yedekler: /root/erlau-backups/
-- Güncelleme: bash /root/guncelle.sh
-- Log: journalctl -u erlau -n 50 --no-pager
+- Güncelleme: `ssh erlau "bash /root/guncelle.sh"`
+- Log: `ssh erlau "journalctl -u erlau -n 50 --no-pager"`
+
+## 2b. YENİ BİLGİSAYAR / AI ORTAMI KURULUMU
+Sırayla çalıştır:
+```bash
+# 1. GitHub auth
+gh auth login
+
+# 2. SSH key oluştur ve sunucuya yükle
+ssh-keygen -t ed25519 -C "can.otu@gmail.com" -f ~/.ssh/id_ed25519 -N ""
+ssh-keyscan -H 178.104.49.105 >> ~/.ssh/known_hosts
+ssh-copy-id -i ~/.ssh/id_ed25519.pub root@178.104.49.105
+
+# 3. SSH config (alias)
+cat >> ~/.ssh/config << 'EOF'
+Host erlau
+    HostName 178.104.49.105
+    User root
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 60
+EOF
+chmod 600 ~/.ssh/config
+
+# 4. Bağlantı testi
+ssh erlau "echo OK && systemctl status erlau --no-pager | head -5"
+```
 
 ## 3. TEKNOLOJİLER
 - Python 3.12, Flask 3.1.3

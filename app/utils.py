@@ -35,3 +35,41 @@ def generate_siparis_no():
         TalepFormu.siparis_no.like(f"{prefix}%")
     ).count()
     return f"{prefix}-{count+1:03d}"
+
+def generate_stok_kodu():
+    from app.models import Malzeme
+    son = Malzeme.query.order_by(Malzeme.id.desc()).first()
+    sonraki = (son.id + 1) if son else 1
+    return f"MLZ-{sonraki:05d}"
+
+def generate_urun_kodu():
+    from app.models import Urun
+    son = Urun.query.order_by(Urun.id.desc()).first()
+    sonraki = (son.id + 1) if son else 1
+    return f"URN-{sonraki:05d}"
+
+def generate_makine_kodu():
+    from app.models import Makine
+    son = Makine.query.order_by(Makine.id.desc()).first()
+    sonraki = (son.id + 1) if son else 1
+    return f"MKN-{sonraki:05d}"
+
+def generate_teklif_no():
+    from app.models import TeklifGrubu
+    yil = datetime.datetime.now().year
+    son = TeklifGrubu.query.filter(
+        TeklifGrubu.teklif_no.like(f"TKL-{yil}-%")
+    ).order_by(TeklifGrubu.id.desc()).first()
+    if son:
+        sonraki = int(son.teklif_no.split('-')[-1]) + 1
+    else:
+        sonraki = 1
+    return f"TKL-{yil}-{sonraki:05d}"
+
+def generate_plan_no():
+    from app.models import UretimPlani
+    now = datetime.datetime.now()
+    hafta = now.isocalendar()[1]
+    yil = now.year
+    son = UretimPlani.query.filter_by(hafta=hafta, yil=yil).count()
+    return f"PLN-{yil}-W{hafta:02d}-{son+1:02d}"
