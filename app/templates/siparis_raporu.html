@@ -6,11 +6,11 @@
     <h1 class="text-2xl font-semibold text-gray-800">Sipariş Raporu</h1>
     <p class="text-sm text-gray-500 mt-1">Tarih aralığı, tür ve tedarikçiye göre detaylı sorgulama</p>
   </div>
-  {% if pagination and pagination.total > 0 %}
+  {% if kalemler %}
   <a href="?bas_tarih={{ bas_str }}&bit_tarih={{ bit_str }}&malzeme_turu={{ tur_filtre }}&tedarikci_id={{ ted_filtre }}&durum={{ durum_filtre }}&hedef={{ hedef_filtre }}&kullanim_amaci={{ amac_filtre }}&kullanilan_alan={{ alan_filtre }}&proje_makine={{ proje_filtre }}&export=excel"
     class="btn-primary">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-    Excel İndir ({{ pagination.total }} kalem)
+    Excel İndir ({{ kalemler|length }} kalem)
   </a>
   {% endif %}
 </div>
@@ -41,6 +41,7 @@
           <option value="iptal" {% if durum_filtre == 'iptal' %}selected{% endif %}>İptal</option>
         </select>
       </div>
+      {% if current_user.role in ['satinalma', 'admin', 'gm'] %}
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Tedarikçi</label>
         <select name="tedarikci_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -50,6 +51,7 @@
           {% endfor %}
         </select>
       </div>
+      {% endif %}
     </div>
     <!-- Satır 2 -->
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -107,12 +109,14 @@
 <!-- Özet Kartlar -->
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
   <div class="card p-4 text-center">
-    <div class="text-2xl font-bold erlau-green-text">{{ pagination.total }}</div>
+    <div class="text-2xl font-bold erlau-green-text">{{ kalemler|length }}</div>
     <div class="text-xs text-gray-500 mt-1">Toplam Kalem</div>
   </div>
   {% if current_user.role in ['satinalma', 'admin', 'muhasebe'] %}
+  {% set ns = namespace(toplam=0) %}
+  {% for k in kalemler %}{% if k.toplam_fiyat %}{% set ns.toplam = ns.toplam + k.toplam_fiyat %}{% endif %}{% endfor %}
   <div class="card p-4 text-center">
-    <div class="text-2xl font-bold text-blue-600">{{ '{:,.0f}'.format(toplam_tutar) }}</div>
+    <div class="text-2xl font-bold text-blue-600">{{ '{:,.0f}'.format(ns.toplam) }}</div>
     <div class="text-xs text-gray-500 mt-1">Toplam Tutar (TL)</div>
   </div>
   {% endif %}
@@ -145,11 +149,8 @@
       </thead>
       <tbody>
         {% for tur, ozet in tur_ozet.items() %}
-        <tr style="border-top:1px solid #f1f5f9" class="hover:bg-gray-50">
-          <td class="px-4 py-2">
-            <a href="?bas_tarih={{ bas_str }}&bit_tarih={{ bit_str }}&malzeme_turu={{ tur }}&tedarikci_id={{ ted_filtre }}&durum={{ durum_filtre }}&hedef={{ hedef_filtre }}&kullanim_amaci={{ amac_filtre }}&kullanilan_alan={{ alan_filtre }}&proje_makine={{ proje_filtre }}"
-              class="font-medium erlau-green-text hover:underline">{{ tur }}</a>
-          </td>
+        <tr style="border-top:1px solid #f1f5f9">
+          <td class="px-4 py-2 font-medium text-gray-700">{{ tur }}</td>
           <td class="px-4 py-2 text-center text-gray-600">{{ ozet.adet }}</td>
           {% if current_user.role in ['satinalma', 'admin', 'muhasebe'] %}
           <td class="px-4 py-2 text-right erlau-green-text font-medium">
@@ -180,11 +181,8 @@
       </thead>
       <tbody>
         {% for ad, ozet in ted_ozet.items() %}
-        <tr style="border-top:1px solid #f1f5f9" class="hover:bg-gray-50">
-          <td class="px-4 py-2">
-            <a href="?bas_tarih={{ bas_str }}&bit_tarih={{ bit_str }}&malzeme_turu={{ tur_filtre }}&tedarikci_id={{ ozet.id }}&durum={{ durum_filtre }}&hedef={{ hedef_filtre }}&kullanim_amaci={{ amac_filtre }}&kullanilan_alan={{ alan_filtre }}&proje_makine={{ proje_filtre }}"
-              class="font-medium erlau-green-text hover:underline">{{ ad }}</a>
-          </td>
+        <tr style="border-top:1px solid #f1f5f9">
+          <td class="px-4 py-2 font-medium text-gray-700">{{ ad }}</td>
           <td class="px-4 py-2 text-center text-gray-600">{{ ozet.adet }}</td>
           {% if current_user.role in ['satinalma', 'admin', 'muhasebe'] %}
           <td class="px-4 py-2 text-right erlau-green-text font-medium">
@@ -203,14 +201,8 @@
 
 <!-- Detay Tablosu -->
 <div class="card overflow-hidden">
-  <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-    <h2 class="font-medium text-gray-700 text-sm">
-      Kalem Detayları
-      <span class="text-xs text-gray-300 font-normal ml-1">— {{ pagination.total }} kalem</span>
-    </h2>
-    {% if pagination.pages > 1 %}
-    <span class="text-xs text-gray-400">Sayfa {{ pagination.page }} / {{ pagination.pages }}</span>
-    {% endif %}
+  <div class="px-5 py-3 border-b border-gray-100">
+    <h2 class="font-medium text-gray-700 text-sm">Kalem Detayları</h2>
   </div>
   <div style="overflow-x:auto">
     <table class="w-full text-sm" style="min-width:900px">
@@ -278,36 +270,6 @@
       </tbody>
     </table>
   </div>
-
-  {% if pagination.pages > 1 %}
-  <div class="px-5 py-3 border-t border-gray-50 flex items-center justify-between">
-    <p class="text-xs text-gray-400">
-      {{ ((pagination.page - 1) * pagination.per_page) + 1 }}–{{ [pagination.page * pagination.per_page, pagination.total] | min }} / {{ pagination.total }} kalem
-    </p>
-    <div class="flex items-center gap-1">
-      {% if pagination.has_prev %}
-      <a href="?bas_tarih={{ bas_str }}&bit_tarih={{ bit_str }}&malzeme_turu={{ tur_filtre }}&tedarikci_id={{ ted_filtre }}&durum={{ durum_filtre }}&hedef={{ hedef_filtre }}&kullanim_amaci={{ amac_filtre }}&kullanilan_alan={{ alan_filtre }}&proje_makine={{ proje_filtre }}&page={{ pagination.prev_num }}"
-        class="px-2.5 py-1 text-xs border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50">‹ Önceki</a>
-      {% endif %}
-      {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-        {% if p %}
-          {% if p == pagination.page %}
-          <span class="px-2.5 py-1 text-xs erlau-green text-white rounded-lg font-medium">{{ p }}</span>
-          {% else %}
-          <a href="?bas_tarih={{ bas_str }}&bit_tarih={{ bit_str }}&malzeme_turu={{ tur_filtre }}&tedarikci_id={{ ted_filtre }}&durum={{ durum_filtre }}&hedef={{ hedef_filtre }}&kullanim_amaci={{ amac_filtre }}&kullanilan_alan={{ alan_filtre }}&proje_makine={{ proje_filtre }}&page={{ p }}"
-            class="px-2.5 py-1 text-xs border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50">{{ p }}</a>
-          {% endif %}
-        {% else %}
-          <span class="px-1 text-xs text-gray-300">…</span>
-        {% endif %}
-      {% endfor %}
-      {% if pagination.has_next %}
-      <a href="?bas_tarih={{ bas_str }}&bit_tarih={{ bit_str }}&malzeme_turu={{ tur_filtre }}&tedarikci_id={{ ted_filtre }}&durum={{ durum_filtre }}&hedef={{ hedef_filtre }}&kullanim_amaci={{ amac_filtre }}&kullanilan_alan={{ alan_filtre }}&proje_makine={{ proje_filtre }}&page={{ pagination.next_num }}"
-        class="px-2.5 py-1 text-xs border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50">Sonraki ›</a>
-      {% endif %}
-    </div>
-  </div>
-  {% endif %}
 </div>
 
 {% else %}

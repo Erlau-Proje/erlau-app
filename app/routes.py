@@ -51,14 +51,109 @@ def logout():
 @main.route('/dashboard')
 @login_required
 def dashboard():
-    from app.services import get_gm_dashboard_stats
+    from sqlalchemy import func
     if current_user.role in ['satinalma', 'admin']:
         return redirect(url_for('satin_alma.panel'))
 
     bugun = date.today()
 
     if current_user.role == 'gm':
-        stats_data = get_gm_dashboard_stats()
+        import json as _json
+        ay_baslangic = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        alti_ay_once = datetime.utcnow() - timedelta(days=182)
+
+        # ── KPI ──────────────────────────────────────────────────────────────
+        durum_sayilari = dict(db.session.query(
+            TalepFormu.durum, func.count(TalepFormu.id)
+        ).group_by(TalepFormu.durum).all())
+
+        bu_ay_toplam = TalepFormu.query.filter(TalepFormu.created_at >= ay_baslangic).count()
+        bu_ay_teslim = TalepFormu.query.filter(
+            TalepFormu.created_at >= ay_baslangic, TalepFormu.durum == 'teslim_alindi'
+        ).count()
+
+        gm_stats = {
+            'bu_ay': bu_ay_toplam,
+            'bekleyen': durum_sayilari.get('bekliyor', 0) + durum_sayilari.get('fiyatlandirildi', 0),
+            'yolda': durum_sayilari.get('yolda', 0),
+            'bu_ay_teslim': bu_ay_teslim,
+        }
+
+        # ── DEPARTMAN KIRILIMİ ───────────────────────────────────────────────
+        dept_rows = db.session.query(
+            TalepFormu.department_id, TalepFormu.durum, func.count(TalepFormu.id).label('sayi')
+        ).group_by(TalepFormu.department_id, TalepFormu.durum).all()
+
+        dept_map = {}
+        for row in dept_rows:
+            dm = dept_map.setdefault(row.department_id, {'toplam': 0, 'bekleyen': 0, 'yolda': 0, 'teslim': 0})
+            dm['toplam'] += row.sayi
+            if row.durum in ('bekliyor', 'fiyatlandirildi'):
+                dm['bekleyen'] += row.sayi
+            elif row.durum == 'yolda':
+                dm['yolda'] += row.sayi
+            elif row.durum == 'teslim_alindi':
+                dm['teslim'] += row.sayi
+
+        departmanlar = Department.query.order_by(Department.name).all()
+        dept_stats = [
+            {'dept': d, **dept_map.get(d.id, {'toplam': 0, 'bekleyen': 0, 'yolda': 0, 'teslim': 0})}
+            for d in departmanlar if dept_map.get(d.id, {}).get('toplam', 0) > 0
+        ]
+
+        # ── AYLIK TREND (son 6 ay, departmana göre) ──────────────────────────
+        trend_rows = db.session.query(
+            func.strftime('%Y', TalepFormu.created_at).label('yil'),
+            func.strftime('%m', TalepFormu.created_at).label('ay'),
+            TalepFormu.department_id,
+            func.count(TalepFormu.id).label('sayi')
+        ).filter(TalepFormu.created_at >= alti_ay_once
+        ).group_by('yil', 'ay', TalepFormu.department_id).all()
+
+        # Son 6 ayın etiketlerini üret
+        ay_adlari = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz',
+                     'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+        bugun_dt = datetime.utcnow()
+        son_6_ay = []
+        for i in range(5, -1, -1):
+            d = bugun_dt - timedelta(days=30 * i)
+            son_6_ay.append((d.year, d.month))
+
+        trend_labels = [f"{ay_adlari[ay-1]} {yil}" for yil, ay in son_6_ay]
+
+        trend_map = {}
+        for row in trend_rows:
+            key = (int(row.yil), int(row.ay))
+            trend_map.setdefault(row.department_id, {})[key] = row.sayi
+
+        renk_paleti = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+        trend_datasets = []
+        for i, ds in enumerate(dept_stats):
+            dept_id = ds['dept'].id
+            if dept_id in trend_map:
+                trend_datasets.append({
+                    'label': ds['dept'].name,
+                    'data': [trend_map[dept_id].get((y, m), 0) for y, m in son_6_ay],
+                    'backgroundColor': renk_paleti[i % len(renk_paleti)],
+                })
+
+        trend_json = _json.dumps({'labels': trend_labels, 'datasets': trend_datasets})
+
+        # ── ORTALAMA ONAY BEKLEME SÜRESİ (aktif bekleyenler) ─────────────────
+        bekleme_rows = db.session.query(
+            TalepFormu.department_id,
+            func.avg(func.julianday('now') - func.julianday(TalepFormu.created_at)).label('ort_gun'),
+            func.count(TalepFormu.id).label('sayi')
+        ).filter(TalepFormu.durum.in_(['bekliyor', 'fiyatlandirildi'])
+        ).group_by(TalepFormu.department_id).all()
+
+        bekleme_map = {r.department_id: {'gun': round(r.ort_gun or 0), 'sayi': r.sayi}
+                       for r in bekleme_rows}
+        bekleme_stats = [
+            {'dept': ds['dept'], **bekleme_map[ds['dept'].id]}
+            for ds in dept_stats if ds['dept'].id in bekleme_map
+        ]
+        bekleme_stats.sort(key=lambda x: x['gun'], reverse=True)
 
         # ── GECİKMİŞ SİPARİŞLER ──────────────────────────────────────────────
         yolda_talepler = TalepFormu.query.options(
@@ -79,59 +174,65 @@ def dashboard():
                     gecikis_listesi.append({'talep': t, 'gecikme': (bugun - bitis).days})
         gecikis_listesi.sort(key=lambda x: x['gecikme'], reverse=True)
 
-        return render_template('dashboard.html',
-            gm_stats=stats_data['gm_stats'],
-            dept_stats=stats_data['dept_stats'],
-            bekleyen_talepler=stats_data['bekleyen_talepler'],
-            trend_json=stats_data['trend_json'],
-            bekleme_stats=stats_data['bekleme_stats'],
-            gecikis_listesi=gecikis_listesi,
-            top_tedarikci=stats_data['top_tedarikci'],
-            talepler=[], kalan_gunler={}, pagination=None)
+        # ── EN AKTİF 10 TEDARİKÇİ ────────────────────────────────────────────
+        top_tedarikci = db.session.query(
+            Tedarikci.name,
+            func.count(TalepKalem.id).label('kalem_sayi'),
+            func.count(func.distinct(TalepKalem.talep_id)).label('siparis_sayi')
+        ).join(TalepKalem, TalepKalem.tedarikci_id == Tedarikci.id
+        ).group_by(Tedarikci.id, Tedarikci.name
+        ).order_by(func.count(TalepKalem.id).desc()).limit(10).all()
 
-    page = request.args.get('page', 1, type=int)
+        # ── EN UZUN BEKLEYEN ONAYLAR ──────────────────────────────────────────
+        bekleyen_talepler = TalepFormu.query.options(
+            selectinload(TalepFormu.kalemler)
+        ).filter(
+            TalepFormu.durum.in_(['bekliyor', 'fiyatlandirildi'])
+        ).order_by(TalepFormu.created_at.asc()).limit(8).all()
+
+        return render_template('dashboard.html',
+            gm_stats=gm_stats,
+            dept_stats=dept_stats,
+            bekleyen_talepler=bekleyen_talepler,
+            trend_json=trend_json,
+            bekleme_stats=bekleme_stats,
+            gecikis_listesi=gecikis_listesi,
+            top_tedarikci=top_tedarikci,
+            talepler=[], kalan_gunler={})
+
     if current_user.role == 'departman_yoneticisi':
-        base_filter = {'department_id': current_user.department_id}
-        pagination = TalepFormu.query.options(
+        talepler = TalepFormu.query.options(
             selectinload(TalepFormu.kalemler),
             selectinload(TalepFormu.talep_eden),
-        ).filter_by(**base_filter).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
+        ).filter_by(
+            department_id=current_user.department_id
+        ).order_by(TalepFormu.created_at.desc()).limit(20).all()
     else:
-        base_filter = {'talep_eden_id': current_user.id}
-        pagination = TalepFormu.query.options(
+        talepler = TalepFormu.query.options(
             selectinload(TalepFormu.kalemler),
-        ).filter_by(**base_filter).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
-
-    talepler = pagination.items
-
-    # Yolda siparişleri tüm kayıtlardan ayrıca çek (sayfa sınırından bağımsız)
-    yolda_talepler = TalepFormu.query.options(
-        selectinload(TalepFormu.kalemler)
-    ).filter_by(**base_filter, durum='yolda').order_by(TalepFormu.created_at.desc()).all()
+        ).filter_by(
+            talep_eden_id=current_user.id
+        ).order_by(TalepFormu.created_at.desc()).limit(20).all()
 
     kalan_gunler = {}
-    for talep in yolda_talepler:
-        if talep.yolda_tarihi:
+    for talep in talepler:
+        if talep.durum == 'yolda' and talep.yolda_tarihi:
             termin = max((k.termin_gun or 0) for k in talep.kalemler) if talep.kalemler else 0
             if termin > 0:
                 bitis = talep.yolda_tarihi.date() + timedelta(days=termin)
                 kalan_gunler[talep.id] = (bitis - bugun).days
 
-    # İstatistikler tüm kayıtlar üzerinden
-    stats_q = TalepFormu.query.filter_by(**base_filter)
     stats = {
-        'toplam': stats_q.count(),
-        'bekleyen': stats_q.filter(TalepFormu.durum.in_(('bekliyor', 'fiyatlandirildi'))).count(),
-        'yolda': stats_q.filter_by(durum='yolda').count(),
-        'onaylandi': stats_q.filter_by(durum='onaylandi').count(),
-        'teslim': stats_q.filter_by(durum='teslim_alindi').count(),
+        'toplam': len(talepler),
+        'bekleyen': sum(1 for t in talepler if t.durum in ('bekliyor', 'fiyatlandirildi')),
+        'yolda': sum(1 for t in talepler if t.durum == 'yolda'),
+        'onaylandi': sum(1 for t in talepler if t.durum == 'onaylandi'),
+        'teslim': sum(1 for t in talepler if t.durum == 'teslim_alindi'),
     }
 
     return render_template('dashboard.html',
         talepler=talepler,
-        yolda_talepler=yolda_talepler,
         kalan_gunler=kalan_gunler,
-        pagination=pagination,
         stats=stats,
         gm_stats=None)
 
@@ -139,9 +240,7 @@ def dashboard():
 @login_required
 def arama():
     q = request.args.get('q', '').strip()
-    page = request.args.get('page', 1, type=int)
     sonuclar = []
-    pagination = None
     if q:
         from sqlalchemy import or_
         kalem_query = TalepKalem.query.join(TalepFormu).filter(
@@ -161,11 +260,8 @@ def arama():
                 kalem_query = kalem_query.filter(TalepFormu.department_id == current_user.department_id)
             else:
                 kalem_query = kalem_query.filter(TalepFormu.talep_eden_id == current_user.id)
-        
-        pagination = kalem_query.order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
-        sonuclar = pagination.items
-        
-    return render_template('arama.html', q=q, sonuclar=sonuclar, pagination=pagination)
+        sonuclar = kalem_query.order_by(TalepFormu.created_at.desc()).limit(50).all()
+    return render_template('arama.html', q=q, sonuclar=sonuclar)
 
 @main.route('/talep/yeni', methods=['GET', 'POST'])
 @login_required
@@ -300,10 +396,12 @@ def siparis_raporu():
     alan_filtre = request.args.get('kullanilan_alan', '')
     proje_filtre = request.args.get('proje_makine', '').strip()
     export = request.args.get('export', '')
-    page = request.args.get('page', 1, type=int)
 
-    # Base query — options eklenmeden, aggregation sorgularında da kullanılacak
-    query = TalepKalem.query.join(TalepFormu)
+    query = TalepKalem.query.join(TalepFormu).options(
+        selectinload(TalepKalem.talep).selectinload(TalepFormu.talep_eden),
+        selectinload(TalepKalem.talep).selectinload(TalepFormu.department),
+        selectinload(TalepKalem.tedarikci)
+    )
 
     # Rol bazlı kapsam
     if current_user.role in ['satinalma', 'admin', 'gm']:
@@ -341,15 +439,10 @@ def siparis_raporu():
     if proje_filtre:
         query = query.filter(TalepKalem.proje_makine.ilike(f'%{proje_filtre}%'))
 
-    _eager = [
-        selectinload(TalepKalem.talep).selectinload(TalepFormu.talep_eden),
-        selectinload(TalepKalem.talep).selectinload(TalepFormu.department),
-        selectinload(TalepKalem.tedarikci)
-    ]
+    kalemler = query.order_by(TalepFormu.created_at.desc()).all()
 
-    # Excel export — filtreli tüm kayıtları al
+    # Excel export
     if export == 'excel':
-        kalemler = query.options(*_eager).order_by(TalepFormu.created_at.desc()).all()
         import io
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment
@@ -395,49 +488,28 @@ def siparis_raporu():
         resp.headers['Content-Disposition'] = f'attachment; filename="siparis_raporu_{tarih}.xlsx"'
         return resp
 
-    # Özet: türe göre — tüm filtreli kayıtlardan (DB aggregation)
-    tur_agg = query.with_entities(
-        TalepKalem.malzeme_turu,
-        TalepKalem.para_birimi,
-        func.count(TalepKalem.id).label('adet'),
-        func.sum(TalepKalem.toplam_fiyat).label('toplam'),
-    ).group_by(TalepKalem.malzeme_turu, TalepKalem.para_birimi).all()
-
+    # Özet: türe göre
     tur_ozet = {}
-    for row in tur_agg:
-        tur = row.malzeme_turu or 'Belirtilmemiş'
+    for k in kalemler:
+        tur = k.malzeme_turu or 'Belirtilmemiş'
         if tur not in tur_ozet:
             tur_ozet[tur] = {'adet': 0, 'toplam': 0, 'para': ''}
-        tur_ozet[tur]['adet'] += row.adet
-        tur_ozet[tur]['toplam'] += row.toplam or 0
-        if row.para_birimi:
-            tur_ozet[tur]['para'] = row.para_birimi
+        tur_ozet[tur]['adet'] += 1
+        if k.toplam_fiyat:
+            tur_ozet[tur]['toplam'] += k.toplam_fiyat
+            tur_ozet[tur]['para'] = k.para_birimi or ''
 
-    # Özet: tedarikçiye göre — tüm filtreli kayıtlardan (DB aggregation)
-    ted_agg = query.filter(TalepKalem.tedarikci_id.isnot(None)).with_entities(
-        TalepKalem.tedarikci_id,
-        TalepKalem.para_birimi,
-        func.count(TalepKalem.id).label('adet'),
-        func.sum(TalepKalem.toplam_fiyat).label('toplam'),
-    ).group_by(TalepKalem.tedarikci_id, TalepKalem.para_birimi).all()
-
-    ted_id_set = {r.tedarikci_id for r in ted_agg}
-    ted_name_map = {t.id: t.name for t in Tedarikci.query.filter(Tedarikci.id.in_(ted_id_set)).all()} if ted_id_set else {}
+    # Özet: tedarikçiye göre
     ted_ozet = {}
-    for row in ted_agg:
-        name = ted_name_map.get(row.tedarikci_id, '—')
-        if name not in ted_ozet:
-            ted_ozet[name] = {'adet': 0, 'toplam': 0, 'para': '', 'id': row.tedarikci_id}
-        ted_ozet[name]['adet'] += row.adet
-        ted_ozet[name]['toplam'] += row.toplam or 0
-        if row.para_birimi:
-            ted_ozet[name]['para'] = row.para_birimi
-
-    toplam_tutar = query.with_entities(func.sum(TalepKalem.toplam_fiyat)).scalar() or 0
-
-    # Sayfa görünümü için pagination (20 per page)
-    pagination = query.options(*_eager).order_by(TalepFormu.created_at.desc()).paginate(page=page, per_page=20, error_out=False)
-    kalemler = pagination.items
+    for k in kalemler:
+        if k.tedarikci:
+            ad = k.tedarikci.name
+            if ad not in ted_ozet:
+                ted_ozet[ad] = {'adet': 0, 'toplam': 0, 'para': ''}
+            ted_ozet[ad]['adet'] += 1
+            if k.toplam_fiyat:
+                ted_ozet[ad]['toplam'] += k.toplam_fiyat
+                ted_ozet[ad]['para'] = k.para_birimi or ''
 
     def distinct_vals(col):
         return [v[0] for v in db.session.query(col).filter(col != None, col != '').distinct().order_by(col).all()]
@@ -449,8 +521,7 @@ def siparis_raporu():
     tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
 
     return render_template('siparis_raporu.html',
-        kalemler=kalemler, pagination=pagination, tur_ozet=tur_ozet, ted_ozet=ted_ozet,
-        toplam_tutar=toplam_tutar,
+        kalemler=kalemler, tur_ozet=tur_ozet, ted_ozet=ted_ozet,
         turler=turler, hedefler=hedefler, amaclar=amaclar, alanlar=alanlar,
         tedarikciler=tedarikciler,
         bas_str=bas_str, bit_str=bit_str,

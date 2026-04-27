@@ -271,6 +271,7 @@ new Chart(document.getElementById('trendChart'), {
 </div>
 
 <!-- Yolda Siparişler — varsa öne çıkar -->
+{% set yolda_talepler = talepler|selectattr('durum','eq','yolda')|list %}
 {% if yolda_talepler %}
 <div class="mb-6">
   <h2 class="text-sm font-medium text-gray-600 mb-3">Yoldaki Siparişler</h2>
@@ -319,9 +320,7 @@ new Chart(document.getElementById('trendChart'), {
   <div class="px-6 py-4 border-b border-gray-50 flex items-center justify-between gap-4">
     <h2 class="font-medium text-gray-700 text-sm flex-shrink-0">
       {% if current_user.role == 'departman_yoneticisi' %}Departman Siparişleri{% else %}Siparişlerim{% endif %}
-      {% if pagination %}
-      <span class="text-xs text-gray-300 font-normal ml-1">— {{ pagination.total }} sipariş</span>
-      {% endif %}
+      <span class="text-xs text-gray-300 font-normal ml-1">— son 20</span>
     </h2>
     <form method="GET" action="{{ url_for('main.arama') }}" class="w-full max-w-xs">
       <div class="relative">
@@ -389,33 +388,6 @@ new Chart(document.getElementById('trendChart'), {
       {% endfor %}
     </tbody>
   </table>
-  {% if pagination and pagination.pages > 1 %}
-  <div class="px-5 py-3 border-t border-gray-50 flex items-center justify-between">
-    <p class="text-xs text-gray-400">
-      {{ ((pagination.page - 1) * pagination.per_page) + 1 }}–{{ [pagination.page * pagination.per_page, pagination.total] | min }} / {{ pagination.total }} sipariş
-    </p>
-    <div class="flex items-center gap-1">
-      {% if pagination.has_prev %}
-      <a href="?page={{ pagination.prev_num }}" class="px-2.5 py-1 text-xs border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50">‹ Önceki</a>
-      {% endif %}
-      {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
-        {% if p %}
-          {% if p == pagination.page %}
-          <span class="px-2.5 py-1 text-xs erlau-green text-white rounded-lg font-medium">{{ p }}</span>
-          {% else %}
-          <a href="?page={{ p }}" class="px-2.5 py-1 text-xs border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50">{{ p }}</a>
-          {% endif %}
-        {% else %}
-          <span class="px-1 text-xs text-gray-300">…</span>
-        {% endif %}
-      {% endfor %}
-      {% if pagination.has_next %}
-      <a href="?page={{ pagination.next_num }}" class="px-2.5 py-1 text-xs border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50">Sonraki ›</a>
-      {% endif %}
-    </div>
-  </div>
-  {% endif %}
-
   {% else %}
   <div class="px-6 py-16 text-center">
     <div class="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center mx-auto mb-3">

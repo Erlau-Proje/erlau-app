@@ -66,10 +66,9 @@ bash /root/guncelle.sh
 
 ## Veritabanı
 - Tip: SQLite — /root/erlau-app/instance/erlau.db
-- Flask-Migrate KURULU ve AKTİF
-- Yeni kolon = flask db migrate -m "mesaj" && flask db upgrade
+- Flask-Migrate KURULU DEĞİL
+- Yeni kolon = Manuel ALTER TABLE
 - instance/ gitignore'da, commit edilmez
-- SQLite timeout=30s olarak güncellendi (concurrency için)
 
 ## SQLAlchemy 2.0 — Kritik
 db.engine.execute() ÇALIŞMAZ. Doğru kullanım:

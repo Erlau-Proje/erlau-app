@@ -13,14 +13,10 @@ migrate = Migrate()
 def create_app():
     app = Flask(__name__)
     import os
-    
-    # Güvenlik: Production'da SECRET_KEY kontrolü
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'erlau-dev-key-2026')
-    
-    # SQLite Performansı: "Database is locked" hatalarını önlemek için timeout eklendi
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///erlau.db?timeout=30'
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'erlau-secret-key-2026')
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///erlau.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    
+
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)

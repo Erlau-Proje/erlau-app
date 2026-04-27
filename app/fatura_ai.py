@@ -85,14 +85,13 @@ def pdf_oku(dosya_yolu: str, tedarikci_ornegi: str = None) -> dict:
         messages=mesajlar
     )
 
-    content = response.content[0].text.strip()
-    
-    # JSON bloğunu daha güvenli şekilde ayıkla (Markdown içindeyse)
-    json_match = re.search(r'\{.*\}', content, re.DOTALL)
-    if json_match:
-        content = json_match.group(0)
-    
-    return json.loads(content)
+    metin = response.content[0].text.strip()
+    # JSON bloğu varsa temizle
+    if '```' in metin:
+        metin = metin.split('```')[1]
+        if metin.startswith('json'):
+            metin = metin[4:]
+    return json.loads(metin)
 
 
 def net_birim_fiyat(kalem: dict) -> float:
