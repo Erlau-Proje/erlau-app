@@ -1,315 +1,168 @@
 # GÖREVLER — AI Koordinasyon Dosyası
 
-## Nasıl Çalışır
-1. **Claude** bu dosyaya görev yazar — kime, ne yapacak, hangi dosyada
-2. **Codex veya Gemini** görevi okur, uygular, durumu `[TAMAMLANDI]` yapar
-3. **Claude** değişiklikleri kontrol eder, onaylar veya düzeltir
+## Sorumluluklar
+| AI | Rol |
+|---|---|
+| **Claude** | G-002, G-005, G-009 + tüm görevleri review eder |
+| **Codex** | G-001, G-003, G-008 |
+| **Gemini** | G-004, G-006, G-007 |
 
-> **NOT:** Tüm görevler `ONAY BEKLENİYOR` durumundadır. Kullanıcı onayından sonra aktive edilecektir.
+## Sıra (bağımlılık sırası)
+1. G-002 (Claude — DB temeli, diğerleri buna bağlı)
+2. G-001 (Codex — bağımsız)
+3. G-004 (Gemini — G-002 sonrası)
+4. G-003 (Codex — G-004 sonrası)
+5. G-006, G-007, G-008 (paralel — G-002 sonrası)
+6. G-005 (Claude — G-003 ve G-004 sonrası)
+7. G-009 (Claude — G-005 sonrası)
 
 ---
 
-## FAZ 1 — Portal ve Mimari Altyapı
+## FAZ 1 — Temel
 
-### [G-001] CODEX — Portal Landing Page `[ONAY BEKLENİYOR]`
-**Dosya:** `app/templates/portal.html` (YENİ)
+### [G-002] CLAUDE — Veritabanı Modelleri `[DEVAM EDİYOR]`
+**Dosya:** `app/models.py`, `app/utils.py`
+**Durum:** `[✓] Claude üstlendi`
+
+---
+
+### [G-001] CODEX — Portal Landing Page `[BEKLIYOR]`
+**Dosya:** `app/templates/portal.html` (YENİ), `app/routes.py` (auth blueprint'e `/` route ekle)
 **Açıklama:**
-- IP:5000 adresine gelen kullanıcı bu sayfayı görür (login gerekmez)
-- 5 büyük buton: Satınalma, Üretim, Bakım, Sevkiyat, Planlama
-- **Tasarım:** Koyu/parlak gradient arka plan (siyah-lacivert-mor), cam efekti (glassmorphism) butonlar, her butonun simgesi ve kısa açıklaması olacak
-- **Sevkiyat butonu:** Disabled görünüm + "Yakında" etiketi, tıklanamaz
-- Tailwind CSS kullan (CDN zaten var)
-- Mobil uyumlu olmalı
-
-**Bağlantılar:**
-- Satınalma → `/login` (mevcut)
-- Üretim → `/uretim/login`
-- Bakım → `/bakim/login`
-- Sevkiyat → `#` (disabled)
-- Planlama → `/planlama/login`
-
-**Durum:** `[ ] Bekliyor`
-
----
-
-### [G-002] GEMINI — Veritabanı Modelleri Genişletme `[ONAY BEKLENİYOR]`
-**Dosya:** `app/models.py`
-**Açıklama:** Aşağıdaki yeni modelleri mevcut `models.py`'ye ekle. Mevcut modellere dokunma.
-
-**Eklenecek Modeller:**
-
-```python
-# Malzeme Listesi (admin yönetir)
-class Malzeme(db.Model):
-    __tablename__ = 'malzeme'
-    id = db.Column(db.Integer, primary_key=True)
-    stok_kodu = db.Column(db.String(20), unique=True)  # otomatik üretilecek: MLZ-00001
-    malzeme_adi = db.Column(db.String(200), nullable=False)
-    birim = db.Column(db.String(20))
-    kategori = db.Column(db.String(100))
-    aciklama = db.Column(db.Text)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# Ürün Listesi
-class Urun(db.Model):
-    __tablename__ = 'urun'
-    id = db.Column(db.Integer, primary_key=True)
-    urun_kodu = db.Column(db.String(20), unique=True)  # otomatik: URN-00001
-    urun_adi = db.Column(db.String(200), nullable=False)
-    proje = db.Column(db.String(100))
-    makine = db.Column(db.String(100))
-    aciklama = db.Column(db.Text)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# Çoklu Tedarikçi Teklifi
-class TeklifGrubu(db.Model):
-    __tablename__ = 'teklif_grubu'
-    id = db.Column(db.Integer, primary_key=True)
-    teklif_no = db.Column(db.String(30), unique=True)  # otomatik: TKL-2026-00001
-    talep_kalem_id = db.Column(db.Integer, db.ForeignKey('talep_kalem.id'))
-    durum = db.Column(db.String(30), default='bekliyor')  # bekliyor, teklif_alindi, secildi
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    kalemler = db.relationship('TeklifKalem', backref='grup', lazy=True)
-
-class TeklifKalem(db.Model):
-    __tablename__ = 'teklif_kalem'
-    id = db.Column(db.Integer, primary_key=True)
-    grup_id = db.Column(db.Integer, db.ForeignKey('teklif_grubu.id'))
-    tedarikci_id = db.Column(db.Integer, db.ForeignKey('tedarikci.id'))
-    birim_fiyat = db.Column(db.Float)
-    para_birimi = db.Column(db.String(10))
-    vade_gun = db.Column(db.Integer)
-    kaynak = db.Column(db.String(20))  # 'mail', 'excel', 'pdf', 'manuel'
-    teklif_dosyasi = db.Column(db.String(500))  # dosya yolu
-    mail_referans = db.Column(db.String(100))  # outlook mail ID
-    secildi = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# İş İstasyonu (Üretim)
-class IsIstasyonu(db.Model):
-    __tablename__ = 'is_istasyonu'
-    id = db.Column(db.Integer, primary_key=True)
-    istasyon_kodu = db.Column(db.String(20), unique=True)
-    istasyon_adi = db.Column(db.String(200), nullable=False)
-    aciklama = db.Column(db.Text)
-    is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# Üretim Planı (Planlama departmanı girer)
-class UretimPlani(db.Model):
-    __tablename__ = 'uretim_plani'
-    id = db.Column(db.Integer, primary_key=True)
-    plan_no = db.Column(db.String(30), unique=True)
-    hafta = db.Column(db.Integer)
-    yil = db.Column(db.Integer)
-    baslangic_tarihi = db.Column(db.Date)
-    bitis_tarihi = db.Column(db.Date)
-    planlayan_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    durum = db.Column(db.String(20), default='taslak')  # taslak, aktif, tamamlandi
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    satirlar = db.relationship('UretimPlaniSatir', backref='plan', lazy=True)
-
-class UretimPlaniSatir(db.Model):
-    __tablename__ = 'uretim_plani_satir'
-    id = db.Column(db.Integer, primary_key=True)
-    plan_id = db.Column(db.Integer, db.ForeignKey('uretim_plani.id'))
-    urun_id = db.Column(db.Integer, db.ForeignKey('urun.id'))
-    istasyon_id = db.Column(db.Integer, db.ForeignKey('is_istasyonu.id'))
-    tarih = db.Column(db.Date)
-    planlanan_adet = db.Column(db.Integer)
-
-# Günlük Üretim Kaydı
-class UretimKaydi(db.Model):
-    __tablename__ = 'uretim_kaydi'
-    id = db.Column(db.Integer, primary_key=True)
-    plan_satir_id = db.Column(db.Integer, db.ForeignKey('uretim_plani_satir.id'), nullable=True)
-    istasyon_id = db.Column(db.Integer, db.ForeignKey('is_istasyonu.id'))
-    urun_id = db.Column(db.Integer, db.ForeignKey('urun.id'))
-    tarih = db.Column(db.Date)
-    gerceklesen_adet = db.Column(db.Integer, default=0)
-    fire_adet = db.Column(db.Integer, default=0)
-    giren_personel_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    aciklama = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# Arıza Kaydı
-class ArizaKaydi(db.Model):
-    __tablename__ = 'ariza_kaydi'
-    id = db.Column(db.Integer, primary_key=True)
-    istasyon_id = db.Column(db.Integer, db.ForeignKey('is_istasyonu.id'))
-    tarih = db.Column(db.Date)
-    baslangic_saati = db.Column(db.Time)
-    bitis_saati = db.Column(db.Time)
-    aciklama = db.Column(db.Text)
-    durum = db.Column(db.String(20), default='acik')  # acik, kapalı
-    giren_personel_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# Makine / Ekipman
-class Makine(db.Model):
-    __tablename__ = 'makine'
-    id = db.Column(db.Integer, primary_key=True)
-    makine_kodu = db.Column(db.String(20), unique=True)
-    makine_adi = db.Column(db.String(200))
-    marka = db.Column(db.String(100))
-    model = db.Column(db.String(100))
-    seri_no = db.Column(db.String(100))
-    is_active = db.Column(db.Boolean, default=True)
-
-# Bakım Planı
-class BakimPlani(db.Model):
-    __tablename__ = 'bakim_plani'
-    id = db.Column(db.Integer, primary_key=True)
-    makine_id = db.Column(db.Integer, db.ForeignKey('makine.id'))
-    bakim_adi = db.Column(db.String(200))
-    periyot_gun = db.Column(db.Integer)  # kaç günde bir
-    son_bakim_tarihi = db.Column(db.Date)
-    sonraki_bakim_tarihi = db.Column(db.Date)
-    aciklama = db.Column(db.Text)
-
-# Bakım Kaydı
-class BakimKaydi(db.Model):
-    __tablename__ = 'bakim_kaydi'
-    id = db.Column(db.Integer, primary_key=True)
-    makine_id = db.Column(db.Integer, db.ForeignKey('makine.id'))
-    bakim_plani_id = db.Column(db.Integer, db.ForeignKey('bakim_plani.id'), nullable=True)
-    bakim_turu = db.Column(db.String(30))  # periyodik, ariza, gunluk
-    tarih = db.Column(db.Date)
-    yapilan_isler = db.Column(db.Text)
-    sure_dakika = db.Column(db.Integer)
-    giren_personel_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-```
-
-**KRITIK:** `stok_kodu` ve `urun_kodu` için `utils.py`'de otomatik üretim fonksiyonu yaz:
-```python
-def generate_stok_kodu():  # MLZ-00001 formatı
-def generate_urun_kodu():  # URN-00001 formatı
-def generate_teklif_no():  # TKL-2026-00001 formatı
-def generate_plan_no():    # PLN-2026-W01 formatı (hafta numaralı)
-```
-
+- IP:5000'e gelen kullanıcı bu sayfayı görür, login gerekmez
+- 5 büyük kart/buton: Satınalma, Üretim, Bakım, Sevkiyat, Planlama
+- Tasarım: koyu gradient arka plan (siyah-lacivert-mor), glassmorphism kart efekti, her kartta ikon + başlık + kısa açıklama
+- Sevkiyat: disabled, üstünde "Yakında" etiketi, tıklanamaz (pointer-events: none, opacity: 0.5)
+- Tailwind CSS CDN (zaten `base.html`'de var, ama portal base'i extend etmeyecek — standalone sayfa)
+- Mobil uyumlu grid (md:grid-cols-3, sm:grid-cols-2)
+- Bağlantılar: Satınalma→`/login`, Üretim→`/uretim`, Bakım→`/bakim`, Planlama→`/planlama`
+- `app/routes.py` dosyasındaki `auth` blueprint'ine şu route'u ekle:
+  ```python
+  @auth.route('/', methods=['GET'])
+  def portal():
+      if current_user.is_authenticated:
+          return redirect(url_for('main.dashboard'))
+      return render_template('portal.html')
+  ```
 **Durum:** `[ ] Bekliyor`
 
 ---
 
 ## FAZ 2 — Satınalma İyileştirmeleri
 
-### [G-003] CODEX — Malzeme ve Ürün Autocomplete `[ONAY BEKLENİYOR]`
+### [G-003] CODEX — Autocomplete (Malzeme + Ürün) `[BEKLIYOR — G-004 SONRASI]`
 **Dosya:** `app/templates/yeni_talep.html`
 **Açıklama:**
-- Malzeme adı alanına 3 harf/rakam girildiğinde `/api/malzeme-ara?q=xxx` endpoint'ini çağır
-- Açılan dropdown'dan seçince birim alanı otomatik dolsun
-- Ürün/Proje/Makine alanı: 3 karakter sonrası `/api/urun-ara?q=xxx` çağır
-- Eğer girilen ürün listede yoksa otomatik kaydet (arka planda `POST /api/urun-ekle`)
-- JavaScript ile yap, harici kütüphane kullanma
-
+- Malzeme adı input'una kullanıcı 3+ karakter girince `/api/malzeme-ara?q=XXX` çağır (fetch API)
+- Sonuçları input'un altında dropdown olarak göster, seçince birim alanı otomatik dolsun
+- Proje/Makine/Ürün alanına 3+ karakter girince `/api/urun-ara?q=XXX` çağır
+- Listede yoksa otomatik `POST /api/urun-ekle` ile kaydet (kullanıcıya bildir: "Yeni ürün eklendi")
+- Saf JS kullan, harici kütüphane yok
+- Dropdown klavye ile de gezinebilsin (ArrowUp, ArrowDown, Enter)
 **Durum:** `[ ] Bekliyor`
 
 ---
 
-### [G-004] GEMINI — Malzeme ve Ürün CRUD Sayfaları `[ONAY BEKLENİYOR]`
-**Dosya:** `app/routes.py` (admin blueprint'e ekle) + yeni template'ler
+### [G-005] CLAUDE — Çoklu Tedarikçi Teklif Sistemi `[BEKLIYOR — G-004 SONRASI]`
+**Dosya:** `app/routes.py`, `app/templates/`
+**Durum:** `[✓] Claude üstlendi`
+
+---
+
+## FAZ 3 — Yeni Modüller
+
+### [G-004] GEMINI — Malzeme + Ürün CRUD `[BEKLIYOR — G-002 SONRASI]`
+**Dosya:** `app/routes.py` (admin blueprint), yeni template'ler
 **Açıklama:**
-- `/admin/malzemeler` → Malzeme listesi, ekle/düzenle/sil (inline edit veya modal)
-- `/admin/urunler` → Ürün listesi, ekle/düzenle/sil
-- `/api/malzeme-ara` → GET, `q` parametresi, JSON döndür
-- `/api/urun-ara` → GET, `q` parametresi, JSON döndür
-- `/api/urun-ekle` → POST, yeni ürünü kaydet, `urun_kodu` otomatik üretilsin
-- Sol menüde admin rolüne "Malzeme Listesi" ve "Ürün Listesi" linkleri ekle
-
+- `/admin/malzemeler` → Malzeme listesi sayfası
+  - Tablo: stok_kodu, malzeme_adi, birim, kategori, is_active, işlemler
+  - Her satır inline düzenlenebilir (double-click ile edit modu) VEYA modal
+  - Yeni malzeme ekle butonu (form: malzeme_adi, birim, kategori)
+  - Sil butonu (soft delete: is_active=False)
+  - stok_kodu otomatik: `utils.generate_stok_kodu()` çağır
+- `/admin/urunler` → Ürün listesi sayfası (aynı yapı)
+  - Tablo: urun_kodu, urun_adi, proje, makine, is_active, işlemler
+  - urun_kodu otomatik: `utils.generate_urun_kodu()` çağır
+- API endpoint'leri (JSON döndür):
+  - `GET /api/malzeme-ara?q=XXX` → `[{"id":1,"malzeme_adi":"Vida","birim":"Adet","stok_kodu":"MLZ-00001"}]`
+  - `GET /api/urun-ara?q=XXX` → `[{"id":1,"urun_adi":"Zincir A","urun_kodu":"URN-00001"}]`
+  - `POST /api/urun-ekle` body: `{"urun_adi":"XXX"}` → yeni Urun kaydı oluştur, JSON döndür
+- Sol menüde admin rolüne "Malzeme Listesi" ve "Ürün Listesi" linkleri ekle (`base.html`)
 **Durum:** `[ ] Bekliyor`
 
 ---
 
-### [G-005] GEMINI — Çoklu Tedarikçi Teklif Sistemi `[ONAY BEKLENİYOR]`
-**Dosya:** `app/routes.py` + `app/templates/teklif_yonetimi.html` (YENİ)
+### [G-006] GEMINI — Üretim Modülü `[BEKLIYOR — G-002 SONRASI]`
+**Dosya:** `app/routes.py` (uretim blueprint ekle), `app/templates/uretim/`
 **Açıklama:**
-- Satınalma panelinde her talep kalemine "Teklif İste" butonu ekle
-- Tıklanınca tedarikçi seçim modalı açılsın (çoklu seçim, 2-3 tedarikçi)
-- `TeklifGrubu` oluşturulsun, her tedarikçi için `TeklifKalem` kaydı
-- Teklif karşılaştırma sayfası: tedarikçilerin fiyatları yan yana görünsün
-- "Seç" butonu ile en uygun teklif seçilsin, `TalepKalem`'e işlensin
-
+- Blueprint: `uretim = Blueprint('uretim', __name__, url_prefix='/uretim')`
+- `/uretim/` → Dashboard: bugünkü plan + istasyon kartları + toplam planlanan/gerçekleşen
+- `/uretim/giris` → Günlük üretim giriş formu
+  - İstasyon seç, ürün seç, tarih (bugün default), planlanan adet (readonly, plandan gelir), gerçekleşen adet, fire, açıklama
+  - Kaydet → `UretimKaydi` oluştur
+- `/uretim/ariza` → Arıza kaydı formu (istasyon, başlangıç/bitiş saati, açıklama)
+- `/uretim/raporlar` → Planlanan vs Gerçekleşen tablosu
+  - Filtre: tarih aralığı, istasyon, ürün
+  - Grafik: Chart.js bar chart (CDN zaten var)
+  - Erişim: rol in ['uretim', 'departman_yoneticisi', 'gm', 'admin']
+- `/uretim/istasyonlar` → İstasyon CRUD (sadece rol='departman_yoneticisi' ve department='Üretim')
+- Sol menüde "Üretim Raporları" linki: tüm DY ve GM görebilir
+- `create_app()` içine blueprint'i kaydet
 **Durum:** `[ ] Bekliyor`
 
 ---
 
-## FAZ 3 — Üretim Modülü
-
-### [G-006] GEMINI — Üretim Blueprint ve Sayfalar `[ONAY BEKLENİYOR]`
-**Dosya:** `app/routes.py` (uretim blueprint) + template'ler
+### [G-007] GEMINI — Bakım Modülü `[BEKLIYOR — G-002 SONRASI]`
+**Dosya:** `app/routes.py` (bakim blueprint ekle), `app/templates/bakim/`
 **Açıklama:**
-- `/uretim/dashboard` → İş istasyonları + bugünün planı
-- `/uretim/giris` → Günlük üretim adedi girişi (planlanan gösterilsin, gerçekleşen girilsin)
-- `/uretim/ariza` → Arıza kaydı oluştur
-- `/uretim/raporlar` → Planlanan vs Gerçekleşen raporu, tarih aralığı filtresi
-- `/uretim/istasyonlar` → İstasyon tanımla/düzenle (sadece üretim DY)
-- Sol menüde "Üretim Raporları" linki → tüm DY ve GM görebilir
-
+- Blueprint: `bakim = Blueprint('bakim', __name__, url_prefix='/bakim')`
+- `/bakim/` → Dashboard: bugünkü bakımlar + yaklaşan periyodikler (7 gün içinde)
+- `/bakim/kayit` → Bakım kaydı formu (makine seç, tür: günlük/periyodik/arıza, tarih, yapılan işler, süre)
+- `/bakim/makineler` → Makine listesi CRUD (makine_kodu otomatik: `MKN-00001`)
+- `/bakim/plan` → Makine bazlı periyodik bakım planları (makine, bakım_adi, periyot_gun, son_bakim_tarihi)
+  - `sonraki_bakim_tarihi` = son_bakim_tarihi + periyot_gun (otomatik hesapla)
+- `/bakim/takvim` → Aylık takvim view (basit tablo: satır=makine, sütun=günler, hücreler renkli)
+- `/bakim/raporlar` → Makine bakım geçmişi, filtre: makine, tarih aralığı
+  - Erişim: rol in ['bakim', 'departman_yoneticisi', 'gm', 'admin']
+- Sol menüde "Bakım Raporları" linki: DY ve GM görebilir
+- `create_app()` içine blueprint'i kaydet
 **Durum:** `[ ] Bekliyor`
 
 ---
 
-## FAZ 4 — Bakım Modülü
-
-### [G-007] GEMINI — Bakım Blueprint ve Sayfalar `[ONAY BEKLENİYOR]`
-**Dosya:** `app/routes.py` (bakim blueprint) + template'ler
+### [G-008] CODEX — Planlama Modülü Arayüzü `[BEKLIYOR — G-002 SONRASI]`
+**Dosya:** `app/routes.py` (planlama blueprint ekle), `app/templates/planlama/`
 **Açıklama:**
-- `/bakim/dashboard` → Bugünkü bakımlar + yaklaşan periyodik bakımlar
-- `/bakim/kayit` → Günlük bakım kaydı gir
-- `/bakim/plan` → Makine periyodik bakım planı görüntüle/ekle
-- `/bakim/takvim` → Aylık bakım takvimi (Calendar view)
-- `/bakim/raporlar` → Bakım geçmişi, makine bazlı rapor
-- `/bakim/makineler` → Makine listesi CRUD
-
+- Blueprint: `planlama = Blueprint('planlama', __name__, url_prefix='/planlama')`
+- `/planlama/` → Dashboard: bu haftanın aktif planı, özet kartlar
+- `/planlama/yeni` → Yeni haftalık plan formu
+  - Plan no otomatik: `utils.generate_plan_no()`
+  - Dinamik satır ekle: ürün seç (autocomplete), istasyon seç, 5 güne adet gir (Pzt-Sal-Çar-Per-Cum)
+  - "Kaydet Taslak" ve "Aktif Et" butonları
+- `/planlama/planlar` → Geçmiş planlar listesi (plan_no, tarih aralığı, durum, toplam adet)
+- Erişim: rol in ['planlama', 'departman_yoneticisi'] AND department in ['Planlama ve Tedarik Zinciri']
+- `create_app()` içine blueprint'i kaydet
 **Durum:** `[ ] Bekliyor`
 
 ---
 
-## FAZ 5 — Planlama Modülü
+## FAZ 4 — AI
 
-### [G-008] CODEX — Planlama Arayüzü `[ONAY BEKLENİYOR]`
-**Dosya:** `app/templates/planlama/` (YENİ klasör) + route'lar
-**Açıklama:**
-- `/planlama/dashboard` → Haftalık plan takvimi görünümü (7 kolon = 7 gün)
-- `/planlama/yeni-plan` → Yeni haftalık plan oluştur
-  - Ürün seç, iş istasyonu seç, günlere adet dağıt
-  - Planı "Aktif Et" ile yayınla
-- `/planlama/planlar` → Geçmiş planlar listesi
-- Üretim bölümünde aktif planın satırları gözüksün
-
-**Durum:** `[ ] Bekliyor`
+### [G-009] CLAUDE — AI Teklif Analizi `[BEKLIYOR — G-005 SONRASI]`
+**Durum:** `[✓] Claude üstlendi`
 
 ---
 
-## FAZ 6 — AI: Teklif Okuma (Claude Yapacak)
+## DURUM ÖZETİ
 
-### [G-009] CLAUDE — AI Teklif Analizi `[ONAY BEKLENİYOR]`
-**Dosya:** `app/fatura_ai.py` (genişletilecek) + yeni `app/teklif_ai.py`
-**Açıklama:**
-- PDF/Excel teklif dosyası yükleme
-- Claude Haiku ile dosyadan: tedarikçi, birim fiyat, para birimi, vade, geçerlilik tarihi çıkar
-- Çıkarılan bilgiyi `TeklifKalem`'e kaydet, kaynak='pdf' veya kaynak='excel'
-- Outlook entegrasyonu: özel teklif numarası (TKL-2026-00001) içeren mailleri eşleştir
-  - **NOT:** Outlook API kurulumu gerekecek (Microsoft Graph API) — ayrı değerlendirme
-
-**Durum:** `[ ] Bekliyor`
-
----
-
-## GÖREV DURUMU ÖZETİ
-
-| Görev | Sorumlu | Durum |
-|-------|---------|-------|
-| G-001 Portal Landing Page | Codex | Bekliyor |
-| G-002 DB Modelleri | Gemini | Bekliyor |
-| G-003 Autocomplete | Codex | Bekliyor |
-| G-004 Malzeme/Ürün CRUD | Gemini | Bekliyor |
-| G-005 Çoklu Teklif | Gemini | Bekliyor |
-| G-006 Üretim Modülü | Gemini | Bekliyor |
-| G-007 Bakım Modülü | Gemini | Bekliyor |
-| G-008 Planlama Arayüzü | Codex | Bekliyor |
-| G-009 AI Teklif Analizi | Claude | Bekliyor |
+| # | Görev | Sorumlu | Durum |
+|---|---|---|---|
+| G-001 | Portal Landing Page | Codex | ⬜ Bekliyor |
+| G-002 | DB Modelleri + utils | Claude | 🔄 Devam ediyor |
+| G-003 | Autocomplete JS | Codex | ⬜ Bekliyor (G-004 sonrası) |
+| G-004 | Malzeme/Ürün CRUD | Gemini | ⬜ Bekliyor (G-002 sonrası) |
+| G-005 | Çoklu Teklif Sistemi | Claude | ⬜ Bekliyor (G-004 sonrası) |
+| G-006 | Üretim Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
+| G-007 | Bakım Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
+| G-008 | Planlama Arayüzü | Codex | ⬜ Bekliyor (G-002 sonrası) |
+| G-009 | AI Teklif Analizi | Claude | ⬜ Bekliyor (G-005 sonrası) |
