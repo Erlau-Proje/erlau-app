@@ -3,8 +3,8 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import selectinload
 from app import db
-from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi
-from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu
+from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi
+from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu, generate_plan_no
 from datetime import datetime, date, timedelta
 from functools import wraps
 
@@ -14,6 +14,8 @@ satin_alma = Blueprint('satin_alma', __name__, url_prefix='/satinalma')
 admin = Blueprint('admin', __name__, url_prefix='/admin')
 muhasebe = Blueprint('muhasebe', __name__, url_prefix='/muhasebe')
 uretim = Blueprint('uretim', __name__, url_prefix='/uretim')
+bakim = Blueprint('bakim', __name__, url_prefix='/bakim')
+planlama = Blueprint('planlama', __name__, url_prefix='/planlama')
 
 def role_required(*roles):
     def decorator(f):
@@ -1892,3 +1894,275 @@ def uretim_raporlar():
         toplam_planlanan=toplam_planlanan,
         toplam_gerceklesen=toplam_gerceklesen,
         toplam_fire=toplam_fire)
+
+
+# ---------------------------------------------------------------------------
+# G-008: PLANLAMA MODÜLÜ
+# ---------------------------------------------------------------------------
+
+def _planlama_ozet_satirlari(plan):
+    if not plan:
+        return []
+    ozet = {}
+    gun_anahtarlari = ['pzt', 'sal', 'car', 'per', 'cum']
+    hafta_baslangic = plan.baslangic_tarihi
+    for satir in plan.satirlar:
+        key = (satir.urun_id, satir.istasyon_id)
+        row = ozet.setdefault(key, {
+            'urun': satir.urun,
+            'istasyon': satir.istasyon,
+            'pzt': 0,
+            'sal': 0,
+            'car': 0,
+            'per': 0,
+            'cum': 0,
+            'toplam': 0,
+        })
+        if hafta_baslangic and satir.tarih:
+            gun_index = (satir.tarih - hafta_baslangic).days
+            if 0 <= gun_index < len(gun_anahtarlari):
+                row[gun_anahtarlari[gun_index]] += satir.planlanan_adet or 0
+        row['toplam'] += satir.planlanan_adet or 0
+    return list(ozet.values())
+
+@planlama.route('/')
+@login_required
+def planlama_dashboard():
+    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin'):
+        flash('Erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('auth.portal'))
+    aktif = UretimPlani.query.filter_by(durum='aktif').order_by(UretimPlani.id.desc()).first()
+    planlar = UretimPlani.query.order_by(UretimPlani.id.desc()).limit(5).all()
+    return render_template('planlama/dashboard.html',
+        aktif=aktif, planlar=planlar, aktif_ozet=_planlama_ozet_satirlari(aktif))
+
+@planlama.route('/yeni', methods=['GET', 'POST'])
+@login_required
+def yeni_plan():
+    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin'):
+        flash('Erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('auth.portal'))
+    if request.method == 'POST':
+        eylem = request.form.get('eylem', 'taslak')
+        baslangic = date.fromisoformat(request.form.get('baslangic_tarihi'))
+        plan = UretimPlani(
+            plan_no=generate_plan_no(),
+            hafta=int(request.form.get('hafta')),
+            yil=int(request.form.get('yil')),
+            baslangic_tarihi=baslangic,
+            bitis_tarihi=date.fromisoformat(request.form.get('bitis_tarihi')),
+            planlayan_id=current_user.id,
+            durum='aktif' if eylem == 'aktif' else 'taslak',
+        )
+        db.session.add(plan)
+        db.session.flush()
+
+        satirlar = request.form.getlist('urun_id[]')
+        istasyonlar_list = request.form.getlist('istasyon_id[]')
+        gunler = ['pzt', 'sal', 'car', 'per', 'cum']
+        for idx, (uid, iid) in enumerate(zip(satirlar, istasyonlar_list)):
+            if not uid:
+                continue
+            for g_idx, gun in enumerate(gunler):
+                adetler = request.form.getlist(f'adet_{gun}[]')
+                adet = int(adetler[idx] or 0) if idx < len(adetler) else 0
+                if adet > 0:
+                    satir = UretimPlaniSatir(
+                        plan_id=plan.id,
+                        urun_id=int(uid),
+                        istasyon_id=int(iid) if iid else None,
+                        tarih=baslangic + timedelta(days=g_idx),
+                        planlanan_adet=adet,
+                    )
+                    db.session.add(satir)
+        db.session.commit()
+        flash(f'Plan {plan.plan_no} {"aktive edildi" if plan.durum == "aktif" else "taslak olarak kaydedildi"}.', 'success')
+        return redirect(url_for('planlama.planlama_dashboard'))
+
+    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).all()
+    urunler = Urun.query.filter_by(is_active=True).order_by(Urun.urun_adi).all()
+    bugun = date.today()
+    pzt = bugun - timedelta(days=bugun.weekday())
+    return render_template('planlama/yeni_plan.html',
+        istasyonlar=istasyonlar, urunler=urunler, pzt=pzt, cum=pzt + timedelta(days=4))
+
+@planlama.route('/planlar')
+@login_required
+def plan_listesi():
+    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin', 'gm'):
+        flash('Erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('auth.portal'))
+    planlar = UretimPlani.query.order_by(UretimPlani.id.desc()).all()
+    return render_template('planlama/plan_listesi.html', planlar=planlar)
+
+
+# ---------------------------------------------------------------------------
+# G-007: BAKIM MODÜLܽ
+# ---------------------------------------------------------------------------
+
+def bakim_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role not in ('bakim', 'departman_yoneticisi', 'admin'):
+            flash('Bakım modülüne erişim yetkiniz yok.', 'danger')
+            return redirect(url_for('auth.portal'))
+        return f(*args, **kwargs)
+    return decorated
+
+@bakim.route('/')
+@login_required
+@bakim_required
+def bakim_dashboard():
+    from datetime import timedelta
+    bugun = date.today()
+    yedi_gun = bugun + timedelta(days=7)
+    bugunki_kayitlar = BakimKaydi.query.filter_by(tarih=bugun).order_by(BakimKaydi.id.desc()).all()
+    yaklasan = BakimPlani.query.filter(
+        BakimPlani.sonraki_bakim_tarihi <= yedi_gun,
+        BakimPlani.sonraki_bakim_tarihi >= bugun,
+        BakimPlani.is_active == True
+    ).order_by(BakimPlani.sonraki_bakim_tarihi).all()
+    return render_template('bakim/dashboard.html',
+        bugunki_kayitlar=bugunki_kayitlar, yaklasan=yaklasan, bugun=bugun)
+
+@bakim.route('/kayit', methods=['GET', 'POST'])
+@login_required
+@bakim_required
+def bakim_kayit():
+    if request.method == 'POST':
+        from datetime import timedelta
+        makine_id = request.form.get('makine_id')
+        plan_id = request.form.get('bakim_plani_id') or None
+        tarih_str = request.form.get('tarih', str(date.today()))
+        k = BakimKaydi(
+            makine_id=makine_id,
+            bakim_plani_id=plan_id,
+            bakim_turu=request.form.get('bakim_turu', 'gunluk'),
+            tarih=date.fromisoformat(tarih_str),
+            yapilan_isler=request.form.get('yapilan_isler', ''),
+            sure_dakika=request.form.get('sure_dakika') or None,
+            giren_personel_id=current_user.id,
+        )
+        db.session.add(k)
+        if plan_id:
+            plan = BakimPlani.query.get(int(plan_id))
+            if plan:
+                plan.son_bakim_tarihi = date.fromisoformat(tarih_str)
+                plan.sonraki_bakim_tarihi = date.fromisoformat(tarih_str) + timedelta(days=plan.periyot_gun)
+        db.session.commit()
+        flash('Bakım kaydı eklendi.', 'success')
+        return redirect(url_for('bakim.bakim_dashboard'))
+    makineler = Makine.query.filter_by(is_active=True).order_by(Makine.makine_adi).all()
+    return render_template('bakim/kayit.html', makineler=makineler, bugun=date.today())
+
+@bakim.route('/makine/<int:makine_id>/planlar')
+@login_required
+@bakim_required
+def makine_planlari(makine_id):
+    return jsonify([{
+        'id': p.id, 'bakim_adi': p.bakim_adi,
+        'periyot_gun': p.periyot_gun,
+        'sonraki': str(p.sonraki_bakim_tarihi) if p.sonraki_bakim_tarihi else ''
+    } for p in BakimPlani.query.filter_by(makine_id=makine_id, is_active=True).all()])
+
+@bakim.route('/makineler', methods=['GET', 'POST'])
+@login_required
+@bakim_required
+def makine_listesi():
+    if request.method == 'POST':
+        eylem = request.form.get('eylem')
+        if eylem == 'ekle':
+            from app.utils import generate_makine_kodu
+            m = Makine(
+                makine_kodu=generate_makine_kodu(),
+                makine_adi=request.form.get('makine_adi', '').strip(),
+                marka=request.form.get('marka', '').strip(),
+                model=request.form.get('model', '').strip(),
+                seri_no=request.form.get('seri_no', '').strip(),
+            )
+            db.session.add(m); db.session.commit()
+            flash('Makine eklendi.', 'success')
+        elif eylem == 'sil':
+            m = db.get_or_404(Makine, request.form.get('makine_id'))
+            m.is_active = False; db.session.commit()
+            flash('Makine pasif yapıldı.', 'warning')
+        return redirect(url_for('bakim.makine_listesi'))
+    makineler = Makine.query.order_by(Makine.makine_kodu).all()
+    return render_template('bakim/makineler.html', makineler=makineler)
+
+@bakim.route('/plan', methods=['GET', 'POST'])
+@login_required
+@bakim_required
+def bakim_plan():
+    if request.method == 'POST':
+        from datetime import timedelta
+        eylem = request.form.get('eylem')
+        if eylem == 'ekle':
+            son_str = request.form.get('son_bakim_tarihi')
+            periyot = int(request.form.get('periyot_gun', 30))
+            son_dt = date.fromisoformat(son_str) if son_str else None
+            sonraki = (son_dt + timedelta(days=periyot)) if son_dt else None
+            p = BakimPlani(
+                makine_id=request.form.get('makine_id'),
+                bakim_adi=request.form.get('bakim_adi', '').strip(),
+                periyot_gun=periyot,
+                son_bakim_tarihi=son_dt,
+                sonraki_bakim_tarihi=sonraki,
+                aciklama=request.form.get('aciklama', '').strip(),
+            )
+            db.session.add(p); db.session.commit()
+            flash('Bakım planı eklendi.', 'success')
+        elif eylem == 'sil':
+            p = db.get_or_404(BakimPlani, request.form.get('plan_id'))
+            p.is_active = False; db.session.commit()
+        return redirect(url_for('bakim.bakim_plan'))
+    planlar = BakimPlani.query.filter_by(is_active=True).order_by(BakimPlani.sonraki_bakim_tarihi).all()
+    makineler = Makine.query.filter_by(is_active=True).order_by(Makine.makine_adi).all()
+    return render_template('bakim/plan.html', planlar=planlar, makineler=makineler)
+
+@bakim.route('/takvim')
+@login_required
+@bakim_required
+def bakim_takvim():
+    import calendar
+    yil = int(request.args.get('yil', date.today().year))
+    ay = int(request.args.get('ay', date.today().month))
+    _, gun_sayisi = calendar.monthrange(yil, ay)
+    gunler = list(range(1, gun_sayisi + 1))
+    makineler = Makine.query.filter_by(is_active=True).order_by(Makine.makine_adi).all()
+    ay_bas = date(yil, ay, 1)
+    ay_son = date(yil, ay, gun_sayisi)
+    kayitlar = BakimKaydi.query.filter(
+        BakimKaydi.tarih >= ay_bas,
+        BakimKaydi.tarih <= ay_son
+    ).all()
+    kayit_map = {}
+    for k in kayitlar:
+        kayit_map.setdefault(k.makine_id, set()).add(k.tarih.day)
+    return render_template('bakim/takvim.html',
+        makineler=makineler, gunler=gunler,
+        kayit_map=kayit_map, yil=yil, ay=ay, gun_sayisi=gun_sayisi)
+
+@bakim.route('/raporlar')
+@login_required
+def bakim_raporlar():
+    if current_user.role not in ('bakim', 'departman_yoneticisi', 'gm', 'admin'):
+        flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('auth.portal'))
+    baslangic = request.args.get('baslangic', str(date.today() - timedelta(days=29)))
+    bitis = request.args.get('bitis', str(date.today()))
+    makine_id = request.args.get('makine_id', '')
+    try:
+        bas_dt = date.fromisoformat(baslangic)
+        bit_dt = date.fromisoformat(bitis)
+    except ValueError:
+        bas_dt = date.today() - timedelta(days=29)
+        bit_dt = date.today()
+    q = BakimKaydi.query.filter(BakimKaydi.tarih >= bas_dt, BakimKaydi.tarih <= bit_dt)
+    if makine_id:
+        q = q.filter(BakimKaydi.makine_id == makine_id)
+    kayitlar = q.order_by(BakimKaydi.tarih.desc()).all()
+    makineler = Makine.query.filter_by(is_active=True).order_by(Makine.makine_adi).all()
+    return render_template('bakim/raporlar.html',
+        kayitlar=kayitlar, makineler=makineler,
+        makine_id=makine_id, baslangic=baslangic, bitis=bitis)
