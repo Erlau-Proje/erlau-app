@@ -66,6 +66,12 @@ def generate_teklif_no():
         sonraki = 1
     return f"TKL-{yil}-{sonraki:05d}"
 
+def generate_istasyon_kodu():
+    from app.models import IsIstasyonu
+    son = IsIstasyonu.query.order_by(IsIstasyonu.id.desc()).first()
+    sonraki = (son.id + 1) if son else 1
+    return f"IST-{sonraki:05d}"
+
 def generate_plan_no():
     from app.models import UretimPlani
     now = datetime.datetime.now()

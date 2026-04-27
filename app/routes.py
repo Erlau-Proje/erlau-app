@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import selectinload
 from app import db
-from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun
+from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi
 from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu
 from datetime import datetime, date, timedelta
 from functools import wraps
@@ -13,6 +13,7 @@ main = Blueprint('main', __name__)
 satin_alma = Blueprint('satin_alma', __name__, url_prefix='/satinalma')
 admin = Blueprint('admin', __name__, url_prefix='/admin')
 muhasebe = Blueprint('muhasebe', __name__, url_prefix='/muhasebe')
+uretim = Blueprint('uretim', __name__, url_prefix='/uretim')
 
 def role_required(*roles):
     def decorator(f):
@@ -1736,3 +1737,158 @@ def urun_otomatik_ekle():
     db.session.add(u)
     db.session.commit()
     return jsonify({'ok': True, 'id': u.id, 'urun_kodu': u.urun_kodu})
+
+
+# ---------------------------------------------------------------------------
+# G-006: ÜRETİM MODÜLܽ
+# ---------------------------------------------------------------------------
+
+def uretim_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role not in ('uretim', 'departman_yoneticisi', 'admin'):
+            flash('Üretim modülüne erişim yetkiniz yok.', 'danger')
+            return redirect(url_for('auth.portal'))
+        return f(*args, **kwargs)
+    return decorated
+
+@uretim.route('/')
+@login_required
+@uretim_required
+def uretim_dashboard():
+    bugun = date.today()
+    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).all()
+    plan_satirlari = UretimPlaniSatir.query.join(UretimPlani).filter(
+        UretimPlaniSatir.tarih == bugun,
+        UretimPlani.durum == 'aktif'
+    ).all()
+    kayitlar = UretimKaydi.query.filter_by(tarih=bugun).all()
+    kayit_map = {k.plan_satir_id: k for k in kayitlar}
+    toplam_planlanan = sum(s.planlanan_adet for s in plan_satirlari)
+    toplam_gerceklesen = sum(k.gerceklesen_adet for k in kayitlar)
+    return render_template('uretim/dashboard.html',
+        istasyonlar=istasyonlar, plan_satirlari=plan_satirlari,
+        kayit_map=kayit_map, bugun=bugun,
+        toplam_planlanan=toplam_planlanan, toplam_gerceklesen=toplam_gerceklesen)
+
+@uretim.route('/giris', methods=['GET', 'POST'])
+@login_required
+@uretim_required
+def uretim_giris():
+    if request.method == 'POST':
+        k = UretimKaydi(
+            plan_satir_id=request.form.get('plan_satir_id') or None,
+            istasyon_id=request.form.get('istasyon_id'),
+            urun_id=request.form.get('urun_id') or None,
+            tarih=date.fromisoformat(request.form.get('tarih', str(date.today()))),
+            gerceklesen_adet=int(request.form.get('gerceklesen_adet', 0)),
+            fire_adet=int(request.form.get('fire_adet', 0)),
+            aciklama=request.form.get('aciklama', ''),
+            giren_personel_id=current_user.id,
+        )
+        db.session.add(k)
+        db.session.commit()
+        flash('Üretim kaydı eklendi.', 'success')
+        return redirect(url_for('uretim.uretim_dashboard'))
+    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).all()
+    urunler = Urun.query.filter_by(is_active=True).order_by(Urun.urun_adi).all()
+    bugun = date.today()
+    plan_satirlari = UretimPlaniSatir.query.join(UretimPlani).filter(
+        UretimPlaniSatir.tarih == bugun,
+        UretimPlani.durum == 'aktif'
+    ).all()
+    return render_template('uretim/giris.html',
+        istasyonlar=istasyonlar, urunler=urunler,
+        plan_satirlari=plan_satirlari, bugun=bugun)
+
+@uretim.route('/ariza', methods=['GET', 'POST'])
+@login_required
+@uretim_required
+def ariza_kaydi():
+    if request.method == 'POST':
+        from datetime import time as dtime
+        bas = request.form.get('baslangic_saati')
+        bit = request.form.get('bitis_saati')
+        a = ArizaKaydi(
+            istasyon_id=request.form.get('istasyon_id'),
+            tarih=date.fromisoformat(request.form.get('tarih', str(date.today()))),
+            baslangic_saati=dtime.fromisoformat(bas) if bas else None,
+            bitis_saati=dtime.fromisoformat(bit) if bit else None,
+            aciklama=request.form.get('aciklama', ''),
+            giren_personel_id=current_user.id,
+        )
+        db.session.add(a)
+        db.session.commit()
+        flash('Arıza kaydı oluşturuldu.', 'success')
+        return redirect(url_for('uretim.uretim_dashboard'))
+    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).all()
+    return render_template('uretim/ariza.html', istasyonlar=istasyonlar, bugun=date.today())
+
+@uretim.route('/istasyonlar', methods=['GET', 'POST'])
+@login_required
+def istasyon_yonetim():
+    if current_user.role not in ('departman_yoneticisi', 'admin'):
+        flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('uretim.uretim_dashboard'))
+    if request.method == 'POST':
+        eylem = request.form.get('eylem')
+        if eylem == 'ekle':
+            from app.utils import generate_istasyon_kodu
+            i = IsIstasyonu(
+                istasyon_kodu=generate_istasyon_kodu(),
+                istasyon_adi=request.form.get('istasyon_adi', '').strip(),
+                aciklama=request.form.get('aciklama', '').strip(),
+            )
+            db.session.add(i); db.session.commit()
+            flash('İstasyon eklendi.', 'success')
+        elif eylem == 'sil':
+            i = db.get_or_404(IsIstasyonu, request.form.get('istasyon_id'))
+            i.is_active = False; db.session.commit()
+            flash('İstasyon pasif yapıldı.', 'warning')
+        return redirect(url_for('uretim.istasyon_yonetim'))
+    istasyonlar = IsIstasyonu.query.order_by(IsIstasyonu.istasyon_kodu).all()
+    return render_template('uretim/istasyonlar.html', istasyonlar=istasyonlar)
+
+@uretim.route('/raporlar')
+@login_required
+def uretim_raporlar():
+    if current_user.role not in ('uretim', 'departman_yoneticisi', 'gm', 'admin'):
+        flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('auth.portal'))
+    baslangic = request.args.get('baslangic', str(date.today() - timedelta(days=6)))
+    bitis = request.args.get('bitis', str(date.today()))
+    istasyon_id = request.args.get('istasyon_id', '')
+    try:
+        bas_dt = date.fromisoformat(baslangic)
+        bit_dt = date.fromisoformat(bitis)
+    except ValueError:
+        bas_dt = date.today() - timedelta(days=6)
+        bit_dt = date.today()
+
+    kayit_q = UretimKaydi.query.filter(
+        UretimKaydi.tarih >= bas_dt,
+        UretimKaydi.tarih <= bit_dt
+    )
+    plan_q = UretimPlaniSatir.query.filter(
+        UretimPlaniSatir.tarih >= bas_dt,
+        UretimPlaniSatir.tarih <= bit_dt
+    )
+    if istasyon_id:
+        kayit_q = kayit_q.filter(UretimKaydi.istasyon_id == istasyon_id)
+        plan_q = plan_q.filter(UretimPlaniSatir.istasyon_id == istasyon_id)
+
+    kayitlar = kayit_q.order_by(UretimKaydi.tarih).all()
+    plan_satirlari = plan_q.all()
+    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).all()
+
+    toplam_planlanan = sum(s.planlanan_adet for s in plan_satirlari)
+    toplam_gerceklesen = sum(k.gerceklesen_adet for k in kayitlar)
+    toplam_fire = sum(k.fire_adet for k in kayitlar)
+
+    return render_template('uretim/raporlar.html',
+        kayitlar=kayitlar, plan_satirlari=plan_satirlari,
+        istasyonlar=istasyonlar, istasyon_id=istasyon_id,
+        baslangic=baslangic, bitis=bitis,
+        toplam_planlanan=toplam_planlanan,
+        toplam_gerceklesen=toplam_gerceklesen,
+        toplam_fire=toplam_fire)

@@ -50,7 +50,7 @@
 
 ## FAZ 2 — Satınalma İyileştirmeleri
 
-### [G-003] CODEX — Autocomplete (Malzeme + Ürün) `[BEKLIYOR — G-004 SONRASI]`
+### [G-003] CODEX — Autocomplete (Malzeme + Ürün) `[TAMAMLANDI]`
 **Dosya:** `app/templates/yeni_talep.html`
 **Açıklama:**
 - Malzeme adı input'una kullanıcı 3+ karakter girince `/api/malzeme-ara?q=XXX` çağır (fetch API)
@@ -59,7 +59,7 @@
 - Listede yoksa otomatik `POST /api/urun-ekle` ile kaydet (kullanıcıya bildir: "Yeni ürün eklendi")
 - Saf JS kullan, harici kütüphane yok
 - Dropdown klavye ile de gezinebilsin (ArrowUp, ArrowDown, Enter)
-**Durum:** `[ ] Bekliyor`
+**Durum:** `[✅] Tamamlandı`
 
 ---
 
@@ -159,8 +159,8 @@
 |---|---|---|---|
 | G-001 | Portal Landing Page | Codex | ✅ Tamamlandı |
 | G-002 | DB Modelleri + utils | Claude | ✅ Tamamlandı |
-| G-003 | Autocomplete JS | Codex | ⬜ Bekliyor (G-004 sonrası) |
-| G-004 | Malzeme/Ürün CRUD | Gemini | ⬜ Bekliyor (G-002 sonrası) |
+| G-003 | Autocomplete JS | Codex | ✅ Tamamlandı |
+| G-004 | Malzeme/Ürün CRUD | Claude | ✅ Tamamlandı |
 | G-005 | Çoklu Teklif Sistemi | Claude | ⬜ Bekliyor (G-004 sonrası) |
 | G-006 | Üretim Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
 | G-007 | Bakım Modülü | Gemini | ⬜ Bekliyor (G-002 sonrası) |
