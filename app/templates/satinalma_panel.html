@@ -181,6 +181,20 @@
             </form>
             {% endif %}
 
+            <!-- İptal + Sil (satinalma/admin) -->
+            {% if talep.durum not in ['iptal', 'teslim_alindi'] %}
+            <form method="POST" action="{{ url_for('satin_alma.iptal', talep_id=talep.id) }}" class="inline" onsubmit="return confirm('Talebi iptal etmek istediğinize emin misiniz?')">
+              <button type="submit" class="text-xs font-medium text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition-colors">
+                İptal
+              </button>
+            </form>
+            {% endif %}
+            <form method="POST" action="{{ url_for('main.talep_sil', talep_id=talep.id) }}" class="inline" onsubmit="return confirm('Talep kalıcı olarak silinecek. Emin misiniz?')">
+              <button type="submit" class="text-xs font-medium text-gray-400 border border-gray-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 px-2.5 py-1.5 rounded-lg transition-colors">
+                Sil
+              </button>
+            </form>
+
           </div>
         </td>
       </tr>
