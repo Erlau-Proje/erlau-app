@@ -132,10 +132,14 @@
           <div class="flex gap-1.5 justify-end items-center">
 
             {% if talep.durum in ['bekliyor', 'fiyatlandirildi'] %}
-            <!-- Fiyatlandır -->
             <a href="{{ url_for('satin_alma.fiyatlandir', talep_id=talep.id) }}"
               class="text-xs font-medium text-purple-600 border border-purple-200 bg-purple-50 hover:bg-purple-100 px-2.5 py-1.5 rounded-lg transition-colors">
               Fiyatlandır
+            </a>
+            {% elif talep.durum in ['onaylandi', 'yolda'] %}
+            <a href="{{ url_for('satin_alma.fiyatlandir', talep_id=talep.id) }}"
+              class="text-xs font-medium text-orange-600 border border-orange-200 bg-orange-50 hover:bg-orange-100 px-2.5 py-1.5 rounded-lg transition-colors">
+              Fiyat Düzelt
             </a>
             {% endif %}
 

@@ -27,7 +27,7 @@ def create_app():
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Lütfen giriş yapın.'
 
-    from app.routes import auth, main, satin_alma, admin, muhasebe, api, uretim, planlama, bakim
+    from app.routes import auth, main, satin_alma, admin, muhasebe, api, uretim, planlama, bakim, teknik_resim_bp
     app.register_blueprint(auth)
     app.register_blueprint(main)
     app.register_blueprint(satin_alma)
@@ -37,6 +37,7 @@ def create_app():
     app.register_blueprint(uretim)
     app.register_blueprint(planlama)
     app.register_blueprint(bakim)
+    app.register_blueprint(teknik_resim_bp)
 
     if not app.debug:
         log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')

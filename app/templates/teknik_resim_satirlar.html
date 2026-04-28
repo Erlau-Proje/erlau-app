@@ -1,0 +1,35 @@
+{% for r in resimler %}
+<tr style="border-bottom:1px solid #f1f5f9" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+  <td style="padding:11px 16px;width:28px">
+    <svg style="width:15px;height:15px;color:#dc2626" fill="currentColor" viewBox="0 0 20 20">
+      <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+    </svg>
+  </td>
+  <td style="padding:11px 16px;font-weight:600;color:#1e293b">{{ r.dosya_adi_gosterim }}</td>
+  <td style="padding:11px 16px;color:#64748b;font-size:12.5px">{{ r.aciklama or '' }}</td>
+  <td style="padding:11px 16px;color:#94a3b8;font-size:12px;white-space:nowrap">
+    {{ r.yukleyen.name if r.yukleyen else '' }}{% if r.yukleyen %} · {% endif %}{{ r.created_at.strftime('%d.%m.%Y') }}
+  </td>
+  <td style="padding:11px 16px;text-align:right;white-space:nowrap">
+    <a href="/teknik-resim/goruntule/{{ r.id }}" target="_blank"
+      style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#eff6ff;color:#1d4ed8;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;margin-right:4px">
+      <svg style="width:11px;height:11px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+      Görüntüle
+    </a>
+    <a href="/teknik-resim/indir/{{ r.id }}"
+      style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f0fdf4;color:#15803d;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;margin-right:4px">
+      <svg style="width:11px;height:11px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+      İndir
+    </a>
+    {% if edit_yetkili %}
+    <form method="POST" action="/teknik-resim/sil/{{ r.id }}" style="display:inline"
+      onsubmit="return confirm('{{ r.dosya_adi_gosterim }} silinecek. Emin misiniz?')">
+      <button type="submit" class="sil-btn" style="display:none;align-items:center;gap:4px;padding:5px 10px;background:#fef2f2;color:#dc2626;border-radius:6px;font-size:12px;font-weight:600;border:none;cursor:pointer">
+        <svg style="width:11px;height:11px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        −
+      </button>
+    </form>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}

@@ -1,0 +1,321 @@
+{% extends 'base.html' %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1 style="font-size:22px;font-weight:700;color:#1e293b">Teknik Resimler
+      {% if edit_yetkili %}<span id="silModBadge" style="display:none;font-size:13px;font-weight:600;color:#dc2626;background:#fee2e2;padding:3px 10px;border-radius:6px;margin-left:10px">Silme Modu</span>{% endif %}
+    </h1>
+    <p style="font-size:13px;color:#64748b;margin-top:2px">
+      {{ toplam }} dosya{% if q %} — "<strong>{{ q }}</strong>" araması{% endif %}
+    </p>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <form method="GET" style="display:flex;gap:8px;align-items:center">
+      <input type="text" name="q" value="{{ q }}" placeholder="Klasör adı veya dosya adı ara..."
+        style="border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;font-size:13px;width:280px;outline:none"
+        autofocus>
+      <button type="submit" class="btn-primary">Ara</button>
+      {% if q %}<a href="{{ url_for('teknik_resim.teknik_resim_listesi') }}" style="font-size:13px;color:#64748b;text-decoration:none;padding:8px 10px">✕ Temizle</a>{% endif %}
+    </form>
+    {% if edit_yetkili %}
+    <button onclick="document.getElementById('yukleModal').style.display='flex'" class="btn-primary">
+      <svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Dosya / Klasör Ekle
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}{% if msgs %}{% for cat, msg in msgs %}
+<div style="padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;font-weight:500;
+  {% if cat=='danger' %}background:#fee2e2;color:#b91c1c{% elif cat=='warning' %}background:#fef3c7;color:#92400e{% else %}background:#dcfce7;color:#15803d{% endif %}">
+  {{ msg }}
+</div>
+{% endfor %}{% endif %}{% endwith %}
+
+<!-- ── KLASÖR MODU (accordion) ── -->
+{% if mod == 'klasor' %}
+{% if klasor_stats %}
+<div id="klasorListesi">
+  {% for klasor_adi, sayi in klasor_stats %}
+  {% set kid = loop.index %}
+  <div class="card" style="margin-bottom:8px;overflow:hidden">
+    <div onclick="klasorAc({{ kid }}, '{{ (klasor_adi or '__bos__') | e }}')"
+      style="display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer;user-select:none"
+      onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+      <svg id="ok-{{ kid }}" style="width:14px;height:14px;color:#94a3b8;transition:transform .2s;flex-shrink:0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+      </svg>
+      <svg style="width:16px;height:16px;color:#f59e0b;flex-shrink:0" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+      </svg>
+      <span style="font-size:13.5px;font-weight:700;color:#1e293b;flex:1">
+        {{ klasor_adi or 'Klasörsüz' }}
+      </span>
+      <span style="font-size:12px;color:#94a3b8;background:#f1f5f9;padding:2px 9px;border-radius:12px">{{ sayi }} dosya</span>
+    </div>
+    <div id="icerik-{{ kid }}" style="display:none">
+      <table style="width:100%;border-collapse:collapse;font-size:13.5px">
+        <tbody id="satirlar-{{ kid }}"></tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div style="text-align:center;padding:64px 24px">
+  <p style="font-size:15px;font-weight:600;color:#64748b">Henüz teknik resim eklenmemiş</p>
+</div>
+{% endif %}
+
+<!-- ── ARAMA MODU ── -->
+{% elif mod == 'arama' %}
+{% if gruplar %}
+  {% for klasor_adi, dosyalar in gruplar.items() %}
+  <div class="card" style="margin-bottom:10px;overflow:hidden">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0">
+      <svg style="width:16px;height:16px;color:#f59e0b;flex-shrink:0" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+      </svg>
+      <span style="font-size:13.5px;font-weight:700;color:#1e293b">{{ klasor_adi or 'Klasörsüz' }}</span>
+      <span style="font-size:11px;color:#94a3b8;margin-left:4px">{{ dosyalar|length }} sonuç</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13.5px">
+      <tbody>
+        {% for r in dosyalar %}
+        <tr style="border-bottom:1px solid #f1f5f9" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+          <td style="padding:11px 16px;width:28px">
+            <svg style="width:15px;height:15px;color:#dc2626" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/>
+            </svg>
+          </td>
+          <td style="padding:11px 16px;font-weight:600;color:#1e293b">{{ r.dosya_adi_gosterim }}</td>
+          <td style="padding:11px 16px;color:#64748b;font-size:12.5px">{{ r.aciklama or '' }}</td>
+          <td style="padding:11px 16px;color:#94a3b8;font-size:12px;white-space:nowrap">
+            {{ r.yukleyen.name if r.yukleyen else '' }}{% if r.yukleyen %} · {% endif %}{{ r.created_at.strftime('%d.%m.%Y') }}
+          </td>
+          <td style="padding:11px 16px;text-align:right;white-space:nowrap">
+            <a href="{{ url_for('teknik_resim.teknik_resim_goruntule', resim_id=r.id) }}" target="_blank"
+              style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#eff6ff;color:#1d4ed8;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;margin-right:4px">
+              <svg style="width:11px;height:11px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+              Görüntüle
+            </a>
+            <a href="{{ url_for('teknik_resim.teknik_resim_indir', resim_id=r.id) }}"
+              style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f0fdf4;color:#15803d;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;margin-right:4px">
+              <svg style="width:11px;height:11px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              İndir
+            </a>
+            {% if edit_yetkili %}
+            <form method="POST" action="{{ url_for('teknik_resim.teknik_resim_sil', resim_id=r.id) }}" style="display:inline"
+              onsubmit="return confirm('{{ r.dosya_adi_gosterim }} silinecek. Emin misiniz?')">
+              <button type="submit" class="sil-btn" style="display:none;align-items:center;gap:4px;padding:5px 10px;background:#fef2f2;color:#dc2626;border-radius:6px;font-size:12px;font-weight:600;border:none;cursor:pointer">
+                <svg style="width:11px;height:11px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>−
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+{% else %}
+<div style="text-align:center;padding:48px 24px;color:#94a3b8">
+  <p style="font-size:15px;font-weight:600;color:#64748b">Sonuç bulunamadı</p>
+  <p style="font-size:13px;margin-top:6px">Farklı bir klasör adı veya dosya adı deneyin.</p>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- ── YÜKLEME MODALİ ── -->
+{% if edit_yetkili %}
+<div id="yukleModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;align-items:center;justify-content:center"
+  onclick="if(event.target===this)modalKapat()">
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:520px;margin:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden" onclick="event.stopPropagation()">
+    <div style="padding:20px 24px 0;border-bottom:1px solid #e2e8f0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <h3 style="font-size:16px;font-weight:700;color:#1e293b">Teknik Resim Ekle</h3>
+        <button onclick="modalKapat()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:20px">✕</button>
+      </div>
+      <div style="display:flex">
+        <button onclick="sekmeAc('tek')" id="sekme-tek"
+          style="padding:8px 18px;font-size:13px;font-weight:600;border:none;cursor:pointer;border-bottom:2px solid #2d7a3a;color:#2d7a3a;background:none">Tek Dosya</button>
+        <button onclick="sekmeAc('klasor')" id="sekme-klasor"
+          style="padding:8px 18px;font-size:13px;font-weight:600;border:none;cursor:pointer;border-bottom:2px solid transparent;color:#94a3b8;background:none">Klasörden Yükle</button>
+      </div>
+    </div>
+    <div id="panel-tek" style="padding:20px 24px">
+      <form method="POST" action="{{ url_for('teknik_resim.teknik_resim_yukle') }}" enctype="multipart/form-data">
+        <div style="display:flex;flex-direction:column;gap:13px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:5px">Klasör Adı</label>
+            <input type="text" name="klasor" placeholder="Örn: MakineA  veya  MakineA/Alt"
+              style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13.5px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:5px">Dosya Adı <span style="font-weight:400;color:#94a3b8">(boş bırakırsanız PDF adı kullanılır)</span></label>
+            <input type="text" name="dosya_adi_gosterim" placeholder="Boş bırakırsanız PDF adı kullanılır"
+              style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13.5px;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:5px">PDF Dosyası <span style="color:#dc2626">*</span></label>
+            <input type="file" name="pdf_dosya" accept=".pdf" required
+              style="width:100%;border:1px solid #d1d5db;border-radius:8px;padding:9px 12px;font-size:13px;box-sizing:border-box">
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button type="button" onclick="modalKapat()" style="flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13.5px;font-weight:500;background:#fff;cursor:pointer">İptal</button>
+            <button type="submit" class="btn-primary" style="flex:1;justify-content:center">Yükle</button>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div id="panel-klasor" style="padding:20px 24px;display:none">
+      <div style="border:2px dashed #e2e8f0;border-radius:12px;padding:24px;text-align:center;cursor:pointer" onclick="document.getElementById('klasorInput').click()">
+        <svg style="width:40px;height:40px;color:#cbd5e1;margin:0 auto 12px;display:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+        <p style="font-size:14px;font-weight:600;color:#374151">Klasör seç</p>
+        <p style="font-size:12px;color:#94a3b8;margin-top:4px">İçindeki tüm PDF dosyaları otomatik yüklenir.</p>
+        <input type="file" id="klasorInput" webkitdirectory multiple accept=".pdf" style="display:none" onchange="klasorSecildi(this)">
+      </div>
+      <div id="ilerlemeAlani" style="display:none;margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span id="ilerlemeMetin" style="font-size:13px;font-weight:600;color:#1e293b">Hazırlanıyor...</span>
+          <span id="ilerlemeYuzde" style="font-size:13px;color:#64748b">0%</span>
+        </div>
+        <div style="background:#e2e8f0;border-radius:8px;height:8px;overflow:hidden">
+          <div id="ilerlemeBar" style="background:#2d7a3a;height:100%;width:0%;transition:width .3s"></div>
+        </div>
+        <div id="ilerlemeDetay" style="margin-top:10px;max-height:160px;overflow-y:auto;font-size:12px;color:#64748b;line-height:1.8"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="button" onclick="modalKapat()" style="flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13.5px;font-weight:500;background:#fff;cursor:pointer">Kapat</button>
+        <button id="yukleBtn" onclick="klasorYukle()" disabled
+          style="flex:1;padding:10px;background:#2d7a3a;color:#fff;border:none;border-radius:8px;font-size:13.5px;font-weight:600;cursor:not-allowed;opacity:.5">Yükle</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+// ── Accordion ──────────────────────────────────────────────────────────────
+const yukluKlasorler = {};
+
+async function klasorAc(kid, klasorAdi) {
+  const icerik = document.getElementById('icerik-' + kid);
+  const ok = document.getElementById('ok-' + kid);
+  if (icerik.style.display !== 'none') {
+    icerik.style.display = 'none';
+    ok.style.transform = '';
+    return;
+  }
+  ok.style.transform = 'rotate(90deg)';
+  icerik.style.display = 'block';
+  if (yukluKlasorler[kid]) return;
+  const tbody = document.getElementById('satirlar-' + kid);
+  tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;font-size:13px">Yükleniyor...</td></tr>';
+  const url = '/teknik-resim/klasor-icerik?k=' + encodeURIComponent(klasorAdi);
+  const r = await fetch(url);
+  tbody.innerHTML = await r.text();
+  yukluKlasorler[kid] = true;
+  {% if edit_yetkili %}
+  if (silModAktif) {
+    tbody.querySelectorAll('.sil-btn').forEach(b => b.style.display = 'inline-flex');
+  }
+  {% endif %}
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────
+function modalKapat() {
+  document.getElementById('yukleModal').style.display = 'none';
+  temizle();
+}
+function sekmeAc(ad) {
+  ['tek','klasor'].forEach(s => {
+    document.getElementById('panel-'+s).style.display = s===ad ? 'block' : 'none';
+    const btn = document.getElementById('sekme-'+s);
+    btn.style.borderBottomColor = s===ad ? '#2d7a3a' : 'transparent';
+    btn.style.color = s===ad ? '#2d7a3a' : '#94a3b8';
+  });
+}
+
+// ── Silme Modu ─────────────────────────────────────────────────────────────
+{% if edit_yetkili %}
+let silModAktif = false;
+window.addEventListener('DOMContentLoaded', function() {
+  if (sessionStorage.getItem('tr_ekle') === '1') {
+    sessionStorage.removeItem('tr_ekle');
+    document.getElementById('yukleModal').style.display = 'flex';
+  }
+  if (sessionStorage.getItem('tr_sil') === '1') {
+    sessionStorage.removeItem('tr_sil');
+    silModuAc();
+  }
+});
+function silModuAc() {
+  silModAktif = true;
+  document.getElementById('silModBadge').style.display = 'inline';
+  document.querySelectorAll('.sil-btn').forEach(b => b.style.display = 'inline-flex');
+}
+{% endif %}
+
+// ── Klasör Yükleme ─────────────────────────────────────────────────────────
+let seciliDosyalar = [];
+function klasorSecildi(input) {
+  const pdfs = Array.from(input.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  seciliDosyalar = pdfs.map(f => {
+    const parts = f.webkitRelativePath.split('/');
+    return { dosya: f, klasor: parts.slice(1,-1).join('/'), gosterimAdi: f.name.replace(/\.pdf$/i,'') };
+  });
+  const btn = document.getElementById('yukleBtn');
+  if (seciliDosyalar.length > 0) {
+    btn.disabled = false; btn.style.cursor='pointer'; btn.style.opacity='1';
+    btn.textContent = seciliDosyalar.length + ' PDF Yükle';
+  }
+  document.getElementById('ilerlemeAlani').style.display = 'block';
+  document.getElementById('ilerlemeMetin').textContent = seciliDosyalar.length + ' PDF hazır';
+  document.getElementById('ilerlemeDetay').innerHTML =
+    seciliDosyalar.map(d => '📄 ' + (d.klasor ? d.klasor+' / ' : '') + d.gosterimAdi).join('<br>');
+}
+async function klasorYukle() {
+  if (!seciliDosyalar.length) return;
+  const btn = document.getElementById('yukleBtn');
+  btn.disabled = true; btn.style.opacity='.6';
+  let tamam=0, hata=0;
+  const detay = document.getElementById('ilerlemeDetay');
+  detay.innerHTML='';
+  for (let i=0; i<seciliDosyalar.length; i++) {
+    const item = seciliDosyalar[i];
+    const yuzde = Math.round(i/seciliDosyalar.length*100);
+    document.getElementById('ilerlemeBar').style.width = yuzde+'%';
+    document.getElementById('ilerlemeYuzde').textContent = yuzde+'%';
+    document.getElementById('ilerlemeMetin').textContent = 'Yükleniyor: '+item.gosterimAdi;
+    const fd = new FormData();
+    fd.append('pdf_dosya', item.dosya);
+    fd.append('klasor', item.klasor);
+    fd.append('dosya_adi_gosterim', item.gosterimAdi);
+    try {
+      const r = await fetch('{{ url_for("teknik_resim.teknik_resim_yukle") }}',
+        {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd});
+      if (r.ok) { tamam++; detay.innerHTML += '<span style="color:#15803d">✔ '+(item.klasor?item.klasor+' / ':'')+item.gosterimAdi+'</span><br>'; }
+      else { hata++; detay.innerHTML += '<span style="color:#dc2626">✖ '+item.gosterimAdi+' (hata)</span><br>'; }
+    } catch(e) { hata++; detay.innerHTML += '<span style="color:#dc2626">✖ '+item.gosterimAdi+'</span><br>'; }
+    detay.scrollTop = detay.scrollHeight;
+  }
+  document.getElementById('ilerlemeBar').style.width='100%';
+  document.getElementById('ilerlemeYuzde').textContent='100%';
+  document.getElementById('ilerlemeMetin').textContent='Tamamlandı: '+tamam+' başarılı'+(hata?', '+hata+' hatalı':'');
+  if (tamam > 0) setTimeout(() => { modalKapat(); location.reload(); }, 1500);
+  else { btn.disabled=false; btn.style.opacity='1'; }
+}
+function temizle() {
+  seciliDosyalar=[];
+  const inp = document.getElementById('klasorInput');
+  if(inp) inp.value='';
+  document.getElementById('ilerlemeAlani') && (document.getElementById('ilerlemeAlani').style.display='none');
+  document.getElementById('ilerlemeBar') && (document.getElementById('ilerlemeBar').style.width='0%');
+  const btn = document.getElementById('yukleBtn');
+  if(btn){btn.disabled=true;btn.style.opacity='.5';btn.textContent='Yükle';}
+}
+</script>
+{% endblock %}

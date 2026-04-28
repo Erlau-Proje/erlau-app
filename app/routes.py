@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import selectinload
 from app import db
-from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi, TeklifGrubu, TeklifKalem
+from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi, TeklifGrubu, TeklifKalem, TeknikResim
 from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu, generate_plan_no, generate_teklif_no
 from datetime import datetime, date, timedelta
 from functools import wraps
@@ -16,6 +16,18 @@ muhasebe = Blueprint('muhasebe', __name__, url_prefix='/muhasebe')
 uretim = Blueprint('uretim', __name__, url_prefix='/uretim')
 bakim = Blueprint('bakim', __name__, url_prefix='/bakim')
 planlama = Blueprint('planlama', __name__, url_prefix='/planlama')
+teknik_resim_bp = Blueprint('teknik_resim', __name__, url_prefix='/teknik-resim')
+
+_TEKNIK_EDIT_ROLES = ('admin', 'satinalma', 'gm', 'departman_yoneticisi', 'proje')
+
+def teknik_yetki_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.teknik_resim_yetki:
+            flash('Bu işlem için yetkiniz yok.', 'danger')
+            return redirect(url_for('teknik_resim.teknik_resim_listesi'))
+        return f(*args, **kwargs)
+    return decorated
 
 def role_required(*roles):
     def decorator(f):
@@ -566,7 +578,42 @@ def onayla(talep_id):
     talep.durum = 'onaylandi'
     db.session.commit()
     flash('Talep onaylandı.', 'success')
+    # Arka planda malzeme kullanım bilgisini öğren
+    try:
+        _malzeme_kullanim_ogren(talep)
+    except Exception:
+        pass
     return redirect(url_for('satin_alma.panel'))
+
+
+def _malzeme_kullanim_ogren(talep):
+    """Onaylanan siparişteki malzemeleri Malzeme tablosuna eşleştir ve kullanım notunu güncelle."""
+    import os
+    from sqlalchemy import func
+    for kalem in talep.kalemler:
+        if not kalem.malzeme_adi:
+            continue
+        # Malzeme tablosunda eşleşme ara
+        mal = Malzeme.query.filter(
+            Malzeme.malzeme_adi.ilike(f'%{kalem.malzeme_adi[:30]}%'),
+            Malzeme.is_active == True
+        ).first()
+        if not mal:
+            continue
+        # Kullanım bilgisi oluştur
+        proje = kalem.proje_makine or ''
+        amac = kalem.kullanim_amaci or ''
+        alan = kalem.kullanilan_alan or ''
+        yeni_bilgi = f"{talep.siparis_no}"
+        if proje: yeni_bilgi += f" / {proje}"
+        if amac:  yeni_bilgi += f" / {amac}"
+        # Mevcut nota ekle (son 5 kullanım tut)
+        mevcut = mal.kullanim_notu or ''
+        satirlar = [x.strip() for x in mevcut.split('\n') if x.strip()]
+        if yeni_bilgi not in satirlar:
+            satirlar.append(yeni_bilgi)
+        mal.kullanim_notu = '\n'.join(satirlar[-5:])  # son 5 kullanım
+    db.session.commit()
 
 @satin_alma.route('/iptal/<int:talep_id>', methods=['POST'])
 @login_required
@@ -986,9 +1033,11 @@ def fiyatlandir(talep_id):
             termin = request.form.get(prefix + 'termin_gun')
             kalem.vade_gun = int(vade) if vade else None
             kalem.termin_gun = int(termin) if termin else None
-        talep.durum = 'fiyatlandirildi'
+        # Onaylı/yolda siparişlerde durumu düşürme, sadece bekleyen/fiyatlandırılmış için güncelle
+        if talep.durum not in ('onaylandi', 'yolda', 'teslim_alindi'):
+            talep.durum = 'fiyatlandirildi'
         db.session.commit()
-        flash('Fiyatlandırma kaydedildi.', 'success')
+        flash('Fiyatlar güncellendi.', 'success')
         return redirect(url_for('satin_alma.panel'))
     return render_template('fiyatlandir.html', talep=talep, tedarikciler=tedarikciler)
 
@@ -1050,7 +1099,15 @@ def siparis_ozet(talep_id):
         User.role == 'satinalma', User.id != current_user.id, User.is_active == True
     ).all()]
     cc = ','.join(cc_emails)
-    return render_template('siparis_ozet.html', talep=talep, gruplar=gruplar, atamasiz=atamasiz, cc=cc)
+    # Orijinal (Almanca) isim haritası
+    tum_malzeme_adlari = {k.malzeme_adi for g in gruplar.values() for k in g['kalemler']}
+    tum_malzeme_adlari |= {k.malzeme_adi for k in atamasiz}
+    orijinal_map = {}
+    for adi in tum_malzeme_adlari:
+        m = Malzeme.query.filter(Malzeme.malzeme_adi == adi, Malzeme.aciklama.isnot(None)).first()
+        if m and m.aciklama and 'Orijinal: ' in m.aciklama:
+            orijinal_map[adi] = m.aciklama.split('Orijinal: ')[1].split(' | ')[0]
+    return render_template('siparis_ozet.html', talep=talep, gruplar=gruplar, atamasiz=atamasiz, cc=cc, orijinal_map=orijinal_map)
 
 @satin_alma.route('/siparis/<int:talep_id>/excel/<int:tedarikci_id>')
 @login_required
@@ -1743,8 +1800,9 @@ def malzeme_listesi():
 
 @admin.route('/malzeme/ekle', methods=['POST'])
 @login_required
-@role_required('admin')
 def malzeme_ekle():
+    if not (current_user.liste_yetki or current_user.role == 'admin'):
+        return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     adi = request.form.get('malzeme_adi', '').strip()
     if not adi:
         return jsonify({'ok': False, 'hata': 'Malzeme adı boş olamaz'}), 400
@@ -1761,20 +1819,22 @@ def malzeme_ekle():
 
 @admin.route('/malzeme/<int:m_id>/duzenle', methods=['POST'])
 @login_required
-@role_required('admin')
 def malzeme_duzenle(m_id):
+    if not (current_user.liste_yetki or current_user.role == 'admin'):
+        return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     m = db.get_or_404(Malzeme, m_id)
     alan = request.form.get('alan')
     deger = request.form.get('deger', '').strip()
-    if alan in ('malzeme_adi', 'birim', 'kategori', 'aciklama'):
+    if alan in ('malzeme_adi', 'birim', 'kategori', 'aciklama', 'kullanim_notu'):
         setattr(m, alan, deger)
         db.session.commit()
     return jsonify({'ok': True})
 
 @admin.route('/malzeme/<int:m_id>/sil', methods=['POST'])
 @login_required
-@role_required('admin')
 def malzeme_sil(m_id):
+    if not (current_user.liste_yetki or current_user.role == 'admin'):
+        return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     m = db.get_or_404(Malzeme, m_id)
     m.is_active = False
     db.session.commit()
@@ -1793,8 +1853,9 @@ def urun_listesi():
 
 @admin.route('/urun/ekle', methods=['POST'])
 @login_required
-@role_required('admin')
 def urun_ekle():
+    if not (current_user.liste_yetki or current_user.role == 'admin'):
+        return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     adi = request.form.get('urun_adi', '').strip()
     if not adi:
         return jsonify({'ok': False, 'hata': 'Ürün adı boş olamaz'}), 400
@@ -1811,8 +1872,9 @@ def urun_ekle():
 
 @admin.route('/urun/<int:u_id>/duzenle', methods=['POST'])
 @login_required
-@role_required('admin')
 def urun_duzenle(u_id):
+    if not (current_user.liste_yetki or current_user.role == 'admin'):
+        return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     u = db.get_or_404(Urun, u_id)
     alan = request.form.get('alan')
     deger = request.form.get('deger', '').strip()
@@ -1823,8 +1885,9 @@ def urun_duzenle(u_id):
 
 @admin.route('/urun/<int:u_id>/sil', methods=['POST'])
 @login_required
-@role_required('admin')
 def urun_sil(u_id):
+    if not (current_user.liste_yetki or current_user.role == 'admin'):
+        return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     u = db.get_or_404(Urun, u_id)
     u.is_active = False
     db.session.commit()
@@ -1841,18 +1904,89 @@ api = Blueprint('api', __name__, url_prefix='/api')
 @login_required
 def malzeme_ara():
     q = request.args.get('q', '').strip()
-    if len(q) < 3:
+    if len(q) < 2:
         return jsonify([])
     sonuclar = Malzeme.query.filter(
-        Malzeme.malzeme_adi.ilike(f'%{q}%'),
+        db.or_(
+            Malzeme.malzeme_adi.ilike(f'%{q}%'),
+            Malzeme.stok_kodu.ilike(f'%{q}%'),
+            Malzeme.aciklama.ilike(f'%{q}%')
+        ),
         Malzeme.is_active == True
-    ).limit(10).all()
+    ).order_by(
+        db.case((Malzeme.stok_kodu == q, 0), else_=1),
+        Malzeme.malzeme_adi
+    ).limit(12).all()
     return jsonify([{
         'id': m.id,
         'stok_kodu': m.stok_kodu,
         'malzeme_adi': m.malzeme_adi,
-        'birim': m.birim or ''
+        'birim': m.birim or '',
+        'kategori': m.kategori or '',
+        'kullanim_notu': m.kullanim_notu or ''
     } for m in sonuclar])
+
+@api.route('/malzeme-oneri', methods=['POST'])
+@login_required
+def malzeme_oneri():
+    """AI destekli malzeme önerisi — yeni talep formunda kullanılır."""
+    data = request.get_json() or {}
+    malzeme_adi = data.get('malzeme_adi', '').strip()
+    proje_makine = data.get('proje_makine', '').strip()
+    kullanim_amaci = data.get('kullanim_amaci', '').strip()
+
+    if len(malzeme_adi) < 2:
+        return jsonify({'oneri': None})
+
+    # Önce veritabanında benzer malzemeleri bul
+    benzerler = Malzeme.query.filter(
+        db.or_(
+            Malzeme.malzeme_adi.ilike(f'%{malzeme_adi}%'),
+            Malzeme.aciklama.ilike(f'%{malzeme_adi}%')
+        ),
+        Malzeme.is_active == True
+    ).limit(5).all()
+
+    benzer_liste = [
+        f"{m.stok_kodu} — {m.malzeme_adi}"
+        + (f" ({m.kullanim_notu[:80]})" if m.kullanim_notu else "")
+        for m in benzerler
+    ]
+
+    try:
+        import anthropic, os
+        client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+        prompt = f"""Satın alma sisteminde yeni talep oluşturuluyor.
+
+Girilen malzeme adı: "{malzeme_adi}"
+Proje/Makine: "{proje_makine or 'belirtilmemiş'}"
+Kullanım amacı: "{kullanim_amaci or 'belirtilmemiş'}"
+
+Sistemdeki benzer malzemeler:
+{chr(10).join(benzer_liste) if benzer_liste else 'Benzer malzeme bulunamadı'}
+
+Kısa ve pratik bir yanıt ver (max 2 cümle):
+1. Bu malzeme için önerilen standart isim ve özellikler neler olmalı?
+2. Sistemdeki benzer malzemelerden biri kullanılabilir mi?
+
+Türkçe yanıtla, teknik ve özlü ol."""
+
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=200,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        oneri_metni = msg.content[0].text.strip()
+    except Exception:
+        oneri_metni = None
+
+    return jsonify({
+        'oneri': oneri_metni,
+        'benzerler': [{'stok_kodu': m.stok_kodu, 'malzeme_adi': m.malzeme_adi,
+                       'birim': m.birim or '', 'kullanim_notu': m.kullanim_notu or ''}
+                      for m in benzerler]
+    })
+
 
 @api.route('/urun-ara')
 @login_required
@@ -2312,3 +2446,140 @@ def bakim_raporlar():
     return render_template('bakim/raporlar.html',
         kayitlar=kayitlar, makineler=makineler,
         makine_id=makine_id, baslangic=baslangic, bitis=bitis)
+
+
+# ---------------------------------------------------------------------------
+# TEKNİK RESİM BLUEPRINT
+# ---------------------------------------------------------------------------
+
+@teknik_resim_bp.route('/')
+@login_required
+def teknik_resim_listesi():
+    from sqlalchemy import func
+    q = request.args.get('q', '').strip()
+    edit_yetkili = bool(current_user.teknik_resim_yetki)
+
+    if q:
+        # Arama: eşleşen dosyaları getir, klasöre göre grupla
+        resimler = TeknikResim.query.filter(
+            db.or_(
+                TeknikResim.dosya_adi_gosterim.ilike(f'%{q}%'),
+                TeknikResim.klasor.ilike(f'%{q}%'),
+                TeknikResim.aciklama.ilike(f'%{q}%')
+            )
+        ).order_by(TeknikResim.klasor, TeknikResim.dosya_adi_gosterim).all()
+        from collections import defaultdict
+        gruplar = defaultdict(list)
+        for r in resimler:
+            gruplar[r.klasor or ''].append(r)
+        return render_template('teknik_resimler.html',
+                               mod='arama', gruplar=dict(sorted(gruplar.items())),
+                               toplam=len(resimler), q=q, edit_yetkili=edit_yetkili)
+    else:
+        # Varsayılan: sadece klasör adları + dosya sayısı
+        klasor_stats = db.session.query(
+            TeknikResim.klasor,
+            func.count(TeknikResim.id).label('sayi')
+        ).group_by(TeknikResim.klasor).order_by(TeknikResim.klasor).all()
+        toplam = db.session.query(func.count(TeknikResim.id)).scalar()
+        return render_template('teknik_resimler.html',
+                               mod='klasor', klasor_stats=klasor_stats,
+                               toplam=toplam, q=q, edit_yetkili=edit_yetkili)
+
+
+@teknik_resim_bp.route('/klasor-icerik')
+@login_required
+def klasor_icerik():
+    klasor = request.args.get('k', '')
+    if klasor == '__bos__':
+        klasor = None
+    if klasor is None:
+        resimler = TeknikResim.query.filter(TeknikResim.klasor.is_(None))\
+                    .order_by(TeknikResim.dosya_adi_gosterim).all()
+    else:
+        resimler = TeknikResim.query.filter_by(klasor=klasor)\
+                    .order_by(TeknikResim.dosya_adi_gosterim).all()
+    edit_yetkili = bool(current_user.teknik_resim_yetki)
+    return render_template('teknik_resim_satirlar.html', resimler=resimler, edit_yetkili=edit_yetkili)
+
+
+@teknik_resim_bp.route('/yukle', methods=['POST'])
+@login_required
+@teknik_yetki_required
+def teknik_resim_yukle():
+    import os
+    from werkzeug.utils import secure_filename
+
+    dosya = request.files.get('pdf_dosya')
+    if not dosya or not dosya.filename.lower().endswith('.pdf'):
+        if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'ok': False, 'hata': 'PDF değil'}), 400
+        flash('Geçerli bir PDF dosyası seçin.', 'danger')
+        return redirect(url_for('teknik_resim.teknik_resim_listesi'))
+
+    klasor = request.form.get('klasor', '').strip()
+    dosya_adi_gosterim = request.form.get('dosya_adi_gosterim', '').strip()
+    aciklama = request.form.get('aciklama', '').strip()
+
+    if not dosya_adi_gosterim:
+        dosya_adi_gosterim = os.path.splitext(dosya.filename)[0]
+
+    disk_adi = secure_filename(dosya.filename)
+    kayit_dizini = os.path.join(os.path.dirname(__file__), 'static', 'teknik_resimler')
+    os.makedirs(kayit_dizini, exist_ok=True)
+    tam_yol = os.path.join(kayit_dizini, disk_adi)
+    if os.path.exists(tam_yol):
+        base, ext = os.path.splitext(disk_adi)
+        disk_adi = f"{base}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}{ext}"
+        tam_yol = os.path.join(kayit_dizini, disk_adi)
+    dosya.save(tam_yol)
+
+    resim = TeknikResim(
+        klasor=klasor or None,
+        dosya_adi_gosterim=dosya_adi_gosterim,
+        aciklama=aciklama or None,
+        dosya_adi=disk_adi,
+        yukleyen_id=current_user.id
+    )
+    db.session.add(resim)
+    db.session.commit()
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True})
+    flash('Teknik resim başarıyla yüklendi.', 'success')
+    return redirect(url_for('teknik_resim.teknik_resim_listesi'))
+
+
+@teknik_resim_bp.route('/goruntule/<int:resim_id>')
+@login_required
+def teknik_resim_goruntule(resim_id):
+    import os
+    from flask import send_from_directory
+    resim = db.get_or_404(TeknikResim, resim_id)
+    dizin = os.path.join(os.path.dirname(__file__), 'static', 'teknik_resimler')
+    return send_from_directory(dizin, resim.dosya_adi, as_attachment=False)
+
+
+@teknik_resim_bp.route('/indir/<int:resim_id>')
+@login_required
+def teknik_resim_indir(resim_id):
+    import os
+    from flask import send_from_directory
+    resim = db.get_or_404(TeknikResim, resim_id)
+    dizin = os.path.join(os.path.dirname(__file__), 'static', 'teknik_resimler')
+    return send_from_directory(dizin, resim.dosya_adi, as_attachment=True, download_name=resim.dosya_adi)
+
+
+@teknik_resim_bp.route('/sil/<int:resim_id>', methods=['POST'])
+@login_required
+@teknik_yetki_required
+def teknik_resim_sil(resim_id):
+    import os
+    resim = db.get_or_404(TeknikResim, resim_id)
+    dosya_yolu = os.path.join(os.path.dirname(__file__), 'static', 'teknik_resimler', resim.dosya_adi)
+    if os.path.exists(dosya_yolu):
+        os.remove(dosya_yolu)
+    db.session.delete(resim)
+    db.session.commit()
+    flash('Teknik resim silindi.', 'success')
+    return redirect(url_for('teknik_resim.teknik_resim_listesi'))

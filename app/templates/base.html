@@ -136,6 +136,21 @@
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
         Ürün Listesi
       </a>
+      <div class="sidebar-section" style="margin-top:8px">Teknik</div>
+      <div style="display:flex;align-items:center;margin:1px 8px;border-radius:8px;{% if 'teknik_resim' in (request.endpoint or '') %}background:#2d7a3a;{% endif %}">
+        <a href="{{ url_for('teknik_resim.teknik_resim_listesi') }}" class="sidebar-link {% if 'teknik_resim' in (request.endpoint or '') %}active{% endif %}" style="flex:1;margin:0;border-radius:8px 0 0 8px">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v14l-4-2-4 2-4-2-4 2V6a2 2 0 012-2z"/></svg>
+          Teknik Resimler
+        </a>
+        {% if current_user.teknik_resim_yetki %}
+        <a href="{{ url_for('teknik_resim.teknik_resim_listesi') }}" onclick="sessionStorage.setItem('tr_ekle','1');return true;" title="Yeni ekle"
+          style="padding:7px 7px;color:#9db8a2;transition:all .15s;border-radius:0;text-decoration:none;font-size:16px;line-height:1;font-weight:700"
+          onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9db8a2'">+</a>
+        <a href="{{ url_for('teknik_resim.teknik_resim_listesi') }}" onclick="sessionStorage.setItem('tr_sil','1');return true;" title="Silme modu"
+          style="padding:7px 7px;color:#9db8a2;transition:all .15s;border-radius:0 8px 8px 0;text-decoration:none;font-size:16px;line-height:1;font-weight:700"
+          onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='#9db8a2'">−</a>
+        {% endif %}
+      </div>
     </nav>
     <!-- User -->
     <div style="padding:12px;border-top:1px solid rgba(255,255,255,.06)">

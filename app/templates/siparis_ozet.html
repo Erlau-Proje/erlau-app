@@ -86,7 +86,13 @@
       {% for k in grup.kalemler %}
       <tr class="hover:bg-gray-50">
         <td class="px-4 py-2 text-gray-400">{{ loop.index }}</td>
-        <td class="px-4 py-2 font-medium text-gray-800">{{ k.malzeme_adi }}</td>
+        <td class="px-4 py-2 font-medium text-gray-800">
+          {{ k.malzeme_adi }}
+          {%- if k.marka_model and 'Orijinal:' not in (k.marka_model or '') %}
+          {%- elif orijinal_map and k.malzeme_adi in orijinal_map %}
+          <div style="font-size:10px;color:#94a3b8">({{ orijinal_map[k.malzeme_adi] }})</div>
+          {%- endif %}
+        </td>
         <td class="px-4 py-2 text-gray-500">{{ k.marka_model or '-' }}</td>
         <td class="px-4 py-2 text-center">{{ k.miktar or '-' }} {{ k.birim or '' }}</td>
         <td class="px-4 py-2 text-center">{{ '{:,.2f}'.format(k.br_fiyat) if k.br_fiyat else '-' }}</td>

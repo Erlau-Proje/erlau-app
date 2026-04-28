@@ -29,6 +29,8 @@ class User(db.Model, UserMixin):
     sifre_degisim_tarihi = db.Column(db.DateTime)
     tablet_pin = db.Column(db.String(6))
     bildirim_email = db.Column(db.Boolean, default=True)
+    teknik_resim_yetki = db.Column(db.Boolean, default=False)
+    liste_yetki = db.Column(db.Boolean, default=False)
     talepler = db.relationship('TalepFormu', backref='talep_eden', lazy=True)
 
 class Tedarikci(db.Model):
@@ -153,6 +155,7 @@ class Malzeme(db.Model):
     birim = db.Column(db.String(20))
     kategori = db.Column(db.String(100))
     aciklama = db.Column(db.Text)
+    kullanim_notu = db.Column(db.Text)   # AI öğrenilen proje/makine kullanım bilgisi
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -323,3 +326,19 @@ class BakimKaydi(db.Model):
     giren_personel_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     giren_personel = db.relationship('User', foreign_keys=[giren_personel_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# TEKNİK RESİM
+# ---------------------------------------------------------------------------
+
+class TeknikResim(db.Model):
+    __tablename__ = 'teknik_resim'
+    id = db.Column(db.Integer, primary_key=True)
+    klasor = db.Column(db.String(500), index=True)   # relative folder path, e.g. "MakineA/Alt"
+    dosya_adi_gosterim = db.Column(db.String(300), nullable=False, index=True)  # original filename stem
+    dosya_adi = db.Column(db.String(400), nullable=False)  # filename on disk
+    aciklama = db.Column(db.Text)
+    yukleyen_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    yukleyen = db.relationship('User', foreign_keys=[yukleyen_id])
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)

@@ -91,6 +91,7 @@ document.body.appendChild(dropdown);
 let activeAutocomplete = null;
 let activeIndex = -1;
 let debounceTimer = null;
+let oneriTimer = null;
 let urunKayitTimer = null;
 
 function escapeHtml(value) {
@@ -173,10 +174,14 @@ function renderDropdown(state) {
   dropdown.innerHTML = state.items.map((item, index) => {
     const isActive = index === activeIndex;
     if (state.type === 'malzeme') {
+      const katBadge = item.kategori ? `<span style="font-size:10px;background:#f1f5f9;color:#64748b;padding:1px 6px;border-radius:4px;margin-left:6px">${escapeHtml(item.kategori)}</span>` : '';
+      const kullanim = item.kullanim_notu ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.kullanim_notu.split('\n')[0])}</div>` : '';
       return `<button type="button" data-index="${index}" class="block w-full px-3 py-2 text-left ${isActive ? 'bg-green-50 text-green-800' : 'text-gray-700 hover:bg-gray-50'}">
-        <span class="font-medium">${escapeHtml(item.malzeme_adi)}</span>
-        <span class="ml-2 text-gray-400">${escapeHtml(item.stok_kodu || '')}</span>
-        ${item.birim ? `<span class="float-right text-gray-500">${escapeHtml(item.birim)}</span>` : ''}
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span class="font-medium">${escapeHtml(item.malzeme_adi)}</span>
+          <span style="font-size:11px;color:#94a3b8;margin-left:8px;flex-shrink:0">${escapeHtml(item.stok_kodu || '')}${katBadge}</span>
+        </div>
+        ${kullanim}
       </button>`;
     }
     return `<button type="button" data-index="${index}" class="block w-full px-3 py-2 text-left ${isActive ? 'bg-green-50 text-green-800' : 'text-gray-700 hover:bg-gray-50'}">
@@ -236,29 +241,33 @@ function scheduleAutocomplete(input, type) {
 
 function createUrunIfNeeded(input) {
   const urunAdi = input.value.trim();
-  if (urunAdi.length < 3 || input.dataset.urunSelected === '1' || input.dataset.urunSaving === '1') {
-    return;
+  if (urunAdi.length < 3 || input.dataset.urunSelected === '1') return;
+  // Listeye eklemek yerine öneri sor
+  let hint = input.parentNode.querySelector('.urun-ekle-hint');
+  if (!hint) {
+    hint = document.createElement('div');
+    hint.className = 'urun-ekle-hint';
+    hint.style.cssText = 'font-size:11px;color:#2d7a3a;margin-top:3px;cursor:pointer';
+    input.parentNode.style.position = 'relative';
+    input.parentNode.appendChild(hint);
   }
-  input.dataset.urunSaving = '1';
-  fetch('/api/urun-ekle', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({urun_adi: urunAdi})
-  })
-    .then(r => r.ok ? r.json() : Promise.reject())
-    .then(data => {
-      if (data && data.ok) {
-        input.dataset.urunSelected = '1';
-        showToast('Yeni ürün eklendi');
-      }
-    })
-    .catch(() => showToast('Ürün eklenemedi'))
-    .finally(() => { input.dataset.urunSaving = ''; });
+  hint.innerHTML = `"${escapeHtml(urunAdi)}" listeye eklensin mi? <span style="text-decoration:underline;font-weight:600" onclick="urunEkleOnayla(this,'${escapeHtml(urunAdi)}')">Ekle</span> <span style="color:#94a3b8;margin-left:4px" onclick="this.parentNode.remove()">✕</span>`;
+}
+
+async function urunEkleOnayla(el, urunAdi) {
+  el.parentNode.remove();
+  const r = await fetch('/api/urun-ekle', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({urun_adi:urunAdi})});
+  const d = await r.json();
+  showToast(d.ok ? 'Ürün listeye eklendi' : 'Eklenemedi');
 }
 
 tbody.addEventListener('input', function(e) {
   if (e.target.classList.contains('malzeme-adi-input')) {
     scheduleAutocomplete(e.target, 'malzeme');
+    // AI öneri: 1.5sn sonra çalışır
+    window.clearTimeout(oneriTimer);
+    const inp = e.target;
+    oneriTimer = window.setTimeout(() => aiOneriGoster(inp), 1500);
   }
   if (e.target.classList.contains('proje-makine-input')) {
     scheduleAutocomplete(e.target, 'urun');
@@ -317,7 +326,9 @@ document.addEventListener('click', function(e) {
   }
 });
 
-window.addEventListener('scroll', closeDropdown, true);
+window.addEventListener('scroll', function(e) {
+  if (!dropdown.contains(e.target)) closeDropdown();
+}, true);
 window.addEventListener('resize', closeDropdown);
 
 tbody.addEventListener('blur', function(e) {
@@ -350,6 +361,63 @@ function satirEkle() {
     <td class="px-2 py-2"><input type="text" name="aciklama[]" class="w-28 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Not..."></td>
     <td class="px-2 py-2"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600 text-xs">✕</button></td>`;
   tbody.appendChild(tr);
+}
+
+// ── AI Öneri ──────────────────────────────────────────────────────────────
+function aiOneriGoster(input) {
+  const malzemeAdi = input.value.trim();
+  if (malzemeAdi.length < 3) return;
+  const tr = input.closest('tr');
+  const projeMakine = (tr.querySelector('.proje-makine-input') || {}).value || '';
+  const kullanAmaciEl = tr.querySelector('select[name="kullanim_amaci[]"]');
+  const kullanAmaci = kullanAmaciEl ? kullanAmaciEl.value : '';
+
+  // Panel oluştur veya bul
+  let panel = input.parentNode.querySelector('.ai-oneri-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.className = 'ai-oneri-panel';
+    panel.style.cssText = 'position:absolute;z-index:100;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;font-size:11.5px;color:#92400e;max-width:320px;box-shadow:0 2px 8px rgba(0,0,0,.1);margin-top:2px;display:none';
+    input.parentNode.style.position = 'relative';
+    input.parentNode.appendChild(panel);
+  }
+  panel.innerHTML = '<span style="color:#d97706">⟳ AI düşünüyor...</span>';
+  panel.style.display = 'block';
+
+  fetch('/api/malzeme-oneri', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({malzeme_adi: malzemeAdi, proje_makine: projeMakine, kullanim_amaci: kullanAmaci})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (!data.oneri && !data.benzerler?.length) { panel.style.display='none'; return; }
+    let html = '';
+    if (data.oneri) html += `<div>💡 ${escapeHtml(data.oneri)}</div>`;
+    if (data.benzerler?.length) {
+      html += `<div style="margin-top:6px;font-weight:600">Stok listesinde benzerler:</div>`;
+      data.benzerler.forEach(b => {
+        html += `<div style="margin-top:3px;cursor:pointer;color:#1d4ed8" onclick="malzemeSecFromPanel(this,'${escapeHtml(b.malzeme_adi)}','${escapeHtml(b.stok_kodu)}')">
+          → <strong>${escapeHtml(b.malzeme_adi)}</strong> <span style="color:#94a3b8">[${escapeHtml(b.stok_kodu)}]</span>
+          ${b.kullanim_notu ? '<br><span style="color:#94a3b8;font-size:10px">'+escapeHtml(b.kullanim_notu.split('\n')[0])+'</span>' : ''}
+        </div>`;
+      });
+    }
+    html += `<div style="margin-top:6px;text-align:right"><a href="#" onclick="this.closest('.ai-oneri-panel').style.display='none';return false;" style="font-size:10px;color:#94a3b8">kapat ✕</a></div>`;
+    panel.innerHTML = html;
+  })
+  .catch(() => { panel.style.display='none'; });
+}
+
+function malzemeSecFromPanel(el, malzemeAdi, stokKodu) {
+  const panel = el.closest('.ai-oneri-panel');
+  const td = panel.parentNode;
+  const input = td.querySelector('.malzeme-adi-input');
+  if (input) {
+    input.value = malzemeAdi;
+    sonAlimSorgula(input);
+  }
+  panel.style.display = 'none';
 }
 </script>
 {% endblock %}
