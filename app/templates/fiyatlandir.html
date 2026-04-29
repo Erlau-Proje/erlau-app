@@ -192,7 +192,7 @@ async function kalemKopyaSil(kalemId) {
   if (!confirm('Bu kopyayı silmek istiyor musunuz?')) return;
   const r = await fetch(`/satinalma/kalem/${kalemId}/kopya-sil`, {method:'POST'});
   const d = await r.json();
-  if (d.ok) { document.getElementById('kalem-row-'+kalemId)?.remove(); }
+  if (d.ok) { location.reload(); }
   else { alert(d.hata || 'Silinemedi'); }
 }
 

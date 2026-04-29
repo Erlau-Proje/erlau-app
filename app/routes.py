@@ -1385,11 +1385,28 @@ def teklif_kalem_ekle(grup_id):
     return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
 
 
+@satin_alma.route('/teklif/kalem/<int:kalem_id>/red-nedeni', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_kalem_red_nedeni(kalem_id):
+    kalem = TeklifKalem.query.get_or_404(kalem_id)
+    kalem.red_nedeni = request.form.get('red_nedeni', '').strip() or None
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
 @satin_alma.route('/teklif/<int:grup_id>/sec/<int:kalem_id>', methods=['POST'])
 @login_required
 @role_required('satinalma', 'admin')
 def teklif_sec(grup_id, kalem_id):
     grup = TeklifGrubu.query.get_or_404(grup_id)
+    # Seçilmeyen alınan tekliflerde red nedeni zorunlu
+    eksik = [k for k in grup.kalemler
+             if k.id != kalem_id and k.birim_fiyat is not None and not k.red_nedeni]
+    if eksik:
+        tedarikci_listesi = ', '.join(k.tedarikci.name if k.tedarikci else '?' for k in eksik)
+        flash(f'Seçilmeyen teklifler için red nedeni girilmedi: {tedarikci_listesi}', 'danger')
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
     for k in grup.kalemler:
         k.secildi = False
     kazanan = TeklifKalem.query.get_or_404(kalem_id)
@@ -1509,7 +1526,9 @@ def kalem_kopya_sil(kalem_id):
     kalem = TalepKalem.query.get_or_404(kalem_id)
     if not kalem.parent_kalem_id:
         return jsonify({'ok': False, 'hata': 'Orijinal kalem silinemez'}), 400
-    talep_id = kalem.talep_id
+    for grup in list(kalem.teklif_gruplari):
+        db.session.delete(grup)
+    db.session.flush()
     db.session.delete(kalem)
     db.session.commit()
     return jsonify({'ok': True})

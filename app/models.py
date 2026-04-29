@@ -207,6 +207,7 @@ class TeklifKalem(db.Model):
     teklif_dosyasi = db.Column(db.String(500))
     mail_referans = db.Column(db.String(100))
     notlar = db.Column(db.Text)
+    red_nedeni = db.Column(db.Text)
     secildi = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
