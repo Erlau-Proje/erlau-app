@@ -1886,10 +1886,10 @@ def _generate_po_no():
     return f"{prefix}-{son+1:03d}"
 
 
-@satin_alma.route('/teklif/<int:grup_id>/po-pdf')
-@login_required
-@role_required('satinalma', 'admin')
-def teklif_po_pdf(grup_id):
+def _build_po_pdf_bytes(po_no, talep_no, gonderen_adi, tedarikci,
+                        malzeme_adi, marka_model, miktar, birim,
+                        birim_fiyat, para_birimi, vade_gun, notlar):
+    """Ortak PO PDF üretici. bytes döner."""
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph, HRFlowable
     from reportlab.graphics.renderPDF import Drawing
     from reportlab.graphics.shapes import String
@@ -1899,235 +1899,292 @@ def teklif_po_pdf(grup_id):
     from reportlab.lib.styles import ParagraphStyle
     import io as _io
 
-    grup = TeklifGrubu.query.get_or_404(grup_id)
-    if grup.durum != 'secildi':
-        flash('Önce bir teklif seçilmelidir.', 'danger')
-        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
-
-    kazanan = next((k for k in grup.kalemler if k.secildi), None)
-    if not kazanan:
-        flash('Seçili teklif bulunamadı.', 'danger')
-        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
-
-    talep_kalem = grup.talep_kalem
-    talep = talep_kalem.talep if talep_kalem else None
-    tedarikci = kazanan.tedarikci
-
-    # PO no oluştur (yoksa)
-    if not grup.po_no:
-        grup.po_no = _generate_po_no()
-        db.session.commit()
-
     _register_fonts()
-    FONT = 'DejaVu' if _fonts_registered else 'Helvetica'
-    FONT_BOLD = 'DejaVu-Bold' if _fonts_registered else 'Helvetica-Bold'
+    FONT     = 'DejaVu'      if _fonts_registered else 'Helvetica'
+    FONT_B   = 'DejaVu-Bold' if _fonts_registered else 'Helvetica-Bold'
 
     buffer = _io.BytesIO()
+    PAGE_W_PT = A4[0] - 3*cm
     doc = SimpleDocTemplate(buffer, pagesize=A4,
         leftMargin=1.5*cm, rightMargin=1.5*cm,
         topMargin=1.5*cm, bottomMargin=2*cm)
 
-    PAGE_W = A4[0] - 3*cm
+    N    = ParagraphStyle('n',  fontName=FONT,   fontSize=9,  leading=13)
+    B    = ParagraphStyle('b',  fontName=FONT_B, fontSize=9,  leading=13)
+    BIG  = ParagraphStyle('bg', fontName=FONT_B, fontSize=14, leading=18)
+    GRAY = ParagraphStyle('g',  fontName=FONT,   fontSize=8,  leading=11,
+                          textColor=colors.grey)
     elements = []
 
-    N = ParagraphStyle('n', fontName=FONT, fontSize=9, leading=13)
-    B = ParagraphStyle('b', fontName=FONT_BOLD, fontSize=9, leading=13)
-    BIG = ParagraphStyle('big', fontName=FONT_BOLD, fontSize=14, leading=18)
-    SMALL = ParagraphStyle('sm', fontName=FONT, fontSize=8, leading=11, textColor=colors.grey)
-
-    # ── Başlık ──
-    logo_draw = Drawing(120, 36)
-    logo_draw.add(String(0, 12, 'ERLAU', fontSize=26, fontName='Helvetica-Bold', fillColor=colors.HexColor('#3a8a00')))
-    logo_draw.add(String(1, 3, 'EINE MARKE DER RUD GRUPPE', fontSize=6, fontName='Helvetica-Bold', fillColor=colors.black))
-
-    header = Table([[logo_draw, Paragraph('SİPARİŞ FORMU', BIG)]], colWidths=[5*cm, PAGE_W-5*cm])
-    header.setStyle(TableStyle([
+    # Başlık
+    logo = Drawing(120, 36)
+    logo.add(String(0, 12, 'ERLAU', fontSize=26, fontName='Helvetica-Bold',
+                    fillColor=colors.HexColor('#3a8a00')))
+    logo.add(String(1,  3, 'EINE MARKE DER RUD GRUPPE', fontSize=6,
+                    fontName='Helvetica-Bold', fillColor=colors.black))
+    hdr = Table([[logo, Paragraph('SİPARİŞ FORMU', BIG)]],
+                colWidths=[5*cm, PAGE_W_PT - 5*cm])
+    hdr.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('ALIGN', (1,0), (1,0), 'RIGHT'),
+        ('ALIGN',  (1,0), (1,0),  'RIGHT'),
     ]))
-    elements.append(header)
-    elements.append(HRFlowable(width='100%', thickness=2, color=colors.HexColor('#3a8a00'), spaceAfter=8))
+    elements += [hdr, HRFlowable(width='100%', thickness=2,
+                                  color=colors.HexColor('#3a8a00'), spaceAfter=8)]
 
-    # ── PO Bilgileri + Tedarikçi ──
-    po_tarih = grup.po_tarihi.strftime('%d.%m.%Y') if grup.po_tarihi else datetime.utcnow().strftime('%d.%m.%Y')
-    talep_no = talep.siparis_no if talep else '-'
+    # PO Bilgileri + Tedarikçi
+    po_tarih = datetime.utcnow().strftime('%d.%m.%Y')
+    sol = Table([
+        [Paragraph('<b>Sipariş No (PO):</b>', B), Paragraph(po_no,        N)],
+        [Paragraph('<b>Talep No:</b>',         B), Paragraph(talep_no,    N)],
+        [Paragraph('<b>Tarih:</b>',             B), Paragraph(po_tarih,    N)],
+        [Paragraph('<b>Hazırlayan:</b>',        B), Paragraph(gonderen_adi, N)],
+    ], colWidths=[4.5*cm, 5.5*cm])
+    sol.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),FONT),
+                              ('FONTSIZE',(0,0),(-1,-1),9),
+                              ('PADDING',(0,0),(-1,-1),3)]))
 
-    sol = [
-        [Paragraph('<b>Sipariş No (PO):</b>', B), Paragraph(grup.po_no or '-', N)],
-        [Paragraph('<b>Talep No:</b>', B), Paragraph(talep_no, N)],
-        [Paragraph('<b>Tarih:</b>', B), Paragraph(po_tarih, N)],
-        [Paragraph('<b>Satınalma Sorumlusu:</b>', B), Paragraph(current_user.name, N)],
-    ]
-    sol_t = Table(sol, colWidths=[4.5*cm, 5.5*cm])
-    sol_t.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),FONT),('FONTSIZE',(0,0),(-1,-1),9),('PADDING',(0,0),(-1,-1),3)]))
-
-    ted_bilgi = f"<b>{tedarikci.name if tedarikci else '—'}</b>"
-    if tedarikci and tedarikci.unvan: ted_bilgi += f"<br/>{tedarikci.unvan}"
-    if tedarikci and tedarikci.adres: ted_bilgi += f"<br/>{tedarikci.adres}"
-    if tedarikci and tedarikci.email: ted_bilgi += f"<br/>{tedarikci.email}"
-    if tedarikci and tedarikci.telefon: ted_bilgi += f"<br/>{tedarikci.telefon}"
-    if tedarikci and tedarikci.vergi_no: ted_bilgi += f"<br/>Vergi No: {tedarikci.vergi_no}"
-
-    sag = [[Paragraph('<b>TEDARİKÇİ</b>', B)], [Paragraph(ted_bilgi, N)]]
-    sag_t = Table(sag, colWidths=[8*cm])
-    sag_t.setStyle(TableStyle([
-        ('BOX',(0,0),(-1,-1),0.5,colors.grey),
-        ('BACKGROUND',(0,0),(0,0),colors.HexColor('#f0fdf4')),
-        ('PADDING',(0,0),(-1,-1),5),
+    ted_html = f"<b>{tedarikci.name if tedarikci else '—'}</b>"
+    if tedarikci:
+        if tedarikci.unvan:    ted_html += f"<br/>{tedarikci.unvan}"
+        if tedarikci.adres:    ted_html += f"<br/>{tedarikci.adres}"
+        if tedarikci.email:    ted_html += f"<br/>{tedarikci.email}"
+        if tedarikci.telefon:  ted_html += f"<br/>{tedarikci.telefon}"
+        if tedarikci.vergi_no: ted_html += f"<br/>Vergi No: {tedarikci.vergi_no}"
+    sag = Table([[Paragraph('<b>TEDARİKÇİ</b>', B)],
+                 [Paragraph(ted_html, N)]], colWidths=[8*cm])
+    sag.setStyle(TableStyle([
+        ('BOX',        (0,0),(-1,-1), 0.5, colors.grey),
+        ('BACKGROUND', (0,0),(0,0),   colors.HexColor('#f0fdf4')),
+        ('PADDING',    (0,0),(-1,-1), 5),
     ]))
+    iki = Table([[sol, sag]], colWidths=[10*cm, PAGE_W_PT - 10*cm])
+    iki.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),
+                              ('PADDING',(0,0),(-1,-1),0)]))
+    elements += [iki, Spacer(1, 0.5*cm)]
 
-    iki_kolon = Table([[sol_t, sag_t]], colWidths=[10*cm, PAGE_W-10*cm])
-    iki_kolon.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('PADDING',(0,0),(-1,-1),0)]))
-    elements.append(iki_kolon)
-    elements.append(Spacer(1, 0.5*cm))
-
-    # ── Malzeme Tablosu ──
-    miktar = talep_kalem.miktar if talep_kalem else 0
-    toplam = (kazanan.birim_fiyat or 0) * (miktar or 0)
-
-    mal_data = [
-        ['#', 'Malzeme Adı', 'Marka/Model', 'Miktar', 'Birim', 'Br. Fiyat', 'Para Birimi', 'Toplam'],
-        [
-            '1',
-            talep_kalem.malzeme_adi if talep_kalem else '-',
-            talep_kalem.marka_model or '-' if talep_kalem else '-',
-            str(miktar or '-'),
-            talep_kalem.birim or '-' if talep_kalem else '-',
-            f"{kazanan.birim_fiyat:.2f}" if kazanan.birim_fiyat else '-',
-            kazanan.para_birimi or 'TL',
-            f"{toplam:.2f}" if kazanan.birim_fiyat and miktar else '-',
-        ]
-    ]
-    mal_t = Table(mal_data, colWidths=[0.8*cm, 5.5*cm, 3*cm, 1.5*cm, 1.5*cm, 2*cm, 2*cm, 2.2*cm])
-    mal_t.setStyle(TableStyle([
-        ('FONTNAME',(0,0),(-1,-1),FONT),
-        ('FONTNAME',(0,0),(-1,0),FONT_BOLD),
-        ('FONTSIZE',(0,0),(-1,-1),9),
-        ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#2d7a3a')),
-        ('TEXTCOLOR',(0,0),(-1,0),colors.white),
-        ('GRID',(0,0),(-1,-1),0.5,colors.grey),
-        ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white]),
-        ('PADDING',(0,0),(-1,-1),5),
-        ('ALIGN',(3,0),(-1,-1),'CENTER'),
-        ('ALIGN',(5,1),(-1,-1),'RIGHT'),
-    ]))
-    elements.append(mal_t)
-    elements.append(Spacer(1, 0.4*cm))
-
-    # ── Toplam Satırı ──
-    toplam_t = Table([
-        ['', '', '', '', '', '', Paragraph('<b>GENEL TOPLAM:</b>', B), Paragraph(f"<b>{toplam:.2f} {kazanan.para_birimi or 'TL'}</b>", B)]
+    # Malzeme tablosu
+    toplam = (birim_fiyat or 0) * (miktar or 0)
+    mal = Table([
+        ['#', 'Malzeme Adı', 'Marka/Model', 'Miktar', 'Birim',
+         'Br. Fiyat', 'Para Birimi', 'Toplam'],
+        ['1', malzeme_adi or '-', marka_model or '-',
+         str(miktar or '-'), birim or '-',
+         f"{birim_fiyat:.2f}" if birim_fiyat else '-',
+         para_birimi or 'TL',
+         f"{toplam:.2f}" if birim_fiyat and miktar else '-'],
     ], colWidths=[0.8*cm, 5.5*cm, 3*cm, 1.5*cm, 1.5*cm, 2*cm, 2*cm, 2.2*cm])
-    toplam_t.setStyle(TableStyle([
-        ('FONTNAME',(0,0),(-1,-1),FONT),
-        ('FONTSIZE',(0,0),(-1,-1),9),
-        ('ALIGN',(6,0),(7,0),'RIGHT'),
-        ('PADDING',(0,0),(-1,-1),4),
+    mal.setStyle(TableStyle([
+        ('FONTNAME',    (0,0),(-1,-1), FONT),
+        ('FONTNAME',    (0,0),(-1,0),  FONT_B),
+        ('FONTSIZE',    (0,0),(-1,-1), 9),
+        ('BACKGROUND',  (0,0),(-1,0),  colors.HexColor('#2d7a3a')),
+        ('TEXTCOLOR',   (0,0),(-1,0),  colors.white),
+        ('GRID',        (0,0),(-1,-1), 0.5, colors.grey),
+        ('PADDING',     (0,0),(-1,-1), 5),
+        ('ALIGN',       (3,0),(-1,-1), 'CENTER'),
+        ('ALIGN',       (5,1),(-1,-1), 'RIGHT'),
     ]))
-    elements.append(toplam_t)
-    elements.append(Spacer(1, 0.4*cm))
+    elements += [mal, Spacer(1, 0.3*cm)]
 
-    # ── Koşullar ──
-    kosul_data = [
-        [Paragraph('<b>Ödeme Vadesi:</b>', B), Paragraph(f"{kazanan.vade_gun or '-'} gün", N),
-         Paragraph('<b>Termin / Teslimat:</b>', B), Paragraph(f"{kazanan.termin_gun or '-'} gün" if hasattr(kazanan,'termin_gun') and kazanan.termin_gun else '-', N)],
-        [Paragraph('<b>Notlar:</b>', B), Paragraph(kazanan.notlar or '-', N), '', ''],
-    ]
-    kosul_t = Table(kosul_data, colWidths=[3.5*cm, 6*cm, 3.5*cm, 5.5*cm])
-    kosul_t.setStyle(TableStyle([
-        ('FONTNAME',(0,0),(-1,-1),FONT),
-        ('FONTSIZE',(0,0),(-1,-1),9),
+    # Toplam satırı
+    tot = Table([['','','','','','',
+                  Paragraph('<b>GENEL TOPLAM:</b>', B),
+                  Paragraph(f"<b>{toplam:.2f} {para_birimi or 'TL'}</b>", B)]],
+                colWidths=[0.8*cm, 5.5*cm, 3*cm, 1.5*cm, 1.5*cm, 2*cm, 2*cm, 2.2*cm])
+    tot.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),FONT),
+                              ('FONTSIZE',(0,0),(-1,-1),9),
+                              ('ALIGN',(6,0),(7,0),'RIGHT'),
+                              ('PADDING',(0,0),(-1,-1),4)]))
+    elements += [tot, Spacer(1, 0.4*cm)]
+
+    # Koşullar
+    kos = Table([
+        [Paragraph('<b>Ödeme Vadesi:</b>', B),
+         Paragraph(f"{vade_gun or '-'} gün", N),
+         Paragraph('<b>Notlar:</b>', B),
+         Paragraph(notlar or '-', N)],
+    ], colWidths=[3.5*cm, 4*cm, 2.5*cm, PAGE_W_PT - 10*cm])
+    kos.setStyle(TableStyle([
+        ('FONTNAME',(0,0),(-1,-1),FONT), ('FONTSIZE',(0,0),(-1,-1),9),
         ('BOX',(0,0),(-1,-1),0.5,colors.grey),
         ('INNERGRID',(0,0),(-1,-1),0.3,colors.HexColor('#e5e7eb')),
         ('PADDING',(0,0),(-1,-1),5),
-        ('SPAN',(1,1),(3,1)),
     ]))
-    elements.append(kosul_t)
-    elements.append(Spacer(1, 0.4*cm))
+    elements += [kos, Spacer(1, 0.4*cm)]
 
-    # ── Teslimat Adresi ──
-    adres_t = Table([
+    # Teslimat adresi
+    adr = Table([
         [Paragraph('<b>Teslimat Adresi:</b>', B),
-         Paragraph('Erlau Makine İmalat San. Tic. A.Ş.<br/>Organize Sanayi Bölgesi, Bursa / TÜRKİYE<br/>satinalma@erlau.com.tr', N)]
-    ], colWidths=[3.5*cm, PAGE_W-3.5*cm])
-    adres_t.setStyle(TableStyle([
-        ('FONTNAME',(0,0),(-1,-1),FONT),('FONTSIZE',(0,0),(-1,-1),9),
-        ('BOX',(0,0),(-1,-1),0.5,colors.grey),('PADDING',(0,0),(-1,-1),5),
+         Paragraph('Erlau Makine İmalat San. Tic. A.Ş.<br/>'
+                   'Organize Sanayi Bölgesi, Bursa / TÜRKİYE<br/>'
+                   'satinalma@erlau.com.tr', N)]
+    ], colWidths=[3.5*cm, PAGE_W_PT - 3.5*cm])
+    adr.setStyle(TableStyle([
+        ('FONTNAME',(0,0),(-1,-1),FONT), ('FONTSIZE',(0,0),(-1,-1),9),
+        ('BOX',(0,0),(-1,-1),0.5,colors.grey), ('PADDING',(0,0),(-1,-1),5),
         ('BACKGROUND',(0,0),(0,0),colors.HexColor('#f9fafb')),
     ]))
-    elements.append(adres_t)
-    elements.append(Spacer(1, 1.2*cm))
+    elements += [adr, Spacer(1, 1*cm)]
 
-    # ── İmza ──
-    imza_data = [
+    # İmza
+    imz = Table([
         ['Hazırlayan', 'Onaylayan'],
-        [f'\n\n\n{current_user.name}', '\n\n\n'],
+        [f'\n\n\n{gonderen_adi}', '\n\n\n'],
         ['İmza / Tarih', 'İmza / Tarih'],
-    ]
-    imza_t = Table(imza_data, colWidths=[PAGE_W/2, PAGE_W/2])
-    imza_t.setStyle(TableStyle([
-        ('FONTNAME',(0,0),(-1,-1),FONT),('FONTSIZE',(0,0),(-1,-1),9),
-        ('FONTNAME',(0,0),(-1,0),FONT_BOLD),
+    ], colWidths=[PAGE_W_PT/2, PAGE_W_PT/2])
+    imz.setStyle(TableStyle([
+        ('FONTNAME',(0,0),(-1,-1),FONT), ('FONTSIZE',(0,0),(-1,-1),9),
+        ('FONTNAME',(0,0),(-1,0),FONT_B),
         ('GRID',(0,0),(-1,-1),0.5,colors.grey),
         ('ALIGN',(0,0),(-1,-1),'CENTER'),
         ('BACKGROUND',(0,0),(-1,0),colors.lightgrey),
         ('PADDING',(0,0),(-1,-1),6),
     ]))
-    elements.append(imza_t)
+    elements.append(imz)
 
     doc.build(elements)
-    buffer.seek(0)
-    response = make_response(buffer.read())
-    response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'inline; filename=PO_{grup.po_no or grup.teklif_no}.pdf'
-    return response
+    return buffer.getvalue()
 
 
-@satin_alma.route('/teklif/<int:grup_id>/po-mailto')
+def _build_po_eml(to_email, subject, body, pdf_bytes, pdf_filename):
+    """PDF ekli EML dosyası üretir. Kullanıcı çift tıklayınca Outlook açılır."""
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+    from email.utils import formatdate
+    msg = MIMEMultipart('mixed')
+    msg['From']    = 'satinalma@erlau.com.tr'
+    msg['To']      = to_email or ''
+    msg['Subject'] = subject
+    msg['Date']    = formatdate(localtime=True)
+    msg.attach(MIMEText(body, 'plain', 'utf-8'))
+    pdf_part = MIMEApplication(pdf_bytes, _subtype='pdf')
+    pdf_part.add_header('Content-Disposition', 'attachment', filename=pdf_filename)
+    msg.attach(pdf_part)
+    return msg.as_bytes()
+
+
+@satin_alma.route('/teklif/<int:grup_id>/po-pdf')
 @login_required
 @role_required('satinalma', 'admin')
-def teklif_po_mailto(grup_id):
-    import urllib.parse
+def teklif_po_pdf(grup_id):
     grup = TeklifGrubu.query.get_or_404(grup_id)
+    if grup.durum != 'secildi':
+        flash('Önce bir teklif seçilmelidir.', 'danger')
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+    kazanan = next((k for k in grup.kalemler if k.secildi), None)
+    if not kazanan:
+        flash('Seçili teklif bulunamadı.', 'danger')
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+    if not grup.po_no:
+        grup.po_no = _generate_po_no()
+        db.session.commit()
+    tk = grup.talep_kalem
+    talep_no = tk.talep.siparis_no if tk and tk.talep else '-'
+    pdf = _build_po_pdf_bytes(
+        po_no=grup.po_no, talep_no=talep_no, gonderen_adi=current_user.name,
+        tedarikci=kazanan.tedarikci,
+        malzeme_adi=tk.malzeme_adi if tk else '-',
+        marka_model=tk.marka_model if tk else '-',
+        miktar=tk.miktar if tk else 0, birim=tk.birim if tk else '-',
+        birim_fiyat=kazanan.birim_fiyat, para_birimi=kazanan.para_birimi,
+        vade_gun=kazanan.vade_gun, notlar=kazanan.notlar,
+    )
+    resp = make_response(pdf)
+    resp.headers['Content-Type'] = 'application/pdf'
+    resp.headers['Content-Disposition'] = f'inline; filename=PO_{grup.po_no}.pdf'
+    return resp
+
+
+@satin_alma.route('/teklif/<int:grup_id>/po-eml')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_po_eml(grup_id):
+    """PDF ekli Outlook taslağı (EML) indir — teklif akışı."""
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    if grup.durum != 'secildi':
+        flash('Önce bir teklif seçilmelidir.', 'danger')
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
     kazanan = next((k for k in grup.kalemler if k.secildi), None)
     if not kazanan:
         flash('Seçili teklif yok.', 'danger')
         return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
-
-    talep_kalem = grup.talep_kalem
+    if not grup.po_no:
+        grup.po_no = _generate_po_no()
+        db.session.commit()
+    tk = grup.talep_kalem
+    talep_no = tk.talep.siparis_no if tk and tk.talep else '-'
     tedarikci = kazanan.tedarikci
-    po_no = grup.po_no or grup.teklif_no
-    email = tedarikci.email if tedarikci else ''
-    tedarikci_adi = tedarikci.name if tedarikci else 'Sayın Yetkili'
-    malzeme = talep_kalem.malzeme_adi if talep_kalem else '-'
-    miktar = f"{talep_kalem.miktar} {talep_kalem.birim or ''}" if talep_kalem and talep_kalem.miktar else '-'
-    fiyat = f"{kazanan.birim_fiyat:.2f} {kazanan.para_birimi}" if kazanan.birim_fiyat else '-'
+    malzeme = tk.malzeme_adi if tk else '-'
+    pdf_bytes = _build_po_pdf_bytes(
+        po_no=grup.po_no, talep_no=talep_no, gonderen_adi=current_user.name,
+        tedarikci=tedarikci,
+        malzeme_adi=malzeme, marka_model=tk.marka_model if tk else '-',
+        miktar=tk.miktar if tk else 0, birim=tk.birim if tk else '-',
+        birim_fiyat=kazanan.birim_fiyat, para_birimi=kazanan.para_birimi,
+        vade_gun=kazanan.vade_gun, notlar=kazanan.notlar,
+    )
+    konu = f"[ERLAU SİPARİŞ] {grup.po_no} - {malzeme[:40]}"
+    to_email = tedarikci.email if tedarikci else ''
+    ted_adi = tedarikci.name if tedarikci else 'Sayın Yetkili'
+    miktar_str = f"{tk.miktar} {tk.birim or ''}" if tk and tk.miktar else '-'
+    fiyat_str = f"{kazanan.birim_fiyat:.2f} {kazanan.para_birimi}" if kazanan.birim_fiyat else '-'
+    govde = (f"Sayın {ted_adi},\n\nAşağıda detayları yer alan siparişimizi iletiyoruz.\n\n"
+             f"{'━'*34}\nSİPARİŞ BİLGİSİ / PURCHASE ORDER\n{'━'*34}\n"
+             f"PO Numarası : {grup.po_no}\nTalep No    : {talep_no}\n"
+             f"Malzeme     : {malzeme}\nMiktar      : {miktar_str}\n"
+             f"Birim Fiyat : {fiyat_str}\nVade        : {kazanan.vade_gun or '-'} gün\n"
+             f"{'━'*34}\n\nSipariş formu ekte yer almaktadır.\n"
+             f"Onayınızı ve tahmini teslimat tarihinizi bekliyoruz.\n\n"
+             f"Saygılarımızla,\n{current_user.name}\nErlau Satınalma Departmanı\nsatinalma@erlau.com.tr")
+    eml = _build_po_eml(to_email, konu, govde, pdf_bytes, f"PO_{grup.po_no}.pdf")
+    resp = make_response(eml)
+    resp.headers['Content-Type'] = 'message/rfc822'
+    resp.headers['Content-Disposition'] = f'attachment; filename="SiparisFormu_{grup.po_no}.eml"'
+    return resp
 
-    konu = f"[ERLAU SİPARİŞ] {po_no} - {malzeme[:40]}"
-    govde = f"""Sayın {tedarikci_adi},
 
-Aşağıda detayları yer alan siparişimizi iletiyoruz.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SİPARİŞ BİLGİSİ / PURCHASE ORDER
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PO Numarası : {po_no}
-Malzeme     : {malzeme}
-Miktar      : {miktar}
-Birim Fiyat : {fiyat}
-Vade        : {kazanan.vade_gun or '-'} gün
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Sipariş formunu ekte bulabilirsiniz.
-Onayınızı ve tahmini teslimat tarihinizi bekliyoruz.
-
-Teşekkürler,
-{current_user.name}
-Erlau Satınalma Departmanı
-satinalma@erlau.com.tr
-"""
-    mailto = f"mailto:{email}?subject={urllib.parse.quote(konu)}&body={urllib.parse.quote(govde)}"
-    return redirect(mailto)
+@satin_alma.route('/kalem/<int:kalem_id>/po-eml')
+@login_required
+@role_required('satinalma', 'admin')
+def kalem_po_eml(kalem_id):
+    """PDF ekli Outlook taslağı (EML) — teklif almadan direkt sipariş."""
+    kalem = TalepKalem.query.get_or_404(kalem_id)
+    if not kalem.tedarikci_id or not kalem.br_fiyat:
+        flash('Tedarikçi ve fiyat girilmiş olmalıdır.', 'danger')
+        talep_id = kalem.talep_id
+        return redirect(url_for('satin_alma.fiyatlandir', talep_id=talep_id))
+    tedarikci = kalem.tedarikci
+    talep = kalem.talep
+    from datetime import date
+    po_no = f"PO-{date.today().strftime('%Y%m%d')}-{kalem.id}"
+    talep_no = talep.siparis_no if talep else '-'
+    pdf_bytes = _build_po_pdf_bytes(
+        po_no=po_no, talep_no=talep_no, gonderen_adi=current_user.name,
+        tedarikci=tedarikci,
+        malzeme_adi=kalem.malzeme_adi, marka_model=kalem.marka_model,
+        miktar=kalem.miktar, birim=kalem.birim,
+        birim_fiyat=kalem.br_fiyat, para_birimi=kalem.para_birimi or 'TL',
+        vade_gun=kalem.vade_gun, notlar=kalem.aciklama,
+    )
+    konu = f"[ERLAU SİPARİŞ] {po_no} - {kalem.malzeme_adi[:40]}"
+    to_email = tedarikci.email if tedarikci else ''
+    ted_adi = tedarikci.name if tedarikci else 'Sayın Yetkili'
+    miktar_str = f"{kalem.miktar} {kalem.birim or ''}" if kalem.miktar else '-'
+    fiyat_str = f"{kalem.br_fiyat:.2f} {kalem.para_birimi or 'TL'}"
+    govde = (f"Sayın {ted_adi},\n\nAşağıda detayları yer alan siparişimizi iletiyoruz.\n\n"
+             f"{'━'*34}\nSİPARİŞ BİLGİSİ / PURCHASE ORDER\n{'━'*34}\n"
+             f"PO Numarası : {po_no}\nTalep No    : {talep_no}\n"
+             f"Malzeme     : {kalem.malzeme_adi}\nMiktar      : {miktar_str}\n"
+             f"Birim Fiyat : {fiyat_str}\nVade        : {kalem.vade_gun or '-'} gün\n"
+             f"{'━'*34}\n\nSipariş formu ekte yer almaktadır.\n"
+             f"Onayınızı ve tahmini teslimat tarihinizi bekliyoruz.\n\n"
+             f"Saygılarımızla,\n{current_user.name}\nErlau Satınalma Departmanı\nsatinalma@erlau.com.tr")
+    eml = _build_po_eml(to_email, konu, govde, pdf_bytes, f"PO_{po_no}.pdf")
+    resp = make_response(eml)
+    resp.headers['Content-Type'] = 'message/rfc822'
+    resp.headers['Content-Disposition'] = f'attachment; filename="SiparisFormu_{po_no}.eml"'
+    return resp
 
 
 @satin_alma.route('/teklif/<int:grup_id>/po-gonder', methods=['POST'])

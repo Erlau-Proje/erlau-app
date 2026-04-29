@@ -30,6 +30,7 @@
             <th class="px-4 py-3 text-center text-xs font-medium text-gray-400">Alım Sayısı</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-purple-500">Çoklu Teklif</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-orange-400">Çoğalt</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-green-600">Sipariş Gönder</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100" id="kalemTbody">
@@ -132,6 +133,18 @@
               </button>
               {% else %}
               <span class="text-xs text-gray-300">{{ kopya_sayisi.n }}/3 kopya</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-center">
+              {% if kalem.tedarikci_id and kalem.br_fiyat %}
+              <a href="{{ url_for('satin_alma.kalem_po_eml', kalem_id=kalem.id) }}"
+                class="inline-flex items-center gap-1 text-xs text-green-700 border border-green-300 hover:bg-green-50 px-2 py-0.5 rounded"
+                title="PDF ekli Outlook taslağı indir — çift tıkla, Outlook hazır açılır">
+                <svg style="width:11px;height:11px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                Sipariş Gönder
+              </a>
+              {% else %}
+              <span class="text-xs text-gray-300">—</span>
               {% endif %}
             </td>
           </tr>
