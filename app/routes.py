@@ -1613,7 +1613,7 @@ def teklif_excel(grup_id):
     ws.row_dimensions[8].height = 14
 
     ws.merge_cells('B6:I6')
-    ws['B6'] = 'Erlau Makine İmalat San. Tic. A.Ş. | erlau.com.tr'
+    ws['B6'] = 'ERLAU Metal San ve Tic LTD ŞTİ | erlau.com.tr'
     stil(ws, 'B6', size=9, color='757575', italic=True)
 
     # Boşluk
@@ -1627,13 +1627,10 @@ def teklif_excel(grup_id):
 
     # Malzeme Detayları başlıkları
     headers = ['#', 'Malzeme Adı / Material', 'Marka/Model', 'Miktar', 'Birim',
-               'Teknik Resim', 'Standart', 'Açıklama', 'Proje/Makine']
+               'Teknik Resim', 'Standart', 'Açıklama']
     ws.row_dimensions[11].height = 20
     for i, h in enumerate(headers):
-        col = get_column_letter(i + 1)
-        if col == 'A': col_idx = 1
-        else: col_idx = i + 1
-        c = ws.cell(row=11, column=col_idx, value=h)
+        c = ws.cell(row=11, column=i+1, value=h)
         stil(ws, c, bold=True, size=9, color=BEYAZ, bg=KOYU_GRI,
              align='center', border=True)
 
@@ -1648,12 +1645,11 @@ def teklif_excel(grup_id):
         kalem.teknik_resim_kodu or '' if kalem else '',
         kalem.standart or '' if kalem else '',
         kalem.aciklama or '' if kalem else '',
-        kalem.proje_makine or '' if kalem else '',
     ]
     for i, v in enumerate(vals):
         c = ws.cell(row=12, column=i+1, value=v)
         bg = ACIK_YESIL if i == 1 else GRI
-        stil(ws, c, size=10, bg=bg, align='center' if i not in [1,2,8] else 'left',
+        stil(ws, c, size=10, bg=bg, align='center' if i not in [1,2,7] else 'left',
              wrap=True, border=True)
 
     # Boşluk
@@ -1674,29 +1670,28 @@ def teklif_excel(grup_id):
         stil(ws, c, bold=True, size=9, color=BEYAZ, bg="1565C0",
              align='center', wrap=True, border=True)
 
-    # Boş doldurma satırları
-    for row in range(16, 19):
-        ws.row_dimensions[row].height = 24
-        for col in range(1, 10):
-            c = ws.cell(row=row, column=col)
-            c.value = 1 if col == 1 else (kalem.malzeme_adi if col == 2 and kalem else '')
-            stil(ws, c, size=10, bg="E3F2FD" if col > 2 else GRI,
-                 align='center', border=True)
+    # Tedarikçi doldurma satırı (1 satır)
+    ws.row_dimensions[16].height = 24
+    for col in range(1, 10):
+        c = ws.cell(row=16, column=col)
+        c.value = 1 if col == 1 else (kalem.malzeme_adi if col == 2 and kalem else '')
+        stil(ws, c, size=10, bg="E3F2FD" if col > 2 else GRI,
+             align='center', border=True)
 
     # Son not
-    ws.row_dimensions[20].height = 10
-    ws.row_dimensions[21].height = 18
-    ws.merge_cells('B21:I21')
-    ws['B21'] = f'Lütfen teklifinizi {teklif_no} referans numarası ile gönderin. | Please reply with reference no: {teklif_no}'
-    stil(ws, 'B21', size=9, color='757575', italic=True)
+    ws.row_dimensions[17].height = 10
+    ws.row_dimensions[18].height = 18
+    ws.merge_cells('B18:I18')
+    ws['B18'] = f'Lütfen teklifinizi {teklif_no} referans numarası ile gönderin. | Please reply with reference no: {teklif_no}'
+    stil(ws, 'B18', size=9, color='757575', italic=True)
 
-    ws.row_dimensions[22].height = 16
-    ws.merge_cells('B22:I22')
-    ws['B22'] = 'Erlau Makine | Satınalma Departmanı | satinalma@erlau.com.tr'
-    stil(ws, 'B22', size=9, color='757575', italic=True)
+    ws.row_dimensions[19].height = 16
+    ws.merge_cells('B19:I19')
+    ws['B19'] = 'ERLAU Metal San ve Tic LTD ŞTİ | Satınalma Departmanı | satinalma@erlau.com.tr'
+    stil(ws, 'B19', size=9, color='757575', italic=True)
 
     # Print area
-    ws.print_area = 'A1:J23'
+    ws.print_area = 'A1:J20'
     ws.page_setup.orientation = 'landscape'
     ws.page_setup.fitToPage = True
 
@@ -2015,7 +2010,7 @@ def _build_po_pdf_bytes(po_no, talep_no, gonderen_adi, tedarikci,
     # Teslimat adresi
     adr = Table([
         [Paragraph('<b>Teslimat Adresi:</b>', B),
-         Paragraph('Erlau Makine İmalat San. Tic. A.Ş.<br/>'
+         Paragraph('ERLAU Metal San ve Tic LTD ŞTİ<br/>'
                    'Organize Sanayi Bölgesi, Bursa / TÜRKİYE<br/>'
                    'satinalma@erlau.com.tr', N)]
     ], colWidths=[3.5*cm, PAGE_W_PT - 3.5*cm])
