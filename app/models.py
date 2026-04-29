@@ -75,6 +75,7 @@ class TalepKalem(db.Model):
     proje_makine = db.Column(db.String(200))
     kw = db.Column(db.String(10))
     aciklama = db.Column(db.Text)
+    anlik_stok = db.Column(db.String(50))
     teknik_resim_kodu = db.Column(db.String(100))
     standart = db.Column(db.String(100))
     br_fiyat = db.Column(db.Float)

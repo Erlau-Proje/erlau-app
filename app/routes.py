@@ -209,6 +209,7 @@ def yeni_talep():
         hedefler = request.form.getlist('hedef[]')
         kwler = request.form.getlist('kw[]')
         aciklamalar = request.form.getlist('aciklama[]')
+        anlik_stoklar = request.form.getlist('anlik_stok[]')
         kullanim_amaclari = request.form.getlist('kullanim_amaci[]')
         kullanilan_alanlar = request.form.getlist('kullanilan_alan[]')
         proje_makineler = request.form.getlist('proje_makine[]')
@@ -227,7 +228,8 @@ def yeni_talep():
                     kullanilan_alan=kullanilan_alanlar[i] if i < len(kullanilan_alanlar) else '',
                     proje_makine=proje_makineler[i] if i < len(proje_makineler) else '',
                     kw=kwler[i] if i < len(kwler) else '',
-                    aciklama=aciklamalar[i] if i < len(aciklamalar) else ''
+                    aciklama=aciklamalar[i] if i < len(aciklamalar) else '',
+                    anlik_stok=anlik_stoklar[i] if i < len(anlik_stoklar) else ''
                 )
                 db.session.add(kalem)
 
@@ -268,6 +270,7 @@ def talep_duzenle(talep_id):
         proje_makineler = request.form.getlist('proje_makine[]')
         kwler = request.form.getlist('kw[]')
         aciklamalar = request.form.getlist('aciklama[]')
+        anlik_stoklar = request.form.getlist('anlik_stok[]')
         for i, ad in enumerate(malzeme_adlari):
             if ad.strip():
                 db.session.add(TalepKalem(
@@ -282,7 +285,8 @@ def talep_duzenle(talep_id):
                     kullanilan_alan=kullanilan_alanlar[i] if i < len(kullanilan_alanlar) else '',
                     proje_makine=proje_makineler[i] if i < len(proje_makineler) else '',
                     kw=kwler[i] if i < len(kwler) else '',
-                    aciklama=aciklamalar[i] if i < len(aciklamalar) else ''
+                    aciklama=aciklamalar[i] if i < len(aciklamalar) else '',
+                    anlik_stok=anlik_stoklar[i] if i < len(anlik_stoklar) else ''
                 ))
         db.session.commit()
         flash('Talep güncellendi.', 'success')
@@ -905,42 +909,78 @@ def kullanici_sifre_sifirla(user_id):
 @main.route('/talep/<int:talep_id>/pdf')
 @login_required
 def talep_pdf(talep_id):
+    from reportlab.pdfbase.pdfmetrics import stringWidth as sw
     _register_fonts()
     FONT = 'DejaVu' if _fonts_registered else 'Helvetica'
     FONT_BOLD = 'DejaVu-Bold' if _fonts_registered else 'Helvetica-Bold'
 
     talep = db.get_or_404(TalepFormu, talep_id)
+
+    PAGE_W, PAGE_H = landscape(A4)
+    LM = RM = 1*cm
+    TM = 1.5*cm
+    BM = 1*cm
+    USABLE_W = PAGE_W - LM - RM
+
+    # İmza tablosu canvas callback ile sayfanın sağ altına çizilecek
+    IMZA_COL_W = 7.5*cm
+    IMZA_W = IMZA_COL_W * 3
+    imza_eden = (talep.talep_eden.name if talep.talep_eden else '') + \
+                ('\n' + talep.talep_eden.unvan if talep.talep_eden and talep.talep_eden.unvan
+                 and talep.talep_eden.unvan_pdf_goster else '')
+    imza_data = [
+        ['Talebi Oluşturan', 'Departman Müdürü Onayı', 'Genel Müdür Onayı'],
+        ['\n\n\n' + imza_eden, '\n\n\nAd Soyad', '\n\n\nAd Soyad'],
+        ['İmza / Tarih', 'İmza / Tarih', 'İmza / Tarih'],
+    ]
+    imza_style = TableStyle([
+        ('FONTNAME', (0,0), (-1,-1), FONT),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+        ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+        ('PADDING', (0,0), (-1,-1), 6),
+    ])
+
+    def draw_imza(canvas, doc):
+        canvas.saveState()
+        t = Table(imza_data, colWidths=[IMZA_COL_W]*3)
+        t.setStyle(imza_style)
+        w, h = t.wrapOn(canvas, IMZA_W, 6*cm)
+        t.drawOn(canvas, PAGE_W - RM - w, BM)
+        canvas.restoreState()
+
+    # bottomMargin: imza tablosu için alan bırak (yaklaşık 4cm)
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
-        rightMargin=1.5*cm, leftMargin=1.5*cm,
-        topMargin=1.5*cm, bottomMargin=1.5*cm)
+        rightMargin=RM, leftMargin=LM,
+        topMargin=TM, bottomMargin=BM + 4*cm)
 
-    styles = getSampleStyleSheet()
     elements = []
 
-    header_style = ParagraphStyle('header', fontSize=11, fontName=FONT_BOLD, spaceAfter=4)
-    normal_style = ParagraphStyle('normal', fontSize=9, fontName=FONT)
-    small_style = ParagraphStyle('small', fontSize=8, fontName=FONT)
-
+    # ── Başlık: logo solda, başlık tam ortada ──
+    LOGO_W = 6*cm
+    title_style = ParagraphStyle('title', fontSize=13, fontName=FONT_BOLD, alignment=1)
     logo_drawing = Drawing(140, 40)
     logo_drawing.add(String(0, 14, 'ERLAU', fontSize=28, fontName='Helvetica-Bold', fillColor=colors.HexColor('#3a8a00')))
     logo_drawing.add(String(2, 4, 'EINE MARKE DER RUD GRUPPE', fontSize=7, fontName='Helvetica-Bold', fillColor=colors.black))
 
-    header_data = [[logo_drawing, Paragraph('SATIN ALMA TALEP FORMU', header_style)]]
-    header_table = Table(header_data, colWidths=[6*cm, None])
+    header_data = [[logo_drawing, Paragraph('SATIN ALMA TALEP FORMU', title_style), '']]
+    header_table = Table(header_data, colWidths=[LOGO_W, USABLE_W - 2*LOGO_W, LOGO_W])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('ALIGN', (1,0), (1,0), 'RIGHT'),
         ('BOTTOMPADDING', (0,0), (-1,-1), 6),
     ]))
     elements.append(header_table)
     elements.append(Spacer(1, 0.3*cm))
-    
+
+    # ── Sipariş bilgileri ──
     info_data = [
         ['Sipariş No:', talep.siparis_no, 'Tarih:', talep.created_at.strftime('%d.%m.%Y')],
-        ['Departman:', talep.department.name if talep.department else '-', 'Talep Eden:', talep.talep_eden.name if talep.talep_eden else '-'],
+        ['Departman:', talep.department.name if talep.department else '-',
+         'Talep Eden:', talep.talep_eden.name if talep.talep_eden else '-'],
     ]
-
     info_table = Table(info_data, colWidths=[3*cm, 7*cm, 3*cm, 7*cm])
     info_table.setStyle(TableStyle([
         ('FONTNAME', (0,0), (-1,-1), FONT),
@@ -952,10 +992,15 @@ def talep_pdf(talep_id):
         ('BACKGROUND', (2,0), (2,-1), colors.lightgrey),
         ('PADDING', (0,0), (-1,-1), 4),
     ]))
+    info_table.hAlign = 'LEFT'
     elements.append(info_table)
     elements.append(Spacer(1, 0.5*cm))
 
-    table_data = [['#', 'Malzeme Adı', 'Marka/Model', 'Tür', 'Birim', 'Miktar', 'Hedef', 'KW', 'Açıklama', 'Son Alım']]
+    # ── Malzeme tablosu: sütun genişliği içeriğe göre otomatik ──
+    HEADERS = ['#', 'Malzeme Adı', 'Marka/Model', 'Tür', 'Birim', 'Miktar', 'Hedef', 'KW', 'Açıklama', 'Son Alım', 'Anlık Stok']
+    PAD = 10  # hücre dolgusu (point)
+
+    table_data = [HEADERS]
     for i, kalem in enumerate(talep.kalemler):
         son_alim = kalem.son_alinma_tarihi.strftime('%d.%m.%Y') if kalem.son_alinma_tarihi else '-'
         table_data.append([
@@ -969,9 +1014,24 @@ def talep_pdf(talep_id):
             kalem.kw or '',
             kalem.aciklama or '',
             son_alim,
+            kalem.anlik_stok or '',
         ])
 
-    col_widths = [0.8*cm, 4.5*cm, 3.5*cm, 2.2*cm, 1.3*cm, 1.3*cm, 1.6*cm, 1.3*cm, 3.5*cm, 2*cm]
+    # Her sütun için maksimum içerik genişliği hesapla
+    col_count = len(HEADERS)
+    col_widths = []
+    for j in range(col_count):
+        max_w = 0
+        for r, row in enumerate(table_data):
+            fn = FONT_BOLD if r == 0 else FONT
+            w = sw(str(row[j]), fn, 8) + PAD
+            max_w = max(max_w, w)
+        col_widths.append(max_w)
+
+    # Her zaman tam sayfa genişliğine orantılı ölçekle
+    total = sum(col_widths)
+    col_widths = [w * USABLE_W / total for w in col_widths]
+
     main_table = Table(table_data, colWidths=col_widths, repeatRows=1)
     main_table.setStyle(TableStyle([
         ('FONTNAME', (0,0), (-1,-1), FONT),
@@ -984,29 +1044,12 @@ def talep_pdf(talep_id):
         ('PADDING', (0,0), (-1,-1), 4),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
+    main_table.hAlign = 'LEFT'
     elements.append(main_table)
-    elements.append(Spacer(1, 1*cm))
 
-    imza_data = [
-        ['Talebi Oluşturan', 'Departman Müdürü Onayı', 'Genel Müdür Onayı'],
-        ['\n\n\n' + (talep.talep_eden.name if talep.talep_eden else '') + ('\n' + talep.talep_eden.unvan if talep.talep_eden and talep.talep_eden.unvan and talep.talep_eden.unvan_pdf_goster else ''), '\n\n\nAd Soyad', '\n\n\nAd Soyad'],
-        ['İmza / Tarih', 'İmza / Tarih', 'İmza / Tarih'],
-    ]
-    imza_table = Table(imza_data, colWidths=[8*cm, 8*cm, 8*cm])
-    imza_table.setStyle(TableStyle([
-        ('FONTNAME', (0,0), (-1,-1), FONT),
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('FONTNAME', (0,0), (-1,0), FONT_BOLD),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-        ('PADDING', (0,0), (-1,-1), 6),
-    ]))
-    elements.append(imza_table)
-    
-    doc.build(elements)
+    doc.build(elements, onFirstPage=draw_imza, onLaterPages=draw_imza)
     buffer.seek(0)
-    
+
     response = make_response(buffer.read())
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'inline; filename=talep_{talep.siparis_no}.pdf'

@@ -46,6 +46,7 @@
             <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">Proje/Makine</th>
             <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">KW</th>
             <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">Açıklama</th>
+            <th class="px-2 py-2 text-left text-xs font-medium text-orange-500">Anlık Stok</th>
             <th class="px-2 py-2"></th>
           </tr>
         </thead>
@@ -89,6 +90,7 @@
             <td class="px-2 py-2"><input type="text" name="proje_makine[]" value="{{ kalem.proje_makine or '' }}" class="w-24 border border-gray-200 rounded px-2 py-1 text-xs"></td>
             <td class="px-2 py-2"><input type="text" name="kw[]" value="{{ kalem.kw or '' }}" class="w-14 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="KW18"></td>
             <td class="px-2 py-2"><input type="text" name="aciklama[]" value="{{ kalem.aciklama or '' }}" class="w-28 border border-gray-200 rounded px-2 py-1 text-xs"></td>
+            <td class="px-2 py-2"><input type="text" name="anlik_stok[]" value="{{ kalem.anlik_stok or '' }}" class="w-16 border border-orange-200 rounded px-2 py-1 text-xs" placeholder="0"></td>
             <td class="px-2 py-2"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600 text-xs">✕</button></td>
           </tr>
           {% endfor %}
@@ -139,6 +141,7 @@ function satirEkle() {
     <td class="px-2 py-2"><input type="text" name="proje_makine[]" class="w-24 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Proje/Makine"></td>
     <td class="px-2 py-2"><input type="text" name="kw[]" class="w-14 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="KW18"></td>
     <td class="px-2 py-2"><input type="text" name="aciklama[]" class="w-28 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Not..."></td>
+    <td class="px-2 py-2"><input type="text" name="anlik_stok[]" class="w-16 border border-orange-200 rounded px-2 py-1 text-xs" placeholder="0"></td>
     <td class="px-2 py-2"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600 text-xs">✕</button></td>`;
   tbody.appendChild(tr);
 }
