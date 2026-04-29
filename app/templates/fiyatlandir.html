@@ -29,15 +29,23 @@
             <th class="px-4 py-3 text-center text-xs font-medium text-blue-500">Son Alım</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-gray-400">Alım Sayısı</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-purple-500">Çoklu Teklif</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-orange-400">Çoğalt</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100">
+        <tbody class="divide-y divide-gray-100" id="kalemTbody">
           {% for kalem in talep.kalemler %}
-          <tr class="hover:bg-gray-50">
-            <td class="px-4 py-3 text-gray-400 text-xs">{{ loop.index }}</td>
+          <tr class="hover:bg-gray-50 {% if kalem.parent_kalem_id %}bg-orange-50{% endif %}" id="kalem-row-{{ kalem.id }}">
+            <td class="px-4 py-3 text-gray-400 text-xs">
+              {% if kalem.parent_kalem_id %}
+              <span style="color:#f97316;font-weight:700">↳</span>
+              {% else %}{{ loop.index }}{% endif %}
+            </td>
             <td class="px-4 py-3">
               <p class="font-medium">{{ kalem.malzeme_adi }}</p>
               <p class="text-xs text-gray-400">{{ kalem.marka_model or '' }}</p>
+              {% if kalem.parent_kalem_id %}
+              <span class="text-xs text-orange-500 font-medium">Kopya (farklı tedarikçi)</span>
+              {% endif %}
             </td>
             <td class="px-4 py-3 text-center">
               <div class="flex items-center justify-center gap-1">
@@ -107,6 +115,25 @@
                 </form>
               {% endif %}
             </td>
+            <td class="px-4 py-3 text-center">
+              {% set ana_id = kalem.parent_kalem_id or kalem.id %}
+              {% set kopya_sayisi = namespace(n=0) %}
+              {% for k in talep.kalemler %}{% if k.parent_kalem_id == ana_id %}{% set kopya_sayisi.n = kopya_sayisi.n + 1 %}{% endif %}{% endfor %}
+              {% if not kalem.parent_kalem_id and kopya_sayisi.n < 3 %}
+              <button onclick="kalemCogalt({{ kalem.id }})"
+                class="text-xs text-orange-500 hover:text-orange-700 border border-orange-200 px-2 py-0.5 rounded"
+                title="Farklı tedarikçi için kopyala (max 3 kopya)">
+                + Çoğalt {% if kopya_sayisi.n > 0 %}({{ kopya_sayisi.n }}/3){% endif %}
+              </button>
+              {% elif kalem.parent_kalem_id %}
+              <button onclick="kalemKopyaSil({{ kalem.id }})"
+                class="text-xs text-red-400 hover:text-red-600 border border-red-200 px-2 py-0.5 rounded">
+                Kopyayı Sil
+              </button>
+              {% else %}
+              <span class="text-xs text-gray-300">{{ kopya_sayisi.n }}/3 kopya</span>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -153,6 +180,20 @@ function genelToplamHesapla() {
     genel += brFiyat * miktar;
   });
   document.getElementById('genel_toplam').textContent = genel > 0 ? genel.toFixed(2) : '—';
+}
+
+async function kalemCogalt(kalemId) {
+  const r = await fetch(`/satinalma/kalem/${kalemId}/cogalt`, {method:'POST'});
+  const d = await r.json();
+  if (d.ok) { location.reload(); }
+  else { alert(d.hata || 'Çoğaltılamadı'); }
+}
+async function kalemKopyaSil(kalemId) {
+  if (!confirm('Bu kopyayı silmek istiyor musunuz?')) return;
+  const r = await fetch(`/satinalma/kalem/${kalemId}/kopya-sil`, {method:'POST'});
+  const d = await r.json();
+  if (d.ok) { document.getElementById('kalem-row-'+kalemId)?.remove(); }
+  else { alert(d.hata || 'Silinemedi'); }
 }
 
 document.querySelectorAll('td[data-malzeme]').forEach(td => {

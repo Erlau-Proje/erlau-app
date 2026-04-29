@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
   <div>
     <a href="{{ url_for('satin_alma.teklif_listesi') }}" class="text-sm text-gray-400 hover:underline">← Teklifler</a>
     <h1 class="text-2xl font-semibold text-gray-800 mt-1">{{ grup.teklif_no }}</h1>
@@ -9,12 +9,51 @@
       {% if grup.talep_kalem and grup.talep_kalem.talep %}· {{ grup.talep_kalem.talep.siparis_no }}{% endif %}
       {% if grup.talep_kalem and grup.talep_kalem.miktar %}· {{ grup.talep_kalem.miktar }} {{ grup.talep_kalem.birim or '' }}{% endif %}
     </p>
+    {% if grup.konu_basligi %}
+    <p class="text-xs text-blue-500 mt-1" title="Mail takip konu başlığı">📧 {{ grup.konu_basligi }}</p>
+    {% endif %}
   </div>
-  <div>
+  <div class="flex gap-2 flex-wrap items-center">
+    <!-- Excel RFQ İndir -->
+    <a href="{{ url_for('satin_alma.teklif_excel', grup_id=grup.id) }}"
+      style="display:inline-flex;align-items:center;gap:5px;padding:7px 13px;background:#E8F5E9;color:#1B5E20;border-radius:8px;font-size:12.5px;font-weight:600;text-decoration:none;border:1px solid #A5D6A7"
+      title="RFQ Excel şablonu indir">
+      <svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Excel RFQ
+    </a>
+    <!-- Outlook Mailto -->
+    {% if tedarikciler %}
+    <div style="position:relative;display:inline-block" id="mailtoWrap">
+      <button onclick="document.getElementById('mailtoMenu').style.display=document.getElementById('mailtoMenu').style.display=='block'?'none':'block'"
+        style="display:inline-flex;align-items:center;gap:5px;padding:7px 13px;background:#E3F2FD;color:#0D47A1;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid #90CAF9;cursor:pointer">
+        <svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        Outlook Taslağı ▾
+      </button>
+      <div id="mailtoMenu" style="display:none;position:absolute;top:100%;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.1);z-index:50;min-width:200px;padding:6px 0">
+        {% for t in tedarikciler %}
+        {% if t.email %}
+        <a href="{{ url_for('satin_alma.teklif_mailto', grup_id=grup.id, tedarikci_id=t.id) }}"
+          style="display:block;padding:8px 14px;font-size:12.5px;color:#1e293b;text-decoration:none"
+          onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"
+          onclick="document.getElementById('mailtoMenu').style.display='none'">
+          📧 {{ t.name }}<br><span style="font-size:10px;color:#94a3b8">{{ t.email }}</span>
+        </a>
+        {% endif %}
+        {% endfor %}
+        <div style="border-top:1px solid #f1f5f9;margin:4px 0"></div>
+        <a href="{{ url_for('satin_alma.teklif_mailto', grup_id=grup.id) }}"
+          style="display:block;padding:8px 14px;font-size:12.5px;color:#64748b;text-decoration:none"
+          onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+          ✉️ Mail adresi girmeden aç
+        </a>
+      </div>
+    </div>
+    {% endif %}
+    <!-- Durum badge -->
     {% if grup.durum == 'secildi' %}
       <span class="bg-green-100 text-green-700 text-sm font-medium px-3 py-1 rounded-full">✓ Teklif Seçildi</span>
     {% elif grup.durum == 'teklif_alindi' %}
-      <span class="bg-yellow-100 text-yellow-700 text-sm font-medium px-3 py-1 rounded-full">Teklif Alındı — Karşılaştırma Yapın</span>
+      <span class="bg-yellow-100 text-yellow-700 text-sm font-medium px-3 py-1 rounded-full">Teklif Alındı</span>
     {% else %}
       <span class="bg-gray-100 text-gray-500 text-sm font-medium px-3 py-1 rounded-full">Bekliyor</span>
     {% endif %}
@@ -94,6 +133,98 @@
 </div>
 {% endif %}
 
+<!-- AI Karşılaştırma Tavsiyesi -->
+{% if grup.kalemler|length >= 2 %}
+<div class="card p-5 mb-4" style="border-left:3px solid #f59e0b;background:#fffbeb" id="aiTavsiyeKart">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span style="font-size:20px">🤖</span>
+      <div>
+        <h3 class="font-medium text-gray-800 text-sm">AI Teklif Karşılaştırması</h3>
+        <p class="text-xs text-gray-500">{{ grup.kalemler|length }} teklif analiz edilecek</p>
+      </div>
+    </div>
+    <button onclick="aiTavsiyeAl()" id="aiTavsiyeBtn"
+      style="background:#f59e0b;color:#fff;padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:600;border:none;cursor:pointer">
+      Analiz Et
+    </button>
+  </div>
+  <div id="aiTavsiyeMetin" style="display:none;margin-top:12px;font-size:13px;color:#374151;line-height:1.6;background:#fff;padding:12px;border-radius:8px;border:1px solid #fde68a"></div>
+</div>
+{% endif %}
+
+<!-- Mail Oku (AI Parse) -->
+{% if grup.durum != 'secildi' %}
+<div class="card p-6 mb-4" style="border-left:3px solid #06b6d4">
+  <div class="flex items-center gap-3 mb-4">
+    <div style="background:#ecfeff;border-radius:8px;padding:7px">
+      <svg style="width:18px;height:18px;color:#0891b2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+    </div>
+    <div>
+      <h2 class="font-medium text-gray-800">📬 Gelen Teklif Mailini Oku (AI)</h2>
+      <p class="text-xs text-gray-400">Tedarikçiden gelen mail içeriğini yapıştırın — AI otomatik fiyat ve koşulları çıkarsın</p>
+    </div>
+  </div>
+  <div id="mailOkuAlani">
+    <textarea id="mailIcerik" rows="5" placeholder="Tedarikçiden gelen mail içeriğini buraya yapıştırın...&#10;(Konu satırı, fiyat, vade, teslimat bilgileri içeren herhangi bir format)"
+      class="w-full border border-gray-200 rounded-lg p-3 text-sm resize-y mb-3" style="font-family:monospace;font-size:12px"></textarea>
+    <button onclick="mailOku()" style="background:#0891b2;color:#fff;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;border:none;cursor:pointer">
+      🔍 AI ile Oku
+    </button>
+  </div>
+  <!-- Sonuç alanı -->
+  <div id="mailOkuSonuc" style="display:none;margin-top:16px;background:#f0fdff;border:1px solid #a5f3fc;border-radius:8px;padding:16px">
+    <h4 class="font-semibold text-gray-800 text-sm mb-3">✅ AI Sonucu — Onaylayın ve Ekleyin:</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:3px">Tedarikçi</label>
+        <select id="r_tedarikci" class="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+          <option value="">— Seç —</option>
+          {% for t in tedarikciler %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+        </select>
+        <div id="r_tedarikci_adi" class="text-xs text-gray-400 mt-1"></div>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:3px">Birim Fiyat</label>
+        <input type="number" id="r_fiyat" step="0.01" class="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:3px">Para Birimi</label>
+        <select id="r_para" class="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+          <option>TL</option><option>EUR</option><option>USD</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:3px">Vade (gün)</label>
+        <input type="number" id="r_vade" class="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:3px">Termin (gün)</label>
+        <input type="number" id="r_termin" class="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:3px">Güven Skoru</label>
+        <div id="r_guven" class="text-sm font-semibold mt-1"></div>
+      </div>
+    </div>
+    <div>
+      <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:3px">Notlar</label>
+      <input type="text" id="r_notlar" class="w-full border border-gray-200 rounded px-2 py-1.5 text-sm">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button onclick="mailOkuTeklifEkle()"
+        style="background:#0891b2;color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer">
+        ✓ Bu Teklifi Ekle
+      </button>
+      <button onclick="document.getElementById('mailOkuSonuc').style.display='none'"
+        style="padding:8px 16px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;cursor:pointer;background:#fff">
+        İptal
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- AI PDF Yükleme -->
 {% if grup.durum != 'secildi' %}
 <div class="card p-6 mb-4" style="border-left:3px solid #7c3aed">
@@ -161,4 +292,71 @@
   </form>
 </div>
 {% endif %}
+<script>
+// Mailto menüsünü dışarı tıklayınca kapat
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('mailtoWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const menu = document.getElementById('mailtoMenu');
+    if (menu) menu.style.display = 'none';
+  }
+});
+
+// AI Tavsiye
+async function aiTavsiyeAl() {
+  const btn = document.getElementById('aiTavsiyeBtn');
+  const kutu = document.getElementById('aiTavsiyeMetin');
+  btn.textContent = '⟳ Analiz ediliyor...';
+  btn.disabled = true;
+  kutu.style.display = 'block';
+  kutu.textContent = 'AI teklifleri değerlendiriyor...';
+  const r = await fetch('{{ url_for("satin_alma.teklif_ai_tavsiye", grup_id=grup.id) }}');
+  const d = await r.json();
+  kutu.textContent = d.tavsiye || 'Tavsiye alınamadı.';
+  btn.textContent = '↺ Tekrar Analiz';
+  btn.disabled = false;
+}
+
+// Mail Oku
+async function mailOku() {
+  const icerik = document.getElementById('mailIcerik').value.trim();
+  if (!icerik) { alert('Mail içeriği boş'); return; }
+  const btn = event.target;
+  btn.textContent = '⟳ Okuyorum...'; btn.disabled = true;
+  const fd = new FormData();
+  fd.append('mail_icerik', icerik);
+  const r = await fetch('{{ url_for("satin_alma.teklif_mail_oku", grup_id=grup.id) }}', {method:'POST', body:fd});
+  const d = await r.json();
+  btn.textContent = '🔍 AI ile Oku'; btn.disabled = false;
+  if (!d.ok) { alert('Hata: ' + d.hata); return; }
+  // Formu doldur
+  if (d.tedarikci_id) {
+    document.getElementById('r_tedarikci').value = d.tedarikci_id;
+  }
+  document.getElementById('r_tedarikci_adi').textContent = d.tedarikci_adi ? `AI: "${d.tedarikci_adi}"` : '';
+  if (d.birim_fiyat) document.getElementById('r_fiyat').value = d.birim_fiyat;
+  if (d.para_birimi) document.getElementById('r_para').value = d.para_birimi;
+  if (d.vade_gun) document.getElementById('r_vade').value = d.vade_gun;
+  if (d.termin_gun) document.getElementById('r_termin').value = d.termin_gun;
+  document.getElementById('r_notlar').value = d.notlar || '';
+  const guven = Math.round((d.guven || 0.5) * 100);
+  const guvenEl = document.getElementById('r_guven');
+  guvenEl.textContent = guven + '%';
+  guvenEl.style.color = guven >= 80 ? '#16a34a' : guven >= 60 ? '#d97706' : '#dc2626';
+  document.getElementById('mailOkuSonuc').style.display = 'block';
+}
+
+// Mail Oku → Teklif Ekle
+async function mailOkuTeklifEkle() {
+  const fd = new FormData();
+  fd.append('tedarikci_id', document.getElementById('r_tedarikci').value);
+  fd.append('birim_fiyat', document.getElementById('r_fiyat').value);
+  fd.append('para_birimi', document.getElementById('r_para').value);
+  fd.append('vade_gun', document.getElementById('r_vade').value);
+  fd.append('notlar', document.getElementById('r_notlar').value + ' [AI-mail]');
+  fd.append('kaynak', 'mail');
+  const r = await fetch('{{ url_for("satin_alma.teklif_kalem_ekle", grup_id=grup.id) }}', {method:'POST', body:fd});
+  if (r.redirected || r.ok) { location.reload(); }
+}
+</script>
 {% endblock %}

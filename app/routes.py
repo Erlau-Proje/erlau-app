@@ -1323,6 +1323,9 @@ def teklif_kalem_ekle(grup_id):
     grup = TeklifGrubu.query.get_or_404(grup_id)
     birim_fiyat = request.form.get('birim_fiyat')
     vade_gun = request.form.get('vade_gun')
+    kaynak = request.form.get('kaynak', 'manuel')
+    if kaynak not in ('manuel', 'pdf', 'excel', 'mail'):
+        kaynak = 'manuel'
     kalem = TeklifKalem(
         grup_id=grup_id,
         tedarikci_id=request.form.get('tedarikci_id') or None,
@@ -1330,7 +1333,7 @@ def teklif_kalem_ekle(grup_id):
         para_birimi=request.form.get('para_birimi', 'TL'),
         vade_gun=int(vade_gun) if vade_gun else None,
         notlar=request.form.get('notlar'),
-        kaynak='manuel',
+        kaynak=kaynak,
     )
     db.session.add(kalem)
     if grup.durum == 'bekliyor':
@@ -1420,6 +1423,396 @@ def teklif_ai_yukle(grup_id):
     db.session.commit()
     flash(f'AI teklif analizi tamamlandı — güven skoru: {veri.get("guven_skoru", 0):.0%}', 'success')
     return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
+
+# ─── YENİ TEKLİF ÖZELLİKLERİ ────────────────────────────────────────────────
+
+@satin_alma.route('/kalem/<int:kalem_id>/cogalt', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def kalem_cogalt(kalem_id):
+    """Bir talep kalemini en fazla 4 kopyaya çoğaltır (farklı tedarikçi için)."""
+    kaynak = TalepKalem.query.get_or_404(kalem_id)
+    # parent_kalem_id'si olan kopyayı çoğaltmaya izin verme
+    ana_id = kaynak.parent_kalem_id or kaynak.id
+    mevcut_kopya = TalepKalem.query.filter_by(parent_kalem_id=ana_id).count()
+    if mevcut_kopya >= 3:  # orijinal + 3 kopya = 4
+        return jsonify({'ok': False, 'hata': 'Bir kalem için en fazla 3 kopya oluşturulabilir.'}), 400
+    kopya = TalepKalem(
+        talep_id=kaynak.talep_id,
+        parent_kalem_id=ana_id,
+        malzeme_adi=kaynak.malzeme_adi,
+        marka_model=kaynak.marka_model,
+        malzeme_turu=kaynak.malzeme_turu,
+        birim=kaynak.birim,
+        miktar=kaynak.miktar,
+        hedef=kaynak.hedef,
+        kullanim_amaci=kaynak.kullanim_amaci,
+        kullanilan_alan=kaynak.kullanilan_alan,
+        proje_makine=kaynak.proje_makine,
+        aciklama=kaynak.aciklama,
+        teknik_resim_kodu=kaynak.teknik_resim_kodu,
+        standart=kaynak.standart,
+    )
+    db.session.add(kopya)
+    db.session.commit()
+    return jsonify({'ok': True, 'kopya_id': kopya.id})
+
+
+@satin_alma.route('/kalem/<int:kalem_id>/kopya-sil', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def kalem_kopya_sil(kalem_id):
+    kalem = TalepKalem.query.get_or_404(kalem_id)
+    if not kalem.parent_kalem_id:
+        return jsonify({'ok': False, 'hata': 'Orijinal kalem silinemez'}), 400
+    talep_id = kalem.talep_id
+    db.session.delete(kalem)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@satin_alma.route('/teklif/<int:grup_id>/excel')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_excel(grup_id):
+    """Tedarikçiye gönderilecek RFQ Excel şablonu oluşturur."""
+    import io, os
+    from flask import send_file
+    import openpyxl
+    from openpyxl.styles import (Font, PatternFill, Alignment, Border, Side,
+                                  GradientFill)
+    from openpyxl.utils import get_column_letter
+    from datetime import date
+
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    kalem = grup.talep_kalem
+    talep = kalem.talep if kalem else None
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Teklif Talebi"
+
+    # Renk paleti
+    YESIL = "1B5E20"
+    ACIK_YESIL = "C8E6C9"
+    GRI = "F5F5F5"
+    KOYU_GRI = "455A64"
+    BEYAZ = "FFFFFF"
+
+    def stil(ws, cell, bold=False, size=11, color=None, bg=None, align='left',
+             wrap=False, border=False, italic=False):
+        c = ws[cell] if isinstance(cell, str) else cell
+        c.font = Font(bold=bold, size=size, color=color or "000000",
+                      name="Calibri", italic=italic)
+        if bg:
+            c.fill = PatternFill("solid", fgColor=bg)
+        c.alignment = Alignment(horizontal=align, vertical='center',
+                                 wrap_text=wrap)
+        if border:
+            thin = Side(style='thin', color='BDBDBD')
+            c.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    # Sütun genişlikleri
+    for col, w in [('A',5),('B',28),('C',14),('D',10),('E',16),('F',14),
+                   ('G',14),('H',14),('I',22)]:
+        ws.column_dimensions[col].width = w
+
+    # Başlık alanı (1-5. satırlar)
+    ws.row_dimensions[1].height = 8
+    ws.row_dimensions[2].height = 42
+    ws.row_dimensions[3].height = 20
+    ws.row_dimensions[4].height = 20
+    ws.row_dimensions[5].height = 14
+
+    ws.merge_cells('B2:D4')
+    ws['B2'] = 'ERLAU'
+    ws['B2'].font = Font(bold=True, size=28, color=YESIL, name='Calibri')
+    ws['B2'].alignment = Alignment(horizontal='left', vertical='center')
+    ws['B2'].fill = PatternFill("solid", fgColor=BEYAZ)
+
+    ws.merge_cells('E2:I2')
+    ws['E2'] = 'TEKLİF TALEBİ / REQUEST FOR QUOTATION'
+    stil(ws, 'E2', bold=True, size=14, color=BEYAZ, bg=YESIL, align='center')
+
+    ws.merge_cells('E3:I3')
+    ws['E3'] = f'Tarih / Date: {date.today().strftime("%d.%m.%Y")}'
+    stil(ws, 'E3', size=10, color=KOYU_GRI, bg=GRI, align='right')
+
+    ws.merge_cells('E4:I4')
+    teklif_no = grup.teklif_no or 'TKL-XXX'
+    siparis_no = talep.siparis_no if talep else ''
+    ws['E4'] = f'Teklif No / RFQ No: {teklif_no}  |  Sipariş: {siparis_no}'
+    stil(ws, 'E4', size=10, color=KOYU_GRI, bg=GRI, align='right')
+
+    # Firma Bilgisi
+    ws.row_dimensions[6].height = 18
+    ws.row_dimensions[7].height = 16
+    ws.row_dimensions[8].height = 14
+
+    ws.merge_cells('B6:I6')
+    ws['B6'] = 'Erlau Makine İmalat San. Tic. A.Ş. | erlau.com.tr'
+    stil(ws, 'B6', size=9, color='757575', italic=True)
+
+    # Boşluk
+    ws.row_dimensions[9].height = 10
+
+    # Malzeme Başlığı
+    ws.row_dimensions[10].height = 26
+    ws.merge_cells('B10:I10')
+    ws['B10'] = 'TALEP EDİLEN MALZEME / REQUESTED ITEM'
+    stil(ws, 'B10', bold=True, size=12, color=BEYAZ, bg=YESIL, align='center')
+
+    # Malzeme Detayları başlıkları
+    headers = ['#', 'Malzeme Adı / Material', 'Marka/Model', 'Miktar', 'Birim',
+               'Teknik Resim', 'Standart', 'Açıklama', 'Proje/Makine']
+    ws.row_dimensions[11].height = 20
+    for i, h in enumerate(headers):
+        col = get_column_letter(i + 1)
+        if col == 'A': col_idx = 1
+        else: col_idx = i + 1
+        c = ws.cell(row=11, column=col_idx, value=h)
+        stil(ws, c, bold=True, size=9, color=BEYAZ, bg=KOYU_GRI,
+             align='center', border=True)
+
+    # Malzeme Satırı
+    ws.row_dimensions[12].height = 40
+    vals = [
+        1,
+        kalem.malzeme_adi if kalem else '',
+        kalem.marka_model or '' if kalem else '',
+        kalem.miktar or '',
+        kalem.birim or '' if kalem else '',
+        kalem.teknik_resim_kodu or '' if kalem else '',
+        kalem.standart or '' if kalem else '',
+        kalem.aciklama or '' if kalem else '',
+        kalem.proje_makine or '' if kalem else '',
+    ]
+    for i, v in enumerate(vals):
+        c = ws.cell(row=12, column=i+1, value=v)
+        bg = ACIK_YESIL if i == 1 else GRI
+        stil(ws, c, size=10, bg=bg, align='center' if i not in [1,2,8] else 'left',
+             wrap=True, border=True)
+
+    # Boşluk
+    ws.row_dimensions[13].height = 10
+
+    # TEDARİKÇİ DOLDURMA ALANI
+    ws.row_dimensions[14].height = 26
+    ws.merge_cells('B14:I14')
+    ws['B14'] = 'TEDARİKÇİ TEKLİF ALANI / SUPPLIER QUOTATION AREA  ← Lütfen doldurunuz / Please fill in'
+    stil(ws, 'B14', bold=True, size=11, color=YESIL, bg='FFF9C4', align='center')
+
+    teklif_headers = ['#', 'Malzeme Adı', 'Birim Fiyat\n(Unit Price)', 'Para Birimi\n(Currency)',
+                       'Toplam\n(Total)', 'Vade (gün)\n(Payment Days)',
+                       'Termin (gün)\n(Lead Days)', 'Teklif Geçerlilik\n(Validity)', 'Notlar / Notes']
+    ws.row_dimensions[15].height = 32
+    for i, h in enumerate(teklif_headers):
+        c = ws.cell(row=15, column=i+1, value=h)
+        stil(ws, c, bold=True, size=9, color=BEYAZ, bg="1565C0",
+             align='center', wrap=True, border=True)
+
+    # Boş doldurma satırları
+    for row in range(16, 19):
+        ws.row_dimensions[row].height = 24
+        for col in range(1, 10):
+            c = ws.cell(row=row, column=col)
+            c.value = 1 if col == 1 else (kalem.malzeme_adi if col == 2 and kalem else '')
+            stil(ws, c, size=10, bg="E3F2FD" if col > 2 else GRI,
+                 align='center', border=True)
+
+    # Son not
+    ws.row_dimensions[20].height = 10
+    ws.row_dimensions[21].height = 18
+    ws.merge_cells('B21:I21')
+    ws['B21'] = f'Lütfen teklifinizi {teklif_no} referans numarası ile gönderin. | Please reply with reference no: {teklif_no}'
+    stil(ws, 'B21', size=9, color='757575', italic=True)
+
+    ws.row_dimensions[22].height = 16
+    ws.merge_cells('B22:I22')
+    ws['B22'] = 'Erlau Makine | Satınalma Departmanı | satinalma@erlau.com.tr'
+    stil(ws, 'B22', size=9, color='757575', italic=True)
+
+    # Print area
+    ws.print_area = 'A1:J23'
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToPage = True
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    # Konu başlığını kaydet
+    if not grup.konu_basligi:
+        malzeme_kisa = (kalem.malzeme_adi[:30] if kalem else 'Malzeme').replace(' ', '_')
+        grup.konu_basligi = f'[ERLAU TEKLIF] {teklif_no} - {kalem.malzeme_adi[:40] if kalem else ""}'
+        db.session.commit()
+
+    dosya_adi = f'Teklif_Talebi_{teklif_no}.xlsx'
+    return send_file(output, as_attachment=True, download_name=dosya_adi,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+@satin_alma.route('/teklif/<int:grup_id>/mailto')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_mailto(grup_id):
+    """Tedarikçi için Outlook taslağı oluşturur (mailto: redirect)."""
+    import urllib.parse
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    kalem = grup.talep_kalem
+    talep = kalem.talep if kalem else None
+    tedarikci_id = request.args.get('tedarikci_id', type=int)
+
+    tedarikci = Tedarikci.query.get(tedarikci_id) if tedarikci_id else None
+    email = tedarikci.email if tedarikci else ''
+
+    konu = grup.konu_basligi or f'[ERLAU TEKLIF] {grup.teklif_no} - {kalem.malzeme_adi[:40] if kalem else ""}'
+    if not grup.konu_basligi:
+        grup.konu_basligi = konu
+        db.session.commit()
+
+    malzeme_adi = kalem.malzeme_adi if kalem else '-'
+    miktar = f"{kalem.miktar} {kalem.birim or ''}" if kalem and kalem.miktar else '-'
+    siparis_no = talep.siparis_no if talep else '-'
+    tedarikci_adi = tedarikci.name if tedarikci else 'Sayın Yetkili'
+
+    govde = f"""Sayın {tedarikci_adi},
+
+Aşağıda belirtilen malzeme/malzemeler için fiyat teklifinizi bekliyoruz.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TALEP BİLGİSİ / REQUEST INFO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Referans No  : {konu}
+Sipariş No   : {siparis_no}
+Malzeme      : {malzeme_adi}
+Miktar       : {miktar}
+{f"Marka/Model  : {kalem.marka_model}" if kalem and kalem.marka_model else ""}
+{f"Teknik Resim : {kalem.teknik_resim_kodu}" if kalem and kalem.teknik_resim_kodu else ""}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Lütfen teklifinizde aşağıdakileri belirtiniz:
+  ✓ Birim fiyat ve para birimi
+  ✓ Vade gün sayısı
+  ✓ Termin / Teslim süresi
+  ✓ Teklif geçerlilik süresi
+
+Ekte RFQ (Teklif Talep) Excel formu bulunmaktadır.
+Teklifinizi bu form üzerinden veya mail yanıtı olarak iletebilirsiniz.
+
+Teşekkürler,
+Erlau Satınalma Departmanı
+"""
+
+    mailto_url = f"mailto:{email}?subject={urllib.parse.quote(konu)}&body={urllib.parse.quote(govde)}"
+    from flask import redirect as flask_redirect
+    return flask_redirect(mailto_url)
+
+
+@satin_alma.route('/teklif/<int:grup_id>/mail-oku', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_mail_oku(grup_id):
+    """AI ile gelen teklif mailini parse eder."""
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    kalem = grup.talep_kalem
+    mail_icerik = request.form.get('mail_icerik', '').strip()
+    if not mail_icerik:
+        return jsonify({'ok': False, 'hata': 'Mail içeriği boş'}), 400
+    try:
+        import anthropic, os, json as _json
+        client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+        prompt = f"""Aşağıdaki tedarikçi teklif mailini analiz et ve JSON döndür.
+
+Talep edilen malzeme: {kalem.malzeme_adi if kalem else 'bilinmiyor'}
+Talep miktarı: {f'{kalem.miktar} {kalem.birim}' if kalem and kalem.miktar else 'bilinmiyor'}
+
+Mail içeriği:
+---
+{mail_icerik[:3000]}
+---
+
+Sadece JSON döndür, başka hiçbir şey yazma:
+{{
+  "tedarikci_adi": "string veya null",
+  "tedarikci_email": "string veya null",
+  "birim_fiyat": number veya null,
+  "para_birimi": "TL|EUR|USD",
+  "vade_gun": number veya null,
+  "termin_gun": number veya null,
+  "teklif_gecerlilik_gun": number veya null,
+  "notlar": "string",
+  "guven_skoru": 0.0-1.0
+}}"""
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=500,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        metin = msg.content[0].text.strip()
+        import re
+        m = re.search(r'\{.*\}', metin, re.DOTALL)
+        veri = _json.loads(m.group()) if m else {}
+    except Exception as e:
+        return jsonify({'ok': False, 'hata': str(e)}), 500
+
+    # Tedarikçi eşleştir
+    tedarikci_id = None
+    if veri.get('tedarikci_email'):
+        t = Tedarikci.query.filter_by(email=veri['tedarikci_email']).first()
+        if t: tedarikci_id = t.id
+    if not tedarikci_id and veri.get('tedarikci_adi'):
+        from sqlalchemy import func
+        t = Tedarikci.query.filter(
+            func.lower(Tedarikci.name).contains(veri['tedarikci_adi'].lower()[:20])
+        ).first()
+        if t: tedarikci_id = t.id
+
+    return jsonify({
+        'ok': True,
+        'tedarikci_id': tedarikci_id,
+        'tedarikci_adi': veri.get('tedarikci_adi'),
+        'birim_fiyat': veri.get('birim_fiyat'),
+        'para_birimi': veri.get('para_birimi', 'TL'),
+        'vade_gun': veri.get('vade_gun'),
+        'termin_gun': veri.get('termin_gun'),
+        'notlar': veri.get('notlar', ''),
+        'guven': veri.get('guven_skoru', 0.5)
+    })
+
+
+@satin_alma.route('/teklif/<int:grup_id>/ai-tavsiye')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_ai_tavsiye(grup_id):
+    """AI en iyi teklifi analiz eder ve tavsiye verir."""
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    if len(grup.kalemler) < 2:
+        return jsonify({'ok': False, 'tavsiye': 'Karşılaştırma için en az 2 teklif gereklidir.'})
+    kalem = grup.talep_kalem
+    miktar = kalem.miktar if kalem and kalem.miktar else 1
+    teklif_listesi_str = ""
+    for i, tk in enumerate(grup.kalemler):
+        toplam = (tk.birim_fiyat or 0) * miktar
+        teklif_listesi_str += f"{i+1}. {tk.tedarikci.name if tk.tedarikci else 'Bilinmiyor'}: {tk.birim_fiyat} {tk.para_birimi}, Vade: {tk.vade_gun or '?'} gün, Toplam: {toplam:.2f} {tk.para_birimi}, Not: {tk.notlar or '-'}\n"
+    try:
+        import anthropic, os
+        client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=300,
+            messages=[{'role': 'user', 'content': f"""Satın alma teklifleri karşılaştırması:
+Malzeme: {kalem.malzeme_adi if kalem else 'bilinmiyor'}, Miktar: {miktar} {kalem.birim if kalem else ''}
+
+{teklif_listesi_str}
+
+Kısa ve net değerlendir (3-4 cümle): En uygun seçenek hangisi ve neden? TL cinsinden toplam maliyet ve vade süresini de göz önünde bulundur. Türkçe yaz."""}]
+        )
+        tavsiye = msg.content[0].text.strip()
+    except Exception as e:
+        tavsiye = f'AI analiz yapılamadı: {e}'
+    return jsonify({'ok': True, 'tavsiye': tavsiye})
 
 
 # ─── MUHASEBE ────────────────────────────────────────────────────────────────

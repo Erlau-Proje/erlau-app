@@ -63,6 +63,7 @@ class TalepFormu(db.Model):
 class TalepKalem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     talep_id = db.Column(db.Integer, db.ForeignKey('talep_formu.id'), index=True)
+    parent_kalem_id = db.Column(db.Integer, db.ForeignKey('talep_kalem.id'), nullable=True)
     malzeme_adi = db.Column(db.String(200), nullable=False, index=True)
     marka_model = db.Column(db.String(200))
     malzeme_turu = db.Column(db.String(50), index=True)
@@ -187,6 +188,7 @@ class TeklifGrubu(db.Model):
     talep_kalem_id = db.Column(db.Integer, db.ForeignKey('talep_kalem.id'), nullable=False)
     talep_kalem = db.relationship('TalepKalem', foreign_keys=[talep_kalem_id], backref='teklif_gruplari')
     durum = db.Column(db.String(30), default='bekliyor')  # bekliyor, teklif_alindi, secildi
+    konu_basligi = db.Column(db.Text)   # Outlook mail subject for tracking
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     kalemler = db.relationship('TeklifKalem', backref='grup', lazy=True, cascade='all, delete-orphan')
 
