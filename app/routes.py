@@ -1877,6 +1877,273 @@ Kısa ve net değerlendir (3-4 cümle): En uygun seçenek hangisi ve neden? TL c
     return jsonify({'ok': True, 'tavsiye': tavsiye})
 
 
+# ─── SİPARİŞ FORMU (PO) ──────────────────────────────────────────────────────
+
+def _generate_po_no():
+    from datetime import date
+    prefix = f"PO-{date.today().strftime('%Y%m%d')}"
+    son = TeklifGrubu.query.filter(TeklifGrubu.po_no.like(f'{prefix}%')).count()
+    return f"{prefix}-{son+1:03d}"
+
+
+@satin_alma.route('/teklif/<int:grup_id>/po-pdf')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_po_pdf(grup_id):
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph, HRFlowable
+    from reportlab.graphics.renderPDF import Drawing
+    from reportlab.graphics.shapes import String
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import ParagraphStyle
+    import io as _io
+
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    if grup.durum != 'secildi':
+        flash('Önce bir teklif seçilmelidir.', 'danger')
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
+    kazanan = next((k for k in grup.kalemler if k.secildi), None)
+    if not kazanan:
+        flash('Seçili teklif bulunamadı.', 'danger')
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
+    talep_kalem = grup.talep_kalem
+    talep = talep_kalem.talep if talep_kalem else None
+    tedarikci = kazanan.tedarikci
+
+    # PO no oluştur (yoksa)
+    if not grup.po_no:
+        grup.po_no = _generate_po_no()
+        db.session.commit()
+
+    _register_fonts()
+    FONT = 'DejaVu' if _fonts_registered else 'Helvetica'
+    FONT_BOLD = 'DejaVu-Bold' if _fonts_registered else 'Helvetica-Bold'
+
+    buffer = _io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+        leftMargin=1.5*cm, rightMargin=1.5*cm,
+        topMargin=1.5*cm, bottomMargin=2*cm)
+
+    PAGE_W = A4[0] - 3*cm
+    elements = []
+
+    N = ParagraphStyle('n', fontName=FONT, fontSize=9, leading=13)
+    B = ParagraphStyle('b', fontName=FONT_BOLD, fontSize=9, leading=13)
+    BIG = ParagraphStyle('big', fontName=FONT_BOLD, fontSize=14, leading=18)
+    SMALL = ParagraphStyle('sm', fontName=FONT, fontSize=8, leading=11, textColor=colors.grey)
+
+    # ── Başlık ──
+    logo_draw = Drawing(120, 36)
+    logo_draw.add(String(0, 12, 'ERLAU', fontSize=26, fontName='Helvetica-Bold', fillColor=colors.HexColor('#3a8a00')))
+    logo_draw.add(String(1, 3, 'EINE MARKE DER RUD GRUPPE', fontSize=6, fontName='Helvetica-Bold', fillColor=colors.black))
+
+    header = Table([[logo_draw, Paragraph('SİPARİŞ FORMU', BIG)]], colWidths=[5*cm, PAGE_W-5*cm])
+    header.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (1,0), (1,0), 'RIGHT'),
+    ]))
+    elements.append(header)
+    elements.append(HRFlowable(width='100%', thickness=2, color=colors.HexColor('#3a8a00'), spaceAfter=8))
+
+    # ── PO Bilgileri + Tedarikçi ──
+    po_tarih = grup.po_tarihi.strftime('%d.%m.%Y') if grup.po_tarihi else datetime.utcnow().strftime('%d.%m.%Y')
+    talep_no = talep.siparis_no if talep else '-'
+
+    sol = [
+        [Paragraph('<b>Sipariş No (PO):</b>', B), Paragraph(grup.po_no or '-', N)],
+        [Paragraph('<b>Talep No:</b>', B), Paragraph(talep_no, N)],
+        [Paragraph('<b>Tarih:</b>', B), Paragraph(po_tarih, N)],
+        [Paragraph('<b>Satınalma Sorumlusu:</b>', B), Paragraph(current_user.name, N)],
+    ]
+    sol_t = Table(sol, colWidths=[4.5*cm, 5.5*cm])
+    sol_t.setStyle(TableStyle([('FONTNAME',(0,0),(-1,-1),FONT),('FONTSIZE',(0,0),(-1,-1),9),('PADDING',(0,0),(-1,-1),3)]))
+
+    ted_bilgi = f"<b>{tedarikci.name if tedarikci else '—'}</b>"
+    if tedarikci and tedarikci.unvan: ted_bilgi += f"<br/>{tedarikci.unvan}"
+    if tedarikci and tedarikci.adres: ted_bilgi += f"<br/>{tedarikci.adres}"
+    if tedarikci and tedarikci.email: ted_bilgi += f"<br/>{tedarikci.email}"
+    if tedarikci and tedarikci.telefon: ted_bilgi += f"<br/>{tedarikci.telefon}"
+    if tedarikci and tedarikci.vergi_no: ted_bilgi += f"<br/>Vergi No: {tedarikci.vergi_no}"
+
+    sag = [[Paragraph('<b>TEDARİKÇİ</b>', B)], [Paragraph(ted_bilgi, N)]]
+    sag_t = Table(sag, colWidths=[8*cm])
+    sag_t.setStyle(TableStyle([
+        ('BOX',(0,0),(-1,-1),0.5,colors.grey),
+        ('BACKGROUND',(0,0),(0,0),colors.HexColor('#f0fdf4')),
+        ('PADDING',(0,0),(-1,-1),5),
+    ]))
+
+    iki_kolon = Table([[sol_t, sag_t]], colWidths=[10*cm, PAGE_W-10*cm])
+    iki_kolon.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('PADDING',(0,0),(-1,-1),0)]))
+    elements.append(iki_kolon)
+    elements.append(Spacer(1, 0.5*cm))
+
+    # ── Malzeme Tablosu ──
+    miktar = talep_kalem.miktar if talep_kalem else 0
+    toplam = (kazanan.birim_fiyat or 0) * (miktar or 0)
+
+    mal_data = [
+        ['#', 'Malzeme Adı', 'Marka/Model', 'Miktar', 'Birim', 'Br. Fiyat', 'Para Birimi', 'Toplam'],
+        [
+            '1',
+            talep_kalem.malzeme_adi if talep_kalem else '-',
+            talep_kalem.marka_model or '-' if talep_kalem else '-',
+            str(miktar or '-'),
+            talep_kalem.birim or '-' if talep_kalem else '-',
+            f"{kazanan.birim_fiyat:.2f}" if kazanan.birim_fiyat else '-',
+            kazanan.para_birimi or 'TL',
+            f"{toplam:.2f}" if kazanan.birim_fiyat and miktar else '-',
+        ]
+    ]
+    mal_t = Table(mal_data, colWidths=[0.8*cm, 5.5*cm, 3*cm, 1.5*cm, 1.5*cm, 2*cm, 2*cm, 2.2*cm])
+    mal_t.setStyle(TableStyle([
+        ('FONTNAME',(0,0),(-1,-1),FONT),
+        ('FONTNAME',(0,0),(-1,0),FONT_BOLD),
+        ('FONTSIZE',(0,0),(-1,-1),9),
+        ('BACKGROUND',(0,0),(-1,0),colors.HexColor('#2d7a3a')),
+        ('TEXTCOLOR',(0,0),(-1,0),colors.white),
+        ('GRID',(0,0),(-1,-1),0.5,colors.grey),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white]),
+        ('PADDING',(0,0),(-1,-1),5),
+        ('ALIGN',(3,0),(-1,-1),'CENTER'),
+        ('ALIGN',(5,1),(-1,-1),'RIGHT'),
+    ]))
+    elements.append(mal_t)
+    elements.append(Spacer(1, 0.4*cm))
+
+    # ── Toplam Satırı ──
+    toplam_t = Table([
+        ['', '', '', '', '', '', Paragraph('<b>GENEL TOPLAM:</b>', B), Paragraph(f"<b>{toplam:.2f} {kazanan.para_birimi or 'TL'}</b>", B)]
+    ], colWidths=[0.8*cm, 5.5*cm, 3*cm, 1.5*cm, 1.5*cm, 2*cm, 2*cm, 2.2*cm])
+    toplam_t.setStyle(TableStyle([
+        ('FONTNAME',(0,0),(-1,-1),FONT),
+        ('FONTSIZE',(0,0),(-1,-1),9),
+        ('ALIGN',(6,0),(7,0),'RIGHT'),
+        ('PADDING',(0,0),(-1,-1),4),
+    ]))
+    elements.append(toplam_t)
+    elements.append(Spacer(1, 0.4*cm))
+
+    # ── Koşullar ──
+    kosul_data = [
+        [Paragraph('<b>Ödeme Vadesi:</b>', B), Paragraph(f"{kazanan.vade_gun or '-'} gün", N),
+         Paragraph('<b>Termin / Teslimat:</b>', B), Paragraph(f"{kazanan.termin_gun or '-'} gün" if hasattr(kazanan,'termin_gun') and kazanan.termin_gun else '-', N)],
+        [Paragraph('<b>Notlar:</b>', B), Paragraph(kazanan.notlar or '-', N), '', ''],
+    ]
+    kosul_t = Table(kosul_data, colWidths=[3.5*cm, 6*cm, 3.5*cm, 5.5*cm])
+    kosul_t.setStyle(TableStyle([
+        ('FONTNAME',(0,0),(-1,-1),FONT),
+        ('FONTSIZE',(0,0),(-1,-1),9),
+        ('BOX',(0,0),(-1,-1),0.5,colors.grey),
+        ('INNERGRID',(0,0),(-1,-1),0.3,colors.HexColor('#e5e7eb')),
+        ('PADDING',(0,0),(-1,-1),5),
+        ('SPAN',(1,1),(3,1)),
+    ]))
+    elements.append(kosul_t)
+    elements.append(Spacer(1, 0.4*cm))
+
+    # ── Teslimat Adresi ──
+    adres_t = Table([
+        [Paragraph('<b>Teslimat Adresi:</b>', B),
+         Paragraph('Erlau Makine İmalat San. Tic. A.Ş.<br/>Organize Sanayi Bölgesi, Bursa / TÜRKİYE<br/>satinalma@erlau.com.tr', N)]
+    ], colWidths=[3.5*cm, PAGE_W-3.5*cm])
+    adres_t.setStyle(TableStyle([
+        ('FONTNAME',(0,0),(-1,-1),FONT),('FONTSIZE',(0,0),(-1,-1),9),
+        ('BOX',(0,0),(-1,-1),0.5,colors.grey),('PADDING',(0,0),(-1,-1),5),
+        ('BACKGROUND',(0,0),(0,0),colors.HexColor('#f9fafb')),
+    ]))
+    elements.append(adres_t)
+    elements.append(Spacer(1, 1.2*cm))
+
+    # ── İmza ──
+    imza_data = [
+        ['Hazırlayan', 'Onaylayan'],
+        [f'\n\n\n{current_user.name}', '\n\n\n'],
+        ['İmza / Tarih', 'İmza / Tarih'],
+    ]
+    imza_t = Table(imza_data, colWidths=[PAGE_W/2, PAGE_W/2])
+    imza_t.setStyle(TableStyle([
+        ('FONTNAME',(0,0),(-1,-1),FONT),('FONTSIZE',(0,0),(-1,-1),9),
+        ('FONTNAME',(0,0),(-1,0),FONT_BOLD),
+        ('GRID',(0,0),(-1,-1),0.5,colors.grey),
+        ('ALIGN',(0,0),(-1,-1),'CENTER'),
+        ('BACKGROUND',(0,0),(-1,0),colors.lightgrey),
+        ('PADDING',(0,0),(-1,-1),6),
+    ]))
+    elements.append(imza_t)
+
+    doc.build(elements)
+    buffer.seek(0)
+    response = make_response(buffer.read())
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'inline; filename=PO_{grup.po_no or grup.teklif_no}.pdf'
+    return response
+
+
+@satin_alma.route('/teklif/<int:grup_id>/po-mailto')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_po_mailto(grup_id):
+    import urllib.parse
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    kazanan = next((k for k in grup.kalemler if k.secildi), None)
+    if not kazanan:
+        flash('Seçili teklif yok.', 'danger')
+        return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
+    talep_kalem = grup.talep_kalem
+    tedarikci = kazanan.tedarikci
+    po_no = grup.po_no or grup.teklif_no
+    email = tedarikci.email if tedarikci else ''
+    tedarikci_adi = tedarikci.name if tedarikci else 'Sayın Yetkili'
+    malzeme = talep_kalem.malzeme_adi if talep_kalem else '-'
+    miktar = f"{talep_kalem.miktar} {talep_kalem.birim or ''}" if talep_kalem and talep_kalem.miktar else '-'
+    fiyat = f"{kazanan.birim_fiyat:.2f} {kazanan.para_birimi}" if kazanan.birim_fiyat else '-'
+
+    konu = f"[ERLAU SİPARİŞ] {po_no} - {malzeme[:40]}"
+    govde = f"""Sayın {tedarikci_adi},
+
+Aşağıda detayları yer alan siparişimizi iletiyoruz.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SİPARİŞ BİLGİSİ / PURCHASE ORDER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PO Numarası : {po_no}
+Malzeme     : {malzeme}
+Miktar      : {miktar}
+Birim Fiyat : {fiyat}
+Vade        : {kazanan.vade_gun or '-'} gün
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Sipariş formunu ekte bulabilirsiniz.
+Onayınızı ve tahmini teslimat tarihinizi bekliyoruz.
+
+Teşekkürler,
+{current_user.name}
+Erlau Satınalma Departmanı
+satinalma@erlau.com.tr
+"""
+    mailto = f"mailto:{email}?subject={urllib.parse.quote(konu)}&body={urllib.parse.quote(govde)}"
+    return redirect(mailto)
+
+
+@satin_alma.route('/teklif/<int:grup_id>/po-gonder', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_po_gonder(grup_id):
+    grup = TeklifGrubu.query.get_or_404(grup_id)
+    if not grup.po_no:
+        grup.po_no = _generate_po_no()
+    grup.po_tarihi = datetime.utcnow()
+    grup.po_gonderen_id = current_user.id
+    db.session.commit()
+    flash(f'Sipariş {grup.po_no} gönderildi olarak kaydedildi.', 'success')
+    return redirect(url_for('satin_alma.teklif_detay', grup_id=grup_id))
+
+
 # ─── MUHASEBE ────────────────────────────────────────────────────────────────
 
 IZINLI_MUHASEBE = ['muhasebe', 'satinalma', 'admin']

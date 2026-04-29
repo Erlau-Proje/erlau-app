@@ -160,6 +160,61 @@
 </div>
 {% endif %}
 
+<!-- ── SİPARİŞ FORMU (PO) ── -->
+{% if grup.durum == 'secildi' %}
+{% set kazanan = grup.kalemler | selectattr('secildi') | first %}
+<div class="card p-5 mb-4" style="border-left:4px solid #16a34a;background:#f0fdf4">
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div class="flex items-center gap-3">
+      <span style="font-size:22px">📦</span>
+      <div>
+        <h3 class="font-semibold text-gray-800 text-sm">Sipariş Formu (Purchase Order)</h3>
+        {% if grup.po_no %}
+        <p class="text-xs text-gray-500 mt-0.5">
+          <span class="font-mono font-semibold text-green-700">{{ grup.po_no }}</span>
+          {% if grup.po_tarihi %}
+          · Gönderildi: {{ grup.po_tarihi.strftime('%d.%m.%Y %H:%M') }} — {{ grup.po_gonderen.name if grup.po_gonderen else '' }}
+          {% endif %}
+        </p>
+        {% else %}
+        <p class="text-xs text-gray-400 mt-0.5">Sipariş formu henüz oluşturulmadı</p>
+        {% endif %}
+      </div>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      <!-- PO PDF -->
+      <a href="{{ url_for('satin_alma.teklif_po_pdf', grup_id=grup.id) }}" target="_blank"
+        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#dcfce7;color:#15803d;border-radius:8px;font-size:12.5px;font-weight:600;text-decoration:none;border:1px solid #86efac">
+        <svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        PO PDF İndir
+      </a>
+      <!-- Outlook -->
+      {% if kazanan and kazanan.tedarikci and kazanan.tedarikci.email %}
+      <a href="{{ url_for('satin_alma.teklif_po_mailto', grup_id=grup.id) }}"
+        style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#eff6ff;color:#1d4ed8;border-radius:8px;font-size:12.5px;font-weight:600;text-decoration:none;border:1px solid #bfdbfe">
+        <svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        Outlook'ta Aç
+      </a>
+      {% endif %}
+      <!-- Gönderildi kaydet -->
+      {% if not grup.po_tarihi %}
+      <form method="POST" action="{{ url_for('satin_alma.teklif_po_gonder', grup_id=grup.id) }}" class="inline"
+        onsubmit="return confirm('Sipariş gönderildi olarak kaydedilsin mi?')">
+        <button type="submit"
+          style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#15803d;color:#fff;border-radius:8px;font-size:12.5px;font-weight:600;border:none;cursor:pointer">
+          ✓ Gönderildi Olarak Kaydet
+        </button>
+      </form>
+      {% else %}
+      <span style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:#f0fdf4;color:#16a34a;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid #86efac">
+        ✓ Gönderildi
+      </span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- AI Karşılaştırma Tavsiyesi -->
 {% if grup.kalemler|length >= 2 %}
 <div class="card p-5 mb-4" style="border-left:3px solid #f59e0b;background:#fffbeb" id="aiTavsiyeKart">
