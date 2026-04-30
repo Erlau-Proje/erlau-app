@@ -10,13 +10,21 @@
 
 <form method="POST">
   <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden mb-4">
-    <div class="px-6 py-4 border-b border-gray-100">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
       <h2 class="font-medium text-gray-800">Kalemler</h2>
+      <button type="button" id="topluTeklifBtn" onclick="topluTeklifAl()"
+        class="hidden items-center gap-2 bg-purple-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-purple-700">
+        <svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <span id="topluTeklifLabel">Seçili Kalemlere Teklif Al</span>
+      </button>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-gray-50">
           <tr>
+            <th class="px-4 py-3 text-center w-8">
+              <input type="checkbox" id="hepsiniSec" onchange="hepsiniSecToggle(this)" class="rounded" title="Tümünü seç">
+            </th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 w-6">#</th>
             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Malzeme</th>
             <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Miktar</th>
@@ -36,6 +44,13 @@
         <tbody class="divide-y divide-gray-100" id="kalemTbody">
           {% for kalem in talep.kalemler %}
           <tr class="hover:bg-gray-50 {% if kalem.parent_kalem_id %}bg-orange-50{% endif %}" id="kalem-row-{{ kalem.id }}">
+            <td class="px-4 py-3 text-center">
+              {% if not kalem.teklif_gruplari %}
+              <input type="checkbox" class="kalem-cb rounded" value="{{ kalem.id }}" onchange="cbDegisti()">
+              {% else %}
+              <span title="Bu kalem için teklif zaten açık" class="text-purple-400 text-xs">✓</span>
+              {% endif %}
+            </td>
             <td class="px-4 py-3 text-gray-400 text-xs">
               {% if kalem.parent_kalem_id %}
               <span style="color:#f97316;font-weight:700">↳</span>
@@ -200,6 +215,39 @@ function genelToplamHesapla() {
 async function teklifAc(kalemId) {
   const r = await fetch(`/satinalma/teklif/yeni/${kalemId}`, {method: 'POST'});
   window.location.href = r.url;
+}
+
+function cbDegisti() {
+  const secili = Array.from(document.querySelectorAll('.kalem-cb:checked'));
+  const btn = document.getElementById('topluTeklifBtn');
+  const label = document.getElementById('topluTeklifLabel');
+  if (secili.length >= 2) {
+    btn.classList.remove('hidden');
+    btn.classList.add('flex');
+    label.textContent = `${secili.length} Kaleme Teklif Al`;
+  } else if (secili.length === 1) {
+    btn.classList.remove('hidden');
+    btn.classList.add('flex');
+    label.textContent = 'Seçili Kaleme Teklif Al';
+  } else {
+    btn.classList.add('hidden');
+    btn.classList.remove('flex');
+  }
+}
+
+function hepsiniSecToggle(master) {
+  document.querySelectorAll('.kalem-cb').forEach(cb => { cb.checked = master.checked; });
+  cbDegisti();
+}
+
+async function topluTeklifAl() {
+  const secili = Array.from(document.querySelectorAll('.kalem-cb:checked')).map(cb => cb.value);
+  if (secili.length === 0) return;
+  const fd = new FormData();
+  secili.forEach(id => fd.append('kalem_ids', id));
+  const r = await fetch('/satinalma/teklif/toplu-yeni', {method: 'POST', body: fd});
+  if (r.ok) window.location.href = r.url;
+  else alert('Hata oluştu.');
 }
 
 async function kalemCogalt(kalemId) {

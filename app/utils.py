@@ -1,3 +1,4 @@
+import random, string
 from app.models import Department, User, db
 from werkzeug.security import generate_password_hash
 
@@ -28,13 +29,9 @@ def create_default_data():
 import datetime
 
 def generate_siparis_no():
-    from app.models import TalepFormu
     now = datetime.datetime.now()
-    prefix = f"SP-{now.strftime('%Y%m%d%H%M%S')}"
-    count = TalepFormu.query.filter(
-        TalepFormu.siparis_no.like(f"{prefix}%")
-    ).count()
-    return f"{prefix}-{count+1:03d}"
+    rastgele = ''.join(random.choices(string.digits, k=4))
+    return f"SP-{now.strftime('%Y%m%d%H%M%S')}-{rastgele}"
 
 def generate_stok_kodu():
     from app.models import Malzeme

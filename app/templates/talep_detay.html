@@ -98,7 +98,7 @@
           {% endif %}
           {% if current_user.role in ['satinalma', 'admin'] or talep.talep_eden_id == current_user.id %}
           <td class="px-4 py-3 text-center">
-            <button type="button" onclick="modalAc({{ kalem.id }}, '{{ kalem.malzeme_adi|replace("'", "\\'") }}', {{ kalem.miktar or 0 }}, {{ kalem.br_fiyat or 0 }})"
+            <button type="button" onclick="modalAc({{ kalem.id }}, '{{ kalem.malzeme_adi|replace("'", "\\'") }}', '{{ (kalem.marka_model or '')|replace("'", "\\'") }}', '{{ kalem.malzeme_turu or '' }}', '{{ kalem.birim or '' }}', {{ kalem.miktar or 0 }}, '{{ kalem.hedef or 'siparis' }}', {{ kalem.br_fiyat or 0 }})"
               class="text-xs text-gray-400 hover:text-blue-600 border border-gray-200 hover:border-blue-300 px-2 py-1 rounded transition-colors">
               Düzenle
             </button>
@@ -112,24 +112,73 @@
 </div>
 <!-- Kalem Düzenleme Modalı -->
 <div id="kalemModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
-  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
-    <h3 class="font-semibold text-gray-800 mb-1">Kalem Düzenle</h3>
-    <p id="modalMalzeme" class="text-xs text-gray-400 mb-4"></p>
+  <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4">
+    <h3 class="font-semibold text-gray-800 mb-4">Kalem Düzenle</h3>
     <form id="kalemForm" method="POST">
-      {% if current_user.role in ['satinalma', 'admin'] %}
       <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Malzeme Adı</label>
+        <input type="text" name="malzeme_adi" id="modalMalzemeAdi"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
+          placeholder="Malzeme adı">
+      </div>
+      <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Marka / Model</label>
+        <input type="text" name="marka_model" id="modalMarkaModel"
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
+          placeholder="Marka / model">
+      </div>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Tür</label>
+          <select name="malzeme_turu" id="modalTur"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400">
+            <option value="Hammadde">Hammadde</option>
+            <option value="Sarf malzeme">Sarf malzeme</option>
+            <option value="Yedek parça">Yedek parça</option>
+            <option value="Ambalaj">Ambalaj</option>
+            <option value="Demirbaş">Demirbaş</option>
+            <option value="Fason">Fason</option>
+            <option value="Diğer">Diğer</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Birim</label>
+          <select name="birim" id="modalBirim"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400">
+            <option value="Adet">Adet</option>
+            <option value="KG">KG</option>
+            <option value="Boy">Boy</option>
+            <option value="M2">M2</option>
+            <option value="Metre">Metre</option>
+            <option value="Paket">Paket</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Miktar</label>
+          <input type="number" step="0.001" min="0.001" name="miktar" id="modalMiktar"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
+            placeholder="0">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Hedef</label>
+          <select name="hedef" id="modalHedef"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400">
+            <option value="siparis">Sipariş</option>
+            <option value="stok">Stok</option>
+            <option value="proje">Proje</option>
+          </select>
+        </div>
+      </div>
+      {% if current_user.role in ['satinalma', 'admin'] %}
+      <div class="mb-4">
         <label class="block text-xs font-medium text-gray-600 mb-1">Birim Fiyat</label>
         <input type="number" step="0.01" min="0" name="br_fiyat" id="modalBrFiyat"
           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
           placeholder="0.00">
       </div>
       {% endif %}
-      <div class="mb-4">
-        <label class="block text-xs font-medium text-gray-600 mb-1">Miktar</label>
-        <input type="number" step="0.001" min="0.001" name="miktar" id="modalMiktar"
-          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-400"
-          placeholder="0">
-      </div>
       <div class="flex gap-2 justify-end">
         <button type="button" onclick="modalKapat()"
           class="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">İptal</button>
@@ -141,9 +190,16 @@
 </div>
 
 <script>
-function modalAc(kalemId, malzemeAdi, miktar, brFiyat) {
-  document.getElementById('modalMalzeme').textContent = malzemeAdi;
+function modalAc(kalemId, malzemeAdi, markaModel, tur, birim, miktar, hedef, brFiyat) {
+  document.getElementById('modalMalzemeAdi').value = malzemeAdi || '';
+  document.getElementById('modalMarkaModel').value = markaModel || '';
+  const turEl = document.getElementById('modalTur');
+  if (turEl) { turEl.value = tur || 'Hammadde'; if (!turEl.value) turEl.value = 'Hammadde'; }
+  const birimEl = document.getElementById('modalBirim');
+  if (birimEl) { birimEl.value = birim || 'Adet'; if (!birimEl.value) birimEl.value = 'Adet'; }
   document.getElementById('modalMiktar').value = miktar || '';
+  const hedefEl = document.getElementById('modalHedef');
+  if (hedefEl) hedefEl.value = hedef || 'siparis';
   const brFiyatEl = document.getElementById('modalBrFiyat');
   if (brFiyatEl) brFiyatEl.value = brFiyat || '';
   document.getElementById('kalemForm').action = '/satinalma/kalem/' + kalemId + '/duzenle';

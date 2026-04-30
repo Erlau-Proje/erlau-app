@@ -1,0 +1,192 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-800">Toplu Teklif</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      {% if talep %}{{ talep.siparis_no }} · {{ talep.department.name if talep.department else '-' }} · {{ talep.talep_eden.name if talep.talep_eden else '-' }}{% endif %}
+      <span class="ml-2 text-gray-300">·</span>
+      <span class="ml-2 text-purple-600 font-medium">{{ gruplar|length }} kalem</span>
+    </p>
+  </div>
+  <div class="flex gap-2">
+    <a href="/satinalma/teklif/toplu/{{ batch_id }}/excel"
+       class="flex items-center gap-1 border border-green-400 text-green-700 text-sm px-3 py-2 rounded-lg hover:bg-green-50">
+      <svg style="width:14px;height:14px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Excel İndir
+    </a>
+    {% if talep %}
+    <a href="{{ url_for('satin_alma.fiyatlandir', talep_id=talep.id) }}" class="text-sm text-gray-500 hover:underline self-center">← Fiyatlandırmaya Dön</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Mevcut teklifler özeti -->
+{% set herhangi_teklif = gruplar | selectattr('kalemler') | list %}
+{% if herhangi_teklif %}
+<div class="bg-purple-50 border border-purple-100 rounded-xl p-4 mb-5">
+  <p class="text-sm font-medium text-purple-800 mb-3">Mevcut Teklifler</p>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-xs text-gray-500">
+          <th class="text-left pb-2">Malzeme</th>
+          <th class="text-left pb-2">Tedarikçi</th>
+          <th class="text-right pb-2">Birim Fiyat</th>
+          <th class="text-right pb-2">Toplam</th>
+          <th class="text-center pb-2">Detay</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-purple-100">
+        {% for grup in gruplar %}
+          {% for tk in grup.kalemler %}
+          <tr>
+            <td class="py-1.5 pr-4 text-gray-700">{{ grup.talep_kalem.malzeme_adi if grup.talep_kalem else '-' }}</td>
+            <td class="py-1.5 pr-4 text-gray-500">{{ tk.tedarikci.name if tk.tedarikci else '—' }}</td>
+            <td class="py-1.5 pr-4 text-right font-medium">{{ "%.2f"|format(tk.birim_fiyat) if tk.birim_fiyat else '—' }} {{ tk.para_birimi }}</td>
+            <td class="py-1.5 pr-4 text-right text-green-700 font-medium">
+              {% if tk.birim_fiyat and grup.talep_kalem and grup.talep_kalem.miktar %}
+                {{ "%.2f"|format(tk.birim_fiyat * grup.talep_kalem.miktar) }} {{ tk.para_birimi }}
+              {% else %}—{% endif %}
+            </td>
+            <td class="py-1.5 text-center">
+              <a href="{{ url_for('satin_alma.teklif_detay', grup_id=grup.id) }}" class="text-xs text-purple-600 hover:underline">detay →</a>
+            </td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Yeni teklif girişi -->
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden mb-5">
+  <div class="px-6 py-4 border-b border-gray-100">
+    <h2 class="font-medium text-gray-800">Yeni Teklif Ekle</h2>
+    <p class="text-xs text-gray-400 mt-0.5">Tedarikçiyi seç, her kalem için fiyat gir ve kaydet.</p>
+  </div>
+  <form method="POST" action="/satinalma/teklif/toplu/{{ batch_id }}/ekle">
+    <!-- Tedarikçi + ortak alanlar -->
+    <div class="px-6 py-4 border-b border-gray-100 bg-gray-50">
+      <div class="flex flex-wrap gap-4 items-end">
+        <div class="flex-1 min-w-48">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Tedarikçi <span class="text-red-500">*</span></label>
+          <select name="tedarikci_id" required
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-400">
+            <option value="">— Seçiniz —</option>
+            {% for t in tedarikciler %}
+            <option value="{{ t.id }}">{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="w-28">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Para Birimi</label>
+          <select name="para_birimi"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-400">
+            <option>TL</option>
+            <option>EUR</option>
+            <option>USD</option>
+          </select>
+        </div>
+        <div class="w-28">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Vade (gün)</label>
+          <input type="number" name="vade_gun" min="0" placeholder="30"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-400">
+        </div>
+      </div>
+    </div>
+
+    <!-- Kalem fiyat tablosu -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-100">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500">Malzeme</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Marka / Model</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Miktar</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 w-36">Birim Fiyat</th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">Toplam</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50" id="topluTbody">
+          {% for grup in gruplar %}
+          {% set kalem = grup.talep_kalem %}
+          <tr>
+            <td class="px-6 py-3">
+              <p class="font-medium text-gray-800">{{ kalem.malzeme_adi if kalem else '—' }}</p>
+              <p class="text-xs text-gray-400">{{ kalem.malzeme_turu or '' }}{% if kalem and kalem.malzeme_turu and kalem.birim %} · {% endif %}{{ kalem.birim or '' }}</p>
+            </td>
+            <td class="px-4 py-3 text-gray-500 text-xs">{{ kalem.marka_model or '—' }}</td>
+            <td class="px-4 py-3 text-center text-gray-700">
+              {{ kalem.miktar }} {{ kalem.birim or '' }}
+            </td>
+            <td class="px-4 py-3">
+              <input type="number" step="0.01" min="0" name="fiyat_{{ grup.id }}"
+                id="fiyat_{{ grup.id }}"
+                class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-purple-400"
+                placeholder="0.00"
+                data-miktar="{{ kalem.miktar or 0 }}"
+                oninput="toplamHesapla(this, 'top_{{ grup.id }}')">
+            </td>
+            <td class="px-4 py-3 text-right font-medium text-green-700" id="top_{{ grup.id }}">—</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot class="bg-gray-50 border-t border-gray-200">
+          <tr>
+            <td colspan="4" class="px-6 py-3 text-right text-xs font-medium text-gray-600">Genel Toplam:</td>
+            <td class="px-4 py-3 text-right font-semibold text-green-700" id="genelToplam">—</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="px-6 py-4 flex justify-end gap-3">
+      {% if talep %}
+      <a href="{{ url_for('satin_alma.fiyatlandir', talep_id=talep.id) }}"
+         class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">İptal</a>
+      {% endif %}
+      <button type="submit"
+        class="erlau-green text-white px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90">
+        Teklifi Kaydet
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Her kalemin ayrı teklif detayına link -->
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+  <p class="text-xs font-medium text-gray-500 mb-3">Kalem Teklif Sayfaları</p>
+  <div class="flex flex-wrap gap-2">
+    {% for grup in gruplar %}
+    <a href="{{ url_for('satin_alma.teklif_detay', grup_id=grup.id) }}"
+       class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:border-purple-300 hover:text-purple-700">
+      {{ grup.talep_kalem.malzeme_adi[:30] if grup.talep_kalem else grup.teklif_no }}
+      <span class="text-gray-300 ml-1">→</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+function toplamHesapla(input, toplamId) {
+  const miktar = parseFloat(input.dataset.miktar) || 0;
+  const fiyat = parseFloat(input.value) || 0;
+  const toplam = fiyat * miktar;
+  document.getElementById(toplamId).textContent = toplam > 0 ? toplam.toFixed(2) : '—';
+  genelToplamHesapla();
+}
+
+function genelToplamHesapla() {
+  let genel = 0;
+  document.querySelectorAll('#topluTbody input[type="number"]').forEach(inp => {
+    const miktar = parseFloat(inp.dataset.miktar) || 0;
+    const fiyat = parseFloat(inp.value) || 0;
+    genel += fiyat * miktar;
+  });
+  document.getElementById('genelToplam').textContent = genel > 0 ? genel.toFixed(2) : '—';
+}
+</script>
+{% endblock %}

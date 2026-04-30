@@ -187,6 +187,7 @@ class TeklifGrubu(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     teklif_no = db.Column(db.String(30), unique=True, nullable=False)
     talep_kalem_id = db.Column(db.Integer, db.ForeignKey('talep_kalem.id'), nullable=False)
+    batch_id = db.Column(db.String(36), nullable=True, index=True)
     talep_kalem = db.relationship('TalepKalem', foreign_keys=[talep_kalem_id], backref='teklif_gruplari')
     durum = db.Column(db.String(30), default='bekliyor')  # bekliyor, teklif_alindi, secildi
     konu_basligi = db.Column(db.Text)

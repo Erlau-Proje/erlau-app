@@ -1096,14 +1096,24 @@ def kalem_duzenle(kalem_id):
         flash('Bu işlem için yetkiniz yok.', 'danger')
         return redirect(url_for('main.talep_detay', talep_id=talep.id))
 
-    if is_satinalma:
-        br_fiyat_str = request.form.get('br_fiyat', '').strip()
-        if br_fiyat_str:
-            try:
-                kalem.br_fiyat = float(br_fiyat_str)
-            except ValueError:
-                flash('Geçersiz birim fiyat.', 'danger')
-                return redirect(url_for('main.talep_detay', talep_id=talep.id))
+    malzeme_adi = request.form.get('malzeme_adi', '').strip()
+    if malzeme_adi:
+        kalem.malzeme_adi = malzeme_adi
+
+    marka_model = request.form.get('marka_model', '').strip()
+    kalem.marka_model = marka_model or kalem.marka_model
+
+    malzeme_turu = request.form.get('malzeme_turu', '').strip()
+    if malzeme_turu:
+        kalem.malzeme_turu = malzeme_turu
+
+    birim = request.form.get('birim', '').strip()
+    if birim:
+        kalem.birim = birim
+
+    hedef = request.form.get('hedef', '').strip()
+    if hedef in ['siparis', 'stok', 'proje']:
+        kalem.hedef = hedef
 
     miktar_str = request.form.get('miktar', '').strip()
     if miktar_str:
@@ -1112,6 +1122,15 @@ def kalem_duzenle(kalem_id):
         except ValueError:
             flash('Geçersiz miktar.', 'danger')
             return redirect(url_for('main.talep_detay', talep_id=talep.id))
+
+    if is_satinalma:
+        br_fiyat_str = request.form.get('br_fiyat', '').strip()
+        if br_fiyat_str:
+            try:
+                kalem.br_fiyat = float(br_fiyat_str)
+            except ValueError:
+                flash('Geçersiz birim fiyat.', 'danger')
+                return redirect(url_for('main.talep_detay', talep_id=talep.id))
 
     if kalem.br_fiyat and kalem.miktar:
         kalem.toplam_fiyat = round(kalem.br_fiyat * kalem.miktar, 2)
@@ -1345,6 +1364,226 @@ def teklif_yeni(kalem_id):
     db.session.add(grup)
     db.session.commit()
     return redirect(url_for('satin_alma.teklif_detay', grup_id=grup.id))
+
+
+@satin_alma.route('/teklif/toplu-yeni', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_toplu_yeni():
+    import uuid as _uuid
+    kalem_ids = request.form.getlist('kalem_ids')
+    if not kalem_ids:
+        flash('Kalem seçilmedi.', 'warning')
+        return redirect(request.referrer or url_for('satin_alma.panel'))
+
+    batch_id = str(_uuid.uuid4())
+    for kid in kalem_ids:
+        try:
+            kid = int(kid)
+        except ValueError:
+            continue
+        kalem = TalepKalem.query.get(kid)
+        if not kalem:
+            continue
+        mevcut = TeklifGrubu.query.filter_by(talep_kalem_id=kid).first()
+        if mevcut:
+            if not mevcut.batch_id:
+                mevcut.batch_id = batch_id
+            else:
+                batch_id = mevcut.batch_id
+            continue
+        grup = TeklifGrubu(teklif_no=generate_teklif_no(), talep_kalem_id=kid, batch_id=batch_id)
+        db.session.add(grup)
+    db.session.commit()
+    return redirect(url_for('satin_alma.teklif_toplu', batch_id=batch_id))
+
+
+@satin_alma.route('/teklif/toplu/<batch_id>')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_toplu(batch_id):
+    gruplar = (TeklifGrubu.query
+               .filter_by(batch_id=batch_id)
+               .options(selectinload(TeklifGrubu.talep_kalem),
+                        selectinload(TeklifGrubu.kalemler).selectinload(TeklifKalem.tedarikci))
+               .all())
+    if not gruplar:
+        flash('Toplu teklif bulunamadı.', 'warning')
+        return redirect(url_for('satin_alma.panel'))
+    tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
+    talep = gruplar[0].talep_kalem.talep if gruplar[0].talep_kalem else None
+    return render_template('toplu_teklif.html', gruplar=gruplar, tedarikciler=tedarikciler,
+                           talep=talep, batch_id=batch_id)
+
+
+@satin_alma.route('/teklif/toplu/<batch_id>/ekle', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_toplu_ekle(batch_id):
+    gruplar = TeklifGrubu.query.filter_by(batch_id=batch_id).all()
+    tedarikci_id = request.form.get('tedarikci_id') or None
+    para_birimi = request.form.get('para_birimi', 'TL')
+    vade_gun = request.form.get('vade_gun') or None
+    kaynak = 'manuel'
+    for grup in gruplar:
+        fiyat_str = request.form.get(f'fiyat_{grup.id}', '').strip()
+        if not fiyat_str:
+            continue
+        try:
+            birim_fiyat = float(fiyat_str)
+        except ValueError:
+            continue
+        kalem = TeklifKalem(
+            grup_id=grup.id,
+            tedarikci_id=int(tedarikci_id) if tedarikci_id else None,
+            birim_fiyat=birim_fiyat,
+            para_birimi=para_birimi,
+            vade_gun=int(vade_gun) if vade_gun else None,
+            kaynak=kaynak,
+        )
+        db.session.add(kalem)
+    db.session.commit()
+    flash('Teklifler kaydedildi.', 'success')
+    return redirect(url_for('satin_alma.teklif_toplu', batch_id=batch_id))
+
+
+@satin_alma.route('/teklif/toplu/<batch_id>/excel')
+@login_required
+@role_required('satinalma', 'admin')
+def teklif_toplu_excel(batch_id):
+    """Toplu RFQ Excel — tüm batch kalemleri tek sayfada."""
+    import io
+    from flask import send_file
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from datetime import date
+
+    gruplar = (TeklifGrubu.query
+               .filter_by(batch_id=batch_id)
+               .options(selectinload(TeklifGrubu.talep_kalem))
+               .all())
+    if not gruplar:
+        flash('Toplu teklif bulunamadı.', 'warning')
+        return redirect(url_for('satin_alma.panel'))
+
+    talep = gruplar[0].talep_kalem.talep if gruplar[0].talep_kalem else None
+    siparis_no = talep.siparis_no if talep else ''
+
+    YESIL = "1B5E20"; ACIK_YESIL = "C8E6C9"; GRI = "F5F5F5"
+    KOYU_GRI = "455A64"; BEYAZ = "FFFFFF"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Teklif Talebi"
+
+    def stil(ws, cell, bold=False, size=11, color=None, bg=None, align='left',
+             wrap=False, border=False, italic=False):
+        c = ws[cell] if isinstance(cell, str) else cell
+        c.font = Font(bold=bold, size=size, color=color or "000000", name="Calibri", italic=italic)
+        if bg:
+            c.fill = PatternFill("solid", fgColor=bg)
+        c.alignment = Alignment(horizontal=align, vertical='center', wrap_text=wrap)
+        if border:
+            thin = Side(style='thin', color='BDBDBD')
+            c.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    for col, w in [('A',5),('B',30),('C',16),('D',10),('E',10),('F',16),('G',14),('H',14),('I',22)]:
+        ws.column_dimensions[col].width = w
+
+    # Başlık
+    ws.row_dimensions[1].height = 8
+    ws.row_dimensions[2].height = 42
+    ws.row_dimensions[3].height = 20
+    ws.row_dimensions[4].height = 20
+    ws.row_dimensions[5].height = 14
+
+    ws.merge_cells('B2:D4')
+    ws['B2'] = 'ERLAU'
+    ws['B2'].font = Font(bold=True, size=28, color=YESIL, name='Calibri')
+    ws['B2'].alignment = Alignment(horizontal='left', vertical='center')
+    ws['B2'].fill = PatternFill("solid", fgColor=BEYAZ)
+
+    ws.merge_cells('E2:I2')
+    ws['E2'] = 'TEKLİF TALEBİ / REQUEST FOR QUOTATION'
+    stil(ws, 'E2', bold=True, size=14, color=BEYAZ, bg=YESIL, align='center')
+
+    ws.merge_cells('E3:I3')
+    ws['E3'] = f'Tarih / Date: {date.today().strftime("%d.%m.%Y")}'
+    stil(ws, 'E3', size=10, color=KOYU_GRI, bg=GRI, align='right')
+
+    ws.merge_cells('E4:I4')
+    ws['E4'] = f'Sipariş: {siparis_no}  |  Kalem Sayısı: {len(gruplar)}'
+    stil(ws, 'E4', size=10, color=KOYU_GRI, bg=GRI, align='right')
+
+    ws.merge_cells('B6:I6')
+    ws['B6'] = 'ERLAU Metal San ve Tic LTD ŞTİ | erlau.com.tr'
+    stil(ws, 'B6', size=9, color='757575', italic=True)
+
+    ws.row_dimensions[9].height = 10
+    ws.row_dimensions[10].height = 26
+    ws.merge_cells('B10:I10')
+    ws['B10'] = 'TALEP EDİLEN MALZEMELER / REQUESTED ITEMS'
+    stil(ws, 'B10', bold=True, size=12, color=BEYAZ, bg=YESIL, align='center')
+
+    hdrs = ['#', 'Malzeme Adı', 'Marka/Model', 'Miktar', 'Birim', 'Teknik Resim', 'Standart', 'Açıklama']
+    ws.row_dimensions[11].height = 20
+    for i, h in enumerate(hdrs):
+        c = ws.cell(row=11, column=i+1, value=h)
+        stil(ws, c, bold=True, size=9, color=BEYAZ, bg=KOYU_GRI, align='center', border=True)
+
+    for idx, grup in enumerate(gruplar):
+        k = grup.talep_kalem
+        row = 12 + idx
+        ws.row_dimensions[row].height = 30
+        vals = [idx+1, k.malzeme_adi if k else '', k.marka_model or '' if k else '',
+                k.miktar or '' if k else '', k.birim or '' if k else '',
+                k.teknik_resim_kodu or '' if k else '', k.standart or '' if k else '',
+                k.aciklama or '' if k else '']
+        for i, v in enumerate(vals):
+            c = ws.cell(row=row, column=i+1, value=v)
+            bg = ACIK_YESIL if i == 1 else GRI
+            stil(ws, c, size=10, bg=bg, align='center' if i not in [1,2,7] else 'left', wrap=True, border=True)
+
+    # Tedarikçi doldurma alanı
+    teklif_row_start = 13 + len(gruplar)
+    ws.row_dimensions[teklif_row_start - 1].height = 10
+    ws.row_dimensions[teklif_row_start].height = 26
+    ws.merge_cells(f'B{teklif_row_start}:I{teklif_row_start}')
+    ws[f'B{teklif_row_start}'] = 'TEDARİKÇİ TEKLİF ALANI  ← Lütfen doldurunuz / Please fill in'
+    stil(ws, f'B{teklif_row_start}', bold=True, size=11, color=YESIL, bg='FFF9C4', align='center')
+
+    th_row = teklif_row_start + 1
+    ws.row_dimensions[th_row].height = 32
+    t_hdrs = ['#', 'Malzeme Adı', 'Birim Fiyat\n(Unit Price)', 'Para Birimi\n(Currency)',
+              'Toplam\n(Total)', 'Vade (gün)\n(Payment Days)', 'Termin (gün)\n(Lead Days)',
+              'Teklif Geçerlilik\n(Validity)', 'Notlar / Notes']
+    for i, h in enumerate(t_hdrs):
+        c = ws.cell(row=th_row, column=i+1, value=h)
+        stil(ws, c, bold=True, size=9, color=BEYAZ, bg="1565C0", align='center', wrap=True, border=True)
+
+    for idx, grup in enumerate(gruplar):
+        k = grup.talep_kalem
+        row = th_row + 1 + idx
+        ws.row_dimensions[row].height = 24
+        for col in range(1, 10):
+            c = ws.cell(row=row, column=col)
+            c.value = idx+1 if col == 1 else (k.malzeme_adi if col == 2 and k else '')
+            stil(ws, c, size=10, bg="E3F2FD" if col > 2 else GRI, align='center', border=True)
+
+    note_row = th_row + 1 + len(gruplar) + 1
+    ws.merge_cells(f'B{note_row}:I{note_row}')
+    ws[f'B{note_row}'] = f'Lütfen teklifinizi {siparis_no} referans numarası ile gönderin. | ERLAU Satınalma Departmanı'
+    stil(ws, f'B{note_row}', size=9, color='757575', italic=True)
+
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToPage = True
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    dosya_adi = f'Toplu_Teklif_{siparis_no or batch_id[:8]}.xlsx'
+    return send_file(output, as_attachment=True, download_name=dosya_adi,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
 @satin_alma.route('/teklif/<int:grup_id>')
@@ -1779,7 +2018,7 @@ def teklif_mail_oku(grup_id):
         return jsonify({'ok': False, 'hata': 'Mail içeriği boş'}), 400
     try:
         import anthropic, os, json as _json
-        client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+        client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'), timeout=10.0)
         prompt = f"""Aşağıdaki tedarikçi teklif mailini analiz et ve JSON döndür.
 
 Talep edilen malzeme: {kalem.malzeme_adi if kalem else 'bilinmiyor'}
@@ -1855,7 +2094,7 @@ def teklif_ai_tavsiye(grup_id):
         teklif_listesi_str += f"{i+1}. {tk.tedarikci.name if tk.tedarikci else 'Bilinmiyor'}: {tk.birim_fiyat} {tk.para_birimi}, Vade: {tk.vade_gun or '?'} gün, Toplam: {toplam:.2f} {tk.para_birimi}, Not: {tk.notlar or '-'}\n"
     try:
         import anthropic, os
-        client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+        client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'), timeout=10.0)
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=300,
@@ -2729,7 +2968,7 @@ def malzeme_oneri():
 
     try:
         import anthropic, os
-        client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
+        client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'), timeout=10.0)
         prompt = f"""Satın alma sisteminde yeni talep oluşturuluyor.
 
 Girilen malzeme adı: "{malzeme_adi}"
