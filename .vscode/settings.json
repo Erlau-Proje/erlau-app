@@ -9,6 +9,6 @@
     "venv/": true,
     "instance/": false
   },
-  "python.defaultInterpreterPath": "./venv/bin/python",
+  "python.defaultInterpreterPath": "/root/erlau-app/venv/bin/python",
   "editor.formatOnSave": false
 }

@@ -26,43 +26,5 @@
       "Bash(journalctl --no-pager *)",
       "Bash(git pull *)"
     ]
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd /root/erlau-app && git pull origin main 2>&1 | grep -v 'Already up to date' || true",
-            "statusMessage": "Proje guncelleniyor (git pull)...",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 /root/erlau-app/.claude/security_check.py",
-            "statusMessage": "Guvenlik taramasi yapiliyor (bandit)..."
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; echo \"$f\" | grep -qE '/app/.*\\.py$' && systemctl restart erlau; } 2>/dev/null || true",
-            "statusMessage": "Python dosyasi degisti, erlau yeniden baslatiliyor..."
-          }
-        ]
-      }
-    ]
   }
 }
