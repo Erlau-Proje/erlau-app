@@ -27,6 +27,18 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /root/erlau-app/.claude/security_check.py",
+            "statusMessage": "Guvenlik taramasi yapiliyor (bandit)..."
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
