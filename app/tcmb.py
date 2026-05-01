@@ -1,10 +1,10 @@
 import requests
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from datetime import date
 import json
 import os
 
-CACHE_FILE = '/tmp/tcmb_kur_cache.json'
+CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instance', 'tcmb_kur_cache.json')
 
 
 def get_kurlar() -> dict:
