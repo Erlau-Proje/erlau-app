@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "/root/erlau-app/venv/bin/mcp-server-sqlite",
+      "args": ["--db-path", "/root/erlau-app/instance/erlau.db"],
+      "env": {}
+    },
+    "git": {
+      "command": "/root/erlau-app/venv/bin/mcp-server-git",
+      "args": ["--repository", "/root/erlau-app"],
+      "env": {}
+    },
+    "fetch": {
+      "command": "/root/erlau-app/venv/bin/mcp-server-fetch",
+      "args": [],
+      "env": {}
+    }
+  }
+}

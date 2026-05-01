@@ -23,10 +23,23 @@
       "Bash(venv/bin/pip install *)",
       "Bash(systemctl is-active *)",
       "Bash(journalctl -u erlau *)",
-      "Bash(journalctl --no-pager *)"
+      "Bash(journalctl --no-pager *)",
+      "Bash(git pull *)"
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /root/erlau-app && git pull origin main 2>&1 | grep -v 'Already up to date' || true",
+            "statusMessage": "Proje guncelleniyor (git pull)...",
+            "async": true
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

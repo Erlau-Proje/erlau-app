@@ -1,0 +1,14 @@
+{
+  "git.autofetch": true,
+  "git.autofetchPeriod": 180,
+  "git.confirmSync": false,
+  "git.enableSmartCommit": true,
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "venv/": true,
+    "instance/": false
+  },
+  "python.defaultInterpreterPath": "./venv/bin/python",
+  "editor.formatOnSave": false
+}
