@@ -1,0 +1,22 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 178.104.49.105
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/erlau-app
+            git pull origin main
+            systemctl restart erlau
+            sleep 3
+            systemctl is-active erlau && echo "Servis aktif" || echo "HATA: Servis baslamadir"

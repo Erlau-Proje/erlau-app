@@ -21,7 +21,23 @@
       "Bash(python -c \"from app import create_app; app = create_app\\(\\); rules = [str\\(r\\) for r in app.url_map.iter_rules\\(\\) if 'rapor' in str\\(r\\)]; print\\(rules\\)\")",
       "Bash(venv/bin/pip show *)",
       "Bash(venv/bin/pip install *)",
-      "Bash(systemctl is-active *)"
+      "Bash(systemctl is-active *)",
+      "Bash(journalctl -u erlau *)",
+      "Bash(journalctl --no-pager *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; echo \"$f\" | grep -qE '/app/.*\\.py$' && systemctl restart erlau; } 2>/dev/null || true",
+            "statusMessage": "Python dosyasi degisti, erlau yeniden baslatiliyor..."
+          }
+        ]
+      }
     ]
   }
 }
