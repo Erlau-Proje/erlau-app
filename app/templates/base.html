@@ -50,15 +50,7 @@
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
         Ana Sayfa
       </a>
-      <a href="{{ url_for('main.yeni_talep') }}" class="sidebar-link {% if request.endpoint == 'main.yeni_talep' %}active{% endif %}">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        Yeni Talep
-      </a>
-      <a href="{{ url_for('satin_alma.siparis_raporu') }}" class="sidebar-link {% if request.endpoint == 'satin_alma.siparis_raporu' %}active{% endif %}">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/></svg>
-        Sipariş Raporu
-      </a>
-      {% if current_user.role in ['planlama', 'departman_yoneticisi', 'admin'] %}
+      {% if menu_visible(current_user, 'planning.section') %}
       <div class="sidebar-section" style="margin-top:8px">Planlama</div>
       <a href="{{ url_for('planlama.planlama_dashboard') }}" class="sidebar-link {% if request.endpoint == 'planlama.planlama_dashboard' %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M5 11h14M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg>
@@ -69,65 +61,145 @@
         Yeni Plan
       </a>
       {% endif %}
-      {% if current_user.role in ['bakim', 'departman_yoneticisi', 'gm', 'admin'] %}
+      {% if menu_visible(current_user, 'maintenance.section') %}
       <div class="sidebar-section" style="margin-top:8px">Bakım</div>
       <a href="{{ url_for('bakim.bakim_dashboard') }}" class="sidebar-link {% if 'bakim' in (request.endpoint or '') %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317a1.75 1.75 0 013.35 0l.216.887a1.75 1.75 0 002.61 1.08l.78-.474a1.75 1.75 0 012.369 2.369l-.474.78a1.75 1.75 0 001.08 2.61l.887.216a1.75 1.75 0 010 3.35l-.887.216a1.75 1.75 0 00-1.08 2.61l.474.78a1.75 1.75 0 01-2.369 2.369l-.78-.474a1.75 1.75 0 00-2.61 1.08l-.216.887a1.75 1.75 0 01-3.35 0l-.216-.887a1.75 1.75 0 00-2.61-1.08l-.78.474a1.75 1.75 0 01-2.369-2.369l.474-.78a1.75 1.75 0 00-1.08-2.61l-.887-.216a1.75 1.75 0 010-3.35l.887-.216a1.75 1.75 0 001.08-2.61l-.474-.78A1.75 1.75 0 016.72 5.81l.78.474a1.75 1.75 0 002.61-1.08l.216-.887z"/><circle cx="12" cy="12" r="3"/></svg>
         Bakım Paneli
+      </a>
+      <a href="{{ url_for('bakim.bakim_program') }}" class="sidebar-link {% if request.endpoint == 'bakim.bakim_program' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Planlı Bakım
+      </a>
+      <a href="{{ url_for('bakim.ariza_tamir_listesi') }}" class="sidebar-link {% if request.endpoint == 'bakim.ariza_tamir_listesi' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        Arıza Tamir
+      </a>
+      <a href="{{ url_for('bakim.periyodik_listesi') }}" class="sidebar-link {% if request.endpoint == 'bakim.periyodik_listesi' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Periyodik Kontrol
       </a>
       <a href="{{ url_for('bakim.bakim_raporlar') }}" class="sidebar-link {% if request.endpoint == 'bakim.bakim_raporlar' %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         Bakım Raporları
       </a>
       {% endif %}
-      {% if current_user.role in ['uretim', 'departman_yoneticisi', 'gm', 'admin'] %}
+      {% if menu_visible(current_user, 'production.section') %}
       <div class="sidebar-section" style="margin-top:8px">Üretim</div>
       <a href="{{ url_for('uretim.uretim_dashboard') }}" class="sidebar-link {% if 'uretim' in (request.endpoint or '') %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 21V9l5 3V9l5 3V5a2 2 0 012-2h2a2 2 0 012 2v16H4z"/></svg>
         Üretim Paneli
       </a>
+      {% if current_user.job_profile not in ['uretim_operatoru', 'cnc_operatoru'] and (can(current_user, 'production.reports') or current_user.job_profile in ['uretim_sorumlusu', 'uretim_yoneticisi']) %}
       <a href="{{ url_for('uretim.uretim_raporlar') }}" class="sidebar-link {% if request.endpoint == 'uretim.uretim_raporlar' %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         Üretim Raporları
       </a>
       {% endif %}
-      {% if current_user.role in ['satinalma', 'admin', 'gm'] %}
+      {% if current_user.job_profile not in ['uretim_operatoru', 'cnc_operatoru'] and (can(current_user, 'production.staff_view') or current_user.job_profile in ['uretim_sorumlusu', 'uretim_yoneticisi']) %}
+      <a href="{{ url_for('uretim.personel_listesi') }}" class="sidebar-link {% if request.endpoint and 'personel' in request.endpoint %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-2.13a4 4 0 100-8 4 4 0 000 8zm6 2a3 3 0 10-2.83-4M7 14a3 3 0 112.83-4"/></svg>
+        Personel
+      </a>
+      {% endif %}
+      {% endif %}
+      {% if menu_visible(current_user, 'quality.section') %}
+      <div class="sidebar-section" style="margin-top:8px">Kalite</div>
+      <a href="{{ url_for('kalite.kalite_dashboard') }}" class="sidebar-link {% if request.endpoint and 'kalite' in request.endpoint %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7 4h10a2 2 0 012 2v6c0 5-3.5 8-5 8s-5-3-5-8V6a2 2 0 012-2z"/></svg>
+        Kalite Paneli
+      </a>
+      <a href="{{ url_for('kalite.dof_listesi') }}" class="sidebar-link {% if request.endpoint and 'dof' in request.endpoint %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5h6m-6 4h6m-6 4h4m-7 8h12a2 2 0 002-2V7l-4-4H6a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+        DÖF
+      </a>
+      <a href="{{ url_for('kalite.sekizd_listesi') }}" class="sidebar-link {% if request.endpoint and 'sekizd' in request.endpoint %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+        8D Raporları
+      </a>
+      <a href="{{ url_for('kalite.surec_listesi') }}" class="sidebar-link {% if request.endpoint and 'surec' in request.endpoint %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+        Süreç Akışları
+      </a>
+      {% if can(current_user, 'quality.control_entry') or can(current_user, 'quality.dof_performance') %}
+      <a href="{{ url_for('kalite.kontrol_giris') }}" class="sidebar-link {% if request.endpoint == 'kalite.kontrol_giris' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Kontrol Girişi
+      </a>
+      <a href="{{ url_for('kalite.dof_performans') }}" class="sidebar-link {% if request.endpoint == 'kalite.dof_performans' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        DÖF Performans
+      </a>
+      {% endif %}
+      {% endif %}
+      {% if menu_visible(current_user, 'purchase.section') %}
       <div class="sidebar-section" style="margin-top:8px">Satın Alma</div>
+      {% if can(current_user, 'talep.create') %}
+      <a href="{{ url_for('main.yeni_talep') }}" class="sidebar-link {% if request.endpoint == 'main.yeni_talep' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Yeni Talep
+      </a>
+      {% endif %}
+      {% if can(current_user, 'purchase.order_report') %}
+      <a href="{{ url_for('satin_alma.siparis_raporu') }}" class="sidebar-link {% if request.endpoint == 'satin_alma.siparis_raporu' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12"/></svg>
+        Sipariş Raporu
+      </a>
+      {% endif %}
+      {% if can(current_user, 'purchase.panel') %}
       <a href="{{ url_for('satin_alma.panel') }}" class="sidebar-link {% if request.endpoint == 'satin_alma.panel' %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
         Panel
       </a>
+      {% endif %}
+      {% if can(current_user, 'purchase.reports') %}
       <a href="{{ url_for('satin_alma.raporlar') }}" class="sidebar-link {% if request.endpoint == 'satin_alma.raporlar' %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         Raporlar
       </a>
-      {% if current_user.role in ['satinalma', 'admin'] %}
+      {% endif %}
+      {% if can(current_user, 'offer.view') %}
       <a href="{{ url_for('satin_alma.teklif_listesi') }}" class="sidebar-link {% if request.endpoint and 'teklif' in request.endpoint %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
         Teklifler
       </a>
       {% endif %}
       {% endif %}
-      {% if current_user.role in ['muhasebe', 'satinalma', 'admin'] %}
+      {% if menu_visible(current_user, 'invoice.section') %}
       <div class="sidebar-section" style="margin-top:8px">Muhasebe</div>
       <a href="{{ url_for('muhasebe.fatura_listesi') }}" class="sidebar-link {% if request.endpoint and 'muhasebe' in request.endpoint %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Faturalar
       </a>
       {% endif %}
-      {% if current_user.role in ['admin', 'satinalma'] %}
+      {% if menu_visible(current_user, 'management.section') %}
       <div class="sidebar-section" style="margin-top:8px">Yönetim</div>
       <a href="{{ url_for('admin.tedarikci_listesi') }}" class="sidebar-link {% if request.endpoint == 'admin.tedarikci_listesi' %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
         Tedarikçiler
       </a>
       {% endif %}
-      {% if current_user.role == 'admin' %}
+      {% if menu_visible(current_user, 'admin.section') %}
+      {% if can(current_user, 'admin.users') %}
       <a href="{{ url_for('admin.kullanicilar') }}" class="sidebar-link {% if request.endpoint == 'admin.kullanicilar' %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
         Kullanıcılar
       </a>
       {% endif %}
+      {% if can(current_user, 'admin.permissions') %}
+      <a href="{{ url_for('admin.yetki_matrisi') }}" class="sidebar-link {% if request.endpoint == 'admin.yetki_matrisi' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M5 5h14v14H5z"/></svg>
+        Yetki Matrisi
+      </a>
+      {% endif %}
+      {% if can(current_user, 'admin.server') %}
+      <a href="{{ url_for('admin.sunucu_dashboard') }}" class="sidebar-link {% if request.endpoint == 'admin.sunucu_dashboard' %}active{% endif %}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12H3l9-9 9 9h-2M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg>
+        Sunucu Durumu
+      </a>
+      {% endif %}
+      {% endif %}
+      {% if menu_visible(current_user, 'list.section') %}
       <a href="{{ url_for('admin.malzeme_listesi') }}" class="sidebar-link {% if request.endpoint == 'admin.malzeme_listesi' %}active{% endif %}">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
         Malzeme Listesi
@@ -136,13 +208,15 @@
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
         Ürün Listesi
       </a>
+      {% endif %}
+      {% if menu_visible(current_user, 'technical.section') %}
       <div class="sidebar-section" style="margin-top:8px">Teknik</div>
       <div style="display:flex;align-items:center;margin:1px 8px;border-radius:8px;{% if 'teknik_resim' in (request.endpoint or '') %}background:#2d7a3a;{% endif %}">
         <a href="{{ url_for('teknik_resim.teknik_resim_listesi') }}" class="sidebar-link {% if 'teknik_resim' in (request.endpoint or '') %}active{% endif %}" style="flex:1;margin:0;border-radius:8px 0 0 8px">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v14l-4-2-4 2-4-2-4 2V6a2 2 0 012-2z"/></svg>
           Teknik Resimler
         </a>
-        {% if current_user.teknik_resim_yetki %}
+        {% if can(current_user, 'technical.manage') %}
         <a href="{{ url_for('teknik_resim.teknik_resim_listesi') }}" onclick="sessionStorage.setItem('tr_ekle','1');return true;" title="Yeni ekle"
           style="padding:7px 7px;color:#9db8a2;transition:all .15s;border-radius:0;text-decoration:none;font-size:16px;line-height:1;font-weight:700"
           onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9db8a2'">+</a>
@@ -151,6 +225,7 @@
           onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='#9db8a2'">−</a>
         {% endif %}
       </div>
+      {% endif %}
     </nav>
     <!-- User -->
     <div style="padding:12px;border-top:1px solid rgba(255,255,255,.06)">

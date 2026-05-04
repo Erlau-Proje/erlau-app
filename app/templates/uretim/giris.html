@@ -1,97 +1,210 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="page-content" style="max-width:640px">
-  <div style="margin-bottom:24px">
-    <a href="{{ url_for('uretim.uretim_dashboard') }}" style="font-size:13px;color:#64748b;text-decoration:none">← Panele Dön</a>
-    <h1 style="font-size:22px;font-weight:700;color:#1e293b;margin-top:8px">Üretim Girişi</h1>
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+  <div>
+    <a href="{{ url_for('uretim.uretim_dashboard') }}" class="text-sm text-gray-400 hover:underline">← Üretim Paneli</a>
+    <h1 class="text-2xl font-semibold text-gray-800 mt-1">Günlük Üretim Girişi</h1>
+    <p class="text-sm text-gray-500 mt-0.5">{{ bugun.strftime('%d.%m.%Y') }} — {{ bugun.strftime('%A') }}</p>
   </div>
-
-  <div class="card" style="padding:28px">
-    <form method="POST">
-      <div style="display:flex;flex-direction:column;gap:18px">
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Tarih</label>
-            <input type="date" name="tarih" value="{{ bugun }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">İş İstasyonu *</label>
-            <select name="istasyon_id" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
-              <option value="">Seçin...</option>
-              {% for i in istasyonlar %}
-              <option value="{{ i.id }}">{{ i.istasyon_adi }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-
-        {% if plan_satirlari %}
-        <div>
-          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Plandan Seç (opsiyonel)</label>
-          <select name="plan_satir_id" id="planSatir" onchange="planSecildi(this)" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
-            <option value="">— Plan satırı seçin —</option>
-            {% for s in plan_satirlari %}
-            <option value="{{ s.id }}" data-urun="{{ s.urun_id or '' }}" data-planlanan="{{ s.planlanan_adet }}">
-              {{ s.istasyon.istasyon_adi if s.istasyon else '?' }} / {{ s.urun.urun_adi if s.urun else '?' }} → {{ s.planlanan_adet }} adet
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-        {% else %}
-        <input type="hidden" name="plan_satir_id" value="">
-        {% endif %}
-
-        <div>
-          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Ürün</label>
-          <select name="urun_id" id="urunSelect" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
-            <option value="">— Seçin —</option>
-            {% for u in urunler %}
-            <option value="{{ u.id }}">{{ u.urun_adi }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">
-              Planlanan Adet
-              <span id="planlananBilgi" style="font-weight:400;color:#94a3b8"></span>
-            </label>
-            <input type="number" id="planlananAdet" readonly style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#f8fafc;color:#94a3b8" placeholder="Plandan gelir">
-          </div>
-          <div>
-            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Gerçekleşen Adet *</label>
-            <input type="number" name="gerceklesen_adet" min="0" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px" placeholder="0">
-          </div>
-        </div>
-
-        <div>
-          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Fire Adet</label>
-          <input type="number" name="fire_adet" min="0" value="0" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
-        </div>
-
-        <div>
-          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Açıklama</label>
-          <textarea name="aciklama" rows="2" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical" placeholder="Varsa not ekleyin..."></textarea>
-        </div>
-
-        <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:4px">
-          <a href="{{ url_for('uretim.uretim_dashboard') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;text-decoration:none;color:#475569">İptal</a>
-          <button type="submit" class="btn-primary">Kaydet</button>
-        </div>
-      </div>
+  <div class="flex gap-2">
+    <form method="GET">
+      <input type="date" name="tarih" value="{{ tarih }}"
+        class="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+        onchange="this.form.submit()">
     </form>
   </div>
 </div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}
+  <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+{% if plan_satirlari %}
+<!-- Toplu Üretim Girişi -->
+<form method="POST" id="toplu-form">
+  <input type="hidden" name="mode" value="batch">
+  <input type="hidden" name="tarih" value="{{ tarih }}">
+
+  <div class="card overflow-hidden mb-5">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div>
+        <h2 class="font-medium text-gray-800">Bugünkü Plan ({{ plan_satirlari|length }} satır)</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Her satır için gerçekleşen adeti girin, personel seçin. Toplu kaydet.</p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <span id="ozet-girilen" style="font-size:12px;color:#6b7280"></span>
+        <button type="submit" class="erlau-green text-white px-5 py-2 rounded-lg text-sm font-medium hover:opacity-90">Toplu Kaydet</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-100">
+          <tr>
+            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500">Ürün</th>
+            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500">İstasyon</th>
+            <th class="px-3 py-2.5 text-center text-xs font-medium text-gray-500">Kaynak</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Planlanan</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-orange-500">Devir</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-indigo-600">Hedef</th>
+            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500" style="min-width:160px">Personel</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-green-700" style="min-width:100px">Gerçekleşen</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Fark</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% set toplam_hedef = namespace(val=0) %}
+          {% for satir in plan_satirlari %}
+          {% set hedef = (satir.planlanan_adet or 0) + (satir.devir_adet or 0) %}
+          {% set toplam_hedef.val = toplam_hedef.val + hedef %}
+          <tr class="hover:bg-gray-50 {% if satir.kaynak == 'devir' %}bg-orange-50{% elif satir.kaynak == 'tamir' %}bg-red-50{% endif %}">
+            <input type="hidden" name="plan_satir_id[]" value="{{ satir.id }}">
+            <td class="px-3 py-2.5">
+              <div class="font-medium text-gray-800 text-xs">{{ satir.urun.urun_adi if satir.urun else '—' }}</div>
+              <div class="text-gray-400 text-xs">{{ satir.urun.urun_kodu if satir.urun else '' }}</div>
+            </td>
+            <td class="px-3 py-2.5 text-xs text-gray-600">{{ satir.istasyon.istasyon_adi if satir.istasyon else '—' }}</td>
+            <td class="px-3 py-2.5 text-center">
+              {% if satir.kaynak == 'devir' %}
+              <span style="background:#fed7aa;color:#c2410c;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px">DEVİR</span>
+              {% elif satir.kaynak == 'tamir' %}
+              <span style="background:#fecaca;color:#dc2626;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px">TAMİR</span>
+              {% else %}
+              <span style="background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px">PLAN</span>
+              {% endif %}
+            </td>
+            <td class="px-3 py-2.5 text-right text-xs text-gray-600">{{ satir.planlanan_adet or 0 }}</td>
+            <td class="px-3 py-2.5 text-right text-xs {% if satir.devir_adet %}text-orange-600 font-semibold{% else %}text-gray-300{% endif %}">
+              {{ satir.devir_adet or '—' }}
+            </td>
+            <td class="px-3 py-2.5 text-right text-xs font-bold text-indigo-700">{{ hedef }}</td>
+            <td class="px-3 py-2.5">
+              <select name="uretim_personeli_id[]"
+                style="width:100%;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:11px">
+                <option value="">— Personel seç —</option>
+                {% for p in personeller %}
+                <option value="{{ p.id }}"
+                  {% if satir.istasyon and p.istasyon_id == satir.istasyon_id %}selected{% endif %}>
+                  {{ p.tam_ad }}{% if p.istasyon %} / {{ p.istasyon.istasyon_adi }}{% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </td>
+            <td class="px-3 py-2.5 text-right">
+              <input type="number" name="gerceklesen[]" min="0" value="{{ hedef }}"
+                data-hedef="{{ hedef }}"
+                oninput="farkGuncelle(this)"
+                style="width:80px;padding:5px 8px;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;text-align:right;font-weight:700;color:#15803d">
+            </td>
+            <td class="px-3 py-2.5 text-right text-xs font-semibold fark-cell" data-satir="{{ satir.id }}">0</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <!-- Alt özet -->
+    <div class="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+      <div class="text-xs text-gray-500">
+        Toplam Hedef: <strong class="text-indigo-700">{{ toplam_hedef.val }}</strong>
+      </div>
+      <div class="text-xs text-gray-500">
+        Toplam Girilen: <strong id="toplam-girilen" class="text-green-700">0</strong>
+        &nbsp;|&nbsp; Kalan: <strong id="toplam-kalan" class="text-red-600">0</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex justify-end gap-3 mb-6">
+    <button type="submit" class="erlau-green text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:opacity-90">
+      ✓ Tüm Satırları Kaydet
+    </button>
+  </div>
+</form>
+{% else %}
+<div class="card px-6 py-10 text-center text-gray-400 mb-6">
+  <div style="font-size:32px;margin-bottom:8px">📋</div>
+  <p class="font-medium">Bugün için aktif plan satırı bulunamadı.</p>
+  <p class="text-sm mt-1">Planlama modülünden önce haftalık plan oluşturun ve aktive edin.</p>
+  <a href="{{ url_for('planlama.yeni_plan') }}" style="display:inline-block;margin-top:16px;background:#3b82f6;color:#fff;padding:8px 20px;border-radius:8px;font-size:13px;text-decoration:none;font-weight:600">Yeni Plan Oluştur</a>
+</div>
+{% endif %}
+
+<!-- Plan Dışı Üretim Girişi -->
+<div class="card p-6" style="border-left:3px solid #94a3b8">
+  <h2 class="font-medium text-gray-800 mb-4">Plan Dışı Üretim Girişi</h2>
+  <form method="POST">
+    <input type="hidden" name="mode" value="tek">
+    <input type="hidden" name="tarih" value="{{ tarih }}">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+      <div class="md:col-span-2">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Ürün</label>
+        <select name="urun_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option value="">Seçin...</option>
+          {% for u in urunler %}
+          <option value="{{ u.id }}">{{ u.urun_adi }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">İstasyon</label>
+        <select name="istasyon_id" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option value="">Seçin...</option>
+          {% for i in istasyonlar %}
+          <option value="{{ i.id }}">{{ i.istasyon_adi }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Personel</label>
+        <select name="uretim_personeli_id_tek" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option value="">Seçin...</option>
+          {% for p in personeller %}
+          <option value="{{ p.id }}">{{ p.tam_ad }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Adet *</label>
+        <input type="number" name="gerceklesen_adet_tek" min="0" required
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="0">
+      </div>
+    </div>
+    <button type="submit" class="text-sm border border-gray-300 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50">Ekle</button>
+  </form>
+</div>
+
 <script>
-function planSecildi(sel) {
-  const opt = sel.options[sel.selectedIndex];
-  const urunId = opt.dataset.urun;
-  const planlanan = opt.dataset.planlanan;
-  if (urunId) document.getElementById('urunSelect').value = urunId;
-  document.getElementById('planlananAdet').value = planlanan || '';
-  document.getElementById('planlananBilgi').textContent = planlanan ? `(hedef: ${planlanan})` : '';
+const TOPLAM_HEDEF = {{ toplam_hedef.val if plan_satirlari else 0 }};
+
+function farkGuncelle(inp) {
+  const hedef = parseInt(inp.dataset.hedef) || 0;
+  const gercek = parseInt(inp.value) || 0;
+  const fark = gercek - hedef;
+  // fark hücresini bul (sonraki td)
+  const td = inp.closest('td').nextElementSibling;
+  if (td) {
+    td.textContent = (fark >= 0 ? '+' : '') + fark;
+    td.style.color = fark >= 0 ? '#16a34a' : '#dc2626';
+  }
+  toplamGuncelle();
 }
+
+function toplamGuncelle() {
+  const inputs = document.querySelectorAll('input[name="gerceklesen[]"]');
+  let toplam = 0;
+  inputs.forEach(inp => { toplam += parseInt(inp.value) || 0; });
+  const toplamEl = document.getElementById('toplam-girilen');
+  const kalanEl = document.getElementById('toplam-kalan');
+  if (toplamEl) toplamEl.textContent = toplam;
+  if (kalanEl) {
+    const kalan = Math.max(TOPLAM_HEDEF - toplam, 0);
+    kalanEl.textContent = kalan;
+    kalanEl.style.color = kalan === 0 ? '#16a34a' : '#dc2626';
+  }
+}
+
+// Sayfa yüklenince farkları hesapla
+document.querySelectorAll('input[name="gerceklesen[]"]').forEach(inp => farkGuncelle(inp));
 </script>
 {% endblock %}

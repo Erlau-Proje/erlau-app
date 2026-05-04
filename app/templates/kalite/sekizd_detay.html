@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.sekizd_listesi') }}" class="text-sm text-gray-400 hover:underline">← 8D Raporları</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">{{ sekizd.sekizd_no }}</h1>
+      <p class="text-sm text-gray-500 mt-1">{{ tedarikci.name if tedarikci else '—' }} · {{ sekizd.urun_adi or sekizd.urun_kodu or '—' }}</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="{{ url_for('kalite.sekizd_pdf', id=sekizd.id) }}" target="_blank" style="background:#3b82f6;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">PDF İndir</a>
+      <a href="{{ url_for('kalite.sekizd_excel', id=sekizd.id) }}" style="background:#16a34a;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Excel İndir</a>
+      <a href="{{ url_for('kalite.sekizd_eml', id=sekizd.id) }}" style="background:#475569;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Outlook Taslağı</a>
+      {% if current_user.role == 'kalite' %}
+      <a href="{{ url_for('kalite.sekizd_duzenle', id=sekizd.id) }}" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Düzenle</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card p-5 mb-5">
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px">
+      <div><div style="font-size:12px;color:#94a3b8;font-weight:600">8D No</div><div style="font-size:15px;font-weight:700;color:#1e293b">{{ sekizd.sekizd_no }}</div></div>
+      <div><div style="font-size:12px;color:#94a3b8;font-weight:600">Tedarikçi</div><div style="font-size:15px;font-weight:700;color:#1e293b">{{ tedarikci.name if tedarikci else '—' }}</div></div>
+      <div><div style="font-size:12px;color:#94a3b8;font-weight:600">Ürün</div><div style="font-size:15px;font-weight:700;color:#1e293b">{{ sekizd.urun_adi or sekizd.urun_kodu or '—' }}</div></div>
+      <div>
+        <div style="font-size:12px;color:#94a3b8;font-weight:600">Durum</div>
+        {% if sekizd.durum == 'taslak' %}<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">taslak</span>
+        {% elif sekizd.durum == 'gonderildi' %}<span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">gonderildi</span>
+        {% else %}<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">kapali</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% macro alan(label, value) -%}
+  <div style="margin-bottom:10px">
+    <div style="font-size:12px;color:#94a3b8;font-weight:600">{{ label }}</div>
+    <div style="font-size:14px;color:#334155;white-space:pre-wrap">{{ value or '—' }}</div>
+  </div>
+  {%- endmacro %}
+
+  <div class="card p-5 mb-4">
+    <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:14px">D1 — Ekip Oluşturma</h2>
+    {{ alan('Ekip Lideri', sekizd.d1_ekip_lideri) }}
+    {{ alan('Ekip Üyeleri', sekizd.d1_ekip_uyeleri) }}
+  </div>
+
+  <div class="card p-5 mb-4">
+    <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:14px">D2 — Problem Tanımı</h2>
+    {{ alan('Problem Özeti', sekizd.d2_problem_ozeti) }}
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+      {{ alan('Kim', sekizd.d2_kim) }}
+      {{ alan('Ne', sekizd.d2_ne) }}
+      {{ alan('Nerede', sekizd.d2_nerede) }}
+      {{ alan('Ne Zaman', sekizd.d2_ne_zaman) }}
+      {{ alan('Neden', sekizd.d2_neden) }}
+      {{ alan('Nasıl', sekizd.d2_nasil) }}
+      {{ alan('Ne Kadar', sekizd.d2_ne_kadar) }}
+      {{ alan('İlk Tespit', sekizd.d2_ilk_tespit) }}
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card p-5 mb-4">
+      <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:14px">D3 — Geçici Önlem</h2>
+      {{ alan('Önlem', sekizd.d3_onlem) }}
+      {{ alan('Sorumlu', sekizd.d3_sorumlu) }}
+      {{ alan('Tarih', sekizd.d3_tarih.strftime('%d.%m.%Y') if sekizd.d3_tarih else '') }}
+      {{ alan('Etkinlik', sekizd.d3_etkinlik) }}
+    </div>
+    <div class="card p-5 mb-4">
+      <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:14px">D4 — Kök Neden</h2>
+      {{ alan('Analiz Metodu', sekizd.d4_analiz_metod) }}
+      {{ alan('Kök Neden', sekizd.d4_kok_neden) }}
+    </div>
+  </div>
+
+  <div class="card p-5 mb-4">
+    <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:14px">D5 — Kalıcı Düzeltici Aksiyon</h2>
+    {{ alan('Aksiyon', sekizd.d5_aksiyon) }}
+  </div>
+
+  <div class="card p-5 mb-4">
+    <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:14px">D6 — Uygulama ve Doğrulama</h2>
+    {{ alan('Uygulama', sekizd.d6_uygulama) }}
+    {{ alan('Tarih', sekizd.d6_tarih.strftime('%d.%m.%Y') if sekizd.d6_tarih else '') }}
+    {{ alan('Doğrulama', sekizd.d6_dogrulama) }}
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card p-5 mb-4">
+      <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:14px">D7 — Önleyici Faaliyet</h2>
+      {{ alan('Önleyici Faaliyet', sekizd.d7_onleyici) }}
+    </div>
+    <div class="card p-5 mb-4">
+      <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:14px">D8 — Takdir ve Kapanış</h2>
+      {{ alan('Takdir', sekizd.d8_tadir) }}
+    </div>
+  </div>
+</div>
+{% endblock %}

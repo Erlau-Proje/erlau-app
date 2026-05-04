@@ -1,92 +1,214 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}
+  <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<!-- Başlık -->
+<div class="flex items-center justify-between mb-5 flex-wrap gap-3">
   <div>
-    <h1 class="text-2xl font-semibold text-gray-800">Planlama Paneli</h1>
-    <p class="text-sm text-gray-500 mt-1">Haftalık üretim planlarını yönetin.</p>
+    <h1 class="text-2xl font-semibold text-gray-800">Planlama Dashboard</h1>
+    <p class="text-sm text-gray-500 mt-0.5">
+      {% if aktif %}
+        {{ aktif.plan_no }} &middot; {{ aktif.baslangic_tarihi.strftime('%d.%m.%Y') if aktif.baslangic_tarihi else '—' }} – {{ aktif.bitis_tarihi.strftime('%d.%m.%Y') if aktif.bitis_tarihi else '—' }}
+      {% else %}Aktif plan yok{% endif %}
+    </p>
   </div>
-  <div class="flex gap-2">
-    <a href="{{ url_for('planlama.plan_listesi') }}" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Tüm Planlar</a>
-    <a href="{{ url_for('planlama.yeni_plan') }}" class="btn-primary">Yeni Plan</a>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <a href="{{ url_for('planlama.plan_listesi') }}" style="padding:7px 14px;border:1px solid #e2e8f0;border-radius:8px;font-size:12.5px;color:#475569;text-decoration:none;font-weight:500">Tüm Planlar</a>
+    <form method="POST" action="{{ url_for('planlama.gun_sonu_devir') }}" style="display:inline"
+      onsubmit="return confirm('Gün sonu devir işlemi başlatılsın mı?\nBugün eksik kalan adetler yarına aktarılacak.')">
+      <button type="submit" style="padding:7px 14px;background:#f59e0b;color:#fff;border-radius:8px;font-size:12.5px;font-weight:600;border:none;cursor:pointer">Gün Sonu Kapat</button>
+    </form>
+    <a href="{{ url_for('planlama.yeni_plan') }}" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">+ Yeni Plan</a>
   </div>
 </div>
 
-<div class="card p-6 mb-5">
-  <div class="flex items-center justify-between mb-4">
+<!-- DÖF Uyarı -->
+{% if acik_dof_sayisi > 0 or geciken_aksiyon_sayisi > 0 %}
+<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:12px 18px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:20px">⚠️</span>
     <div>
-      <h2 class="font-semibold text-gray-800">Aktif Plan</h2>
-      {% if aktif %}
-      <p class="text-sm text-gray-500 mt-1">{{ aktif.plan_no }} · Hafta {{ aktif.hafta }} / {{ aktif.yil }}</p>
-      {% endif %}
+      <div style="font-size:13px;font-weight:600;color:#92400e">Açık DÖF Bildirimi</div>
+      <div style="font-size:12px;color:#78350f">
+        Departmanınıza açık <strong>{{ acik_dof_sayisi }}</strong> DÖF
+        {% if geciken_aksiyon_sayisi > 0 %}, <strong style="color:#dc2626">{{ geciken_aksiyon_sayisi }}</strong> geciken aksiyon{% endif %} var.
+      </div>
     </div>
-    {% if aktif %}
-    <span class="px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">Aktif</span>
+  </div>
+  <a href="{{ url_for('kalite.dof_benim') }}" style="background:#f59e0b;color:#fff;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap">Görüntüle →</a>
+</div>
+{% endif %}
+
+<!-- Özet Kartlar -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+  {% set kartlar = [
+    ('Bu Hafta Hedef', toplam_hedef, '#3b82f6', '🎯'),
+    ('Gerçekleşen', toplam_gerceklesen, '#16a34a', '✅'),
+    ('Tamamlanma %', '%.1f%%'|format(tamamlanma_yuzdesi), '#8b5cf6', '📊'),
+    ('Toplam Devir', toplam_devir, '#f59e0b', '🔄'),
+  ] %}
+  {% for baslik, deger, renk, ikon in kartlar %}
+  <div class="card p-4" style="border-top:3px solid {{ renk }}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px">{{ baslik }}</span>
+      <span style="font-size:18px">{{ ikon }}</span>
+    </div>
+    <div style="font-size:28px;font-weight:700;color:{{ renk }}">{{ deger }}</div>
+    {% if baslik == 'Tamamlanma %' %}
+    <div style="margin-top:8px;background:#f1f5f9;border-radius:4px;height:6px">
+      <div style="width:{{ [tamamlanma_yuzdesi,100]|min }}%;background:{{ renk }};height:100%;border-radius:4px;transition:width .5s"></div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div style="display:grid;grid-template-columns:3fr 2fr;gap:16px;margin-bottom:20px">
+
+  <!-- Günlük Hedef vs Gerçekleşen Grafik -->
+  <div class="card p-5">
+    <h3 style="font-size:13px;font-weight:600;color:#374151;margin-bottom:16px">Günlük Hedef / Gerçekleşen / Devir</h3>
+    <canvas id="gunlukChart" height="160"></canvas>
+  </div>
+
+  <!-- İstasyon Kapasite -->
+  <div class="card p-5">
+    <h3 style="font-size:13px;font-weight:600;color:#374151;margin-bottom:12px">İstasyon Kapasite Kullanımı</h3>
+    {% if istasyon_kapasite %}
+      {% for ist in istasyon_kapasite %}
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
+        <div style="width:110px;font-size:11px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="{{ ist.istasyon_adi }}">{{ ist.istasyon_adi }}</div>
+        <div style="flex:1;background:#f1f5f9;border-radius:4px;height:14px;position:relative">
+          <div style="width:{{ [ist.oran,100]|min }}%;background:{% if ist.oran >= 90 %}#16a34a{% elif ist.oran >= 70 %}#f59e0b{% else %}#dc2626{% endif %};height:100%;border-radius:4px;transition:width .4s"></div>
+        </div>
+        <div style="width:38px;font-size:11px;font-weight:700;text-align:right;color:{% if ist.oran >= 90 %}#16a34a{% elif ist.oran >= 70 %}#d97706{% else %}#dc2626{% endif %}">{{ "%.0f"|format(ist.oran) }}%</div>
+      </div>
+      {% endfor %}
+    {% else %}
+    <p style="font-size:12px;color:#9ca3af;text-align:center;padding:24px 0">Henüz veri yok</p>
+    {% endif %}
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px">
+
+  <!-- Aktif Plan Satırları -->
+  <div class="card overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-gray-100">
+      <h3 style="font-size:13px;font-weight:600;color:#374151">Aktif Plan Özeti</h3>
+    </div>
+    {% if aktif_ozet %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead class="bg-gray-50 border-b border-gray-100">
+          <tr>
+            <th class="px-4 py-2 text-left font-medium text-gray-500">Ürün</th>
+            <th class="px-3 py-2 text-left font-medium text-gray-500">İstasyon</th>
+            <th class="px-3 py-2 text-right font-medium text-gray-500">Pzt</th>
+            <th class="px-3 py-2 text-right font-medium text-gray-500">Sal</th>
+            <th class="px-3 py-2 text-right font-medium text-gray-500">Çar</th>
+            <th class="px-3 py-2 text-right font-medium text-gray-500">Per</th>
+            <th class="px-3 py-2 text-right font-medium text-gray-500">Cum</th>
+            <th class="px-3 py-2 text-right font-medium text-indigo-600">Toplam</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for satir in aktif_ozet %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 font-medium text-gray-800">{{ satir.urun.urun_adi if satir.urun else '—' }}</td>
+            <td class="px-3 py-2 text-gray-500">{{ satir.istasyon.istasyon_adi if satir.istasyon else '—' }}</td>
+            {% for gun in ['pzt','sal','car','per','cum'] %}
+            <td class="px-3 py-2 text-right {% if satir[gun] %}text-gray-700{% else %}text-gray-300{% endif %}">{{ satir[gun] or '—' }}</td>
+            {% endfor %}
+            <td class="px-3 py-2 text-right font-bold text-indigo-700">{{ satir.toplam }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="px-5 py-8 text-center text-gray-400 text-sm">Aktif plan satırı yok</div>
     {% endif %}
   </div>
 
-  {% if aktif and aktif_ozet %}
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead class="bg-gray-50 text-xs text-gray-500">
-        <tr>
-          <th class="px-3 py-2 text-left">Ürün</th>
-          <th class="px-3 py-2 text-left">İstasyon</th>
-          <th class="px-3 py-2 text-right">Pzt</th>
-          <th class="px-3 py-2 text-right">Sal</th>
-          <th class="px-3 py-2 text-right">Çar</th>
-          <th class="px-3 py-2 text-right">Per</th>
-          <th class="px-3 py-2 text-right">Cum</th>
-          <th class="px-3 py-2 text-right">Toplam</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in aktif_ozet %}
-        <tr class="border-t border-gray-100">
-          <td class="px-3 py-2 font-medium text-gray-800">{{ row.urun.urun_adi if row.urun else '-' }}</td>
-          <td class="px-3 py-2 text-gray-600">{{ row.istasyon.istasyon_adi if row.istasyon else '-' }}</td>
-          <td class="px-3 py-2 text-right">{{ row.pzt }}</td>
-          <td class="px-3 py-2 text-right">{{ row.sal }}</td>
-          <td class="px-3 py-2 text-right">{{ row.car }}</td>
-          <td class="px-3 py-2 text-right">{{ row.per }}</td>
-          <td class="px-3 py-2 text-right">{{ row.cum }}</td>
-          <td class="px-3 py-2 text-right font-semibold text-gray-800">{{ row.toplam }}</td>
-        </tr>
+  <!-- Kalite Özeti + Son Planlar -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+
+    <!-- Kalite Özeti -->
+    <div class="card p-4">
+      <h3 style="font-size:13px;font-weight:600;color:#374151;margin-bottom:12px">Kalite Özeti (Bu Hafta)</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div style="text-align:center;padding:10px;background:#f0fdf4;border-radius:8px">
+          <div style="font-size:22px;font-weight:700;color:#16a34a">{{ kalite_ozet.ok_adet }}</div>
+          <div style="font-size:10px;color:#16a34a;font-weight:600">OK</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:#fef2f2;border-radius:8px">
+          <div style="font-size:22px;font-weight:700;color:#dc2626">{{ kalite_ozet.nok_adet }}</div>
+          <div style="font-size:10px;color:#dc2626;font-weight:600">NOK</div>
+        </div>
+      </div>
+      {% set toplam_kk = kalite_ozet.ok_adet + kalite_ozet.nok_adet %}
+      {% if toplam_kk > 0 %}
+      <div style="background:#f1f5f9;border-radius:4px;height:8px;margin-bottom:6px">
+        <div style="width:{{ kalite_ozet.ok_oran }}%;background:#16a34a;height:100%;border-radius:4px"></div>
+      </div>
+      <div style="font-size:11px;color:#64748b;text-align:center">OK Oranı: <strong style="color:#16a34a">{{ kalite_ozet.ok_oran }}%</strong></div>
+      <div style="font-size:10px;color:#9ca3af;text-align:center;margin-top:4px">Hurda: {{ kalite_ozet.hurda_adet }} | Tamir: {{ kalite_ozet.tamir_adet }}</div>
+      {% else %}
+      <p style="font-size:11px;color:#9ca3af;text-align:center">Henüz kalite kaydı yok</p>
+      {% endif %}
+    </div>
+
+    <!-- Son Planlar -->
+    <div class="card overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100">
+        <h3 style="font-size:13px;font-weight:600;color:#374151">Son Planlar</h3>
+      </div>
+      <div class="divide-y divide-gray-100">
+        {% for plan in planlar %}
+        <div class="px-4 py-2.5 flex items-center justify-between">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#1e293b;font-family:monospace">{{ plan.plan_no }}</div>
+            <div style="font-size:10px;color:#9ca3af">{{ plan.baslangic_tarihi.strftime('%d.%m') if plan.baslangic_tarihi else '—' }}</div>
+          </div>
+          <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;
+            {% if plan.durum == 'aktif' %}background:#dcfce7;color:#16a34a
+            {% elif plan.durum == 'tamamlandi' %}background:#e0e7ff;color:#4338ca
+            {% else %}background:#f1f5f9;color:#64748b{% endif %}">
+            {{ {'aktif':'Aktif','taslak':'Taslak','tamamlandi':'Tamamlandı'}.get(plan.durum, plan.durum) }}
+          </span>
+        </div>
         {% endfor %}
-      </tbody>
-    </table>
+      </div>
+    </div>
   </div>
-  {% elif aktif %}
-  <p class="text-sm text-gray-500">Aktif plan var ancak henüz satır bulunmuyor.</p>
-  {% else %}
-  <p class="text-sm text-gray-500">Aktif üretim planı bulunmuyor.</p>
-  {% endif %}
 </div>
 
-<div class="card p-6">
-  <h2 class="font-semibold text-gray-800 mb-4">Son 5 Plan</h2>
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead class="bg-gray-50 text-xs text-gray-500">
-        <tr>
-          <th class="px-3 py-2 text-left">Plan No</th>
-          <th class="px-3 py-2 text-left">Hafta</th>
-          <th class="px-3 py-2 text-left">Tarih Aralığı</th>
-          <th class="px-3 py-2 text-left">Durum</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for plan in planlar %}
-        <tr class="border-t border-gray-100">
-          <td class="px-3 py-2 font-medium text-gray-800">{{ plan.plan_no }}</td>
-          <td class="px-3 py-2">{{ plan.hafta }} / {{ plan.yil }}</td>
-          <td class="px-3 py-2">{{ plan.baslangic_tarihi.strftime('%d.%m.%Y') if plan.baslangic_tarihi else '-' }} - {{ plan.bitis_tarihi.strftime('%d.%m.%Y') if plan.bitis_tarihi else '-' }}</td>
-          <td class="px-3 py-2">{{ plan.durum }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="px-3 py-4 text-center text-gray-400">Henüz plan oluşturulmadı.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const gunlukData = {{ haftalik_veri | tojson }};
+new Chart(document.getElementById('gunlukChart'), {
+  type: 'bar',
+  data: {
+    labels: gunlukData.map(d => d.gun_adi),
+    datasets: [
+      {label: 'Planlanan', data: gunlukData.map(d => d.planlanan), backgroundColor: '#e2e8f0', borderRadius: 4},
+      {label: 'Gerçekleşen', data: gunlukData.map(d => d.gerceklesen), backgroundColor: '#16a34a', borderRadius: 4},
+      {label: 'Devir', data: gunlukData.map(d => d.devir), backgroundColor: '#f59e0b', borderRadius: 4},
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {legend: {position:'bottom', labels:{font:{size:11}, boxWidth:12}}},
+    scales: {
+      x: {grid:{display:false}, ticks:{font:{size:11}}},
+      y: {grid:{color:'#f1f5f9'}, ticks:{font:{size:11}}, beginAtZero: true}
+    }
+  }
+});
+</script>
 {% endblock %}

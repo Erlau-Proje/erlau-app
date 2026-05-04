@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content" style="max-width:1100px">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.sekizd_listesi') }}" class="text-sm text-gray-400 hover:underline">← 8D Raporları</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">{{ baslik }}</h1>
+    </div>
+  </div>
+
+  <form method="POST" action="{{ form_action }}">
+    <div class="card p-5 mb-4">
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Rapor Bilgileri</h2>
+      <div style="display:grid;grid-template-columns:2fr 1fr 2fr 1fr;gap:14px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Tedarikçi</label>
+          <select name="tedarikci_id" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            <option value="">Tedarikçi seçin</option>
+            {% for t in tedarikciler %}
+            <option value="{{ t.id }}" {% if sekizd and sekizd.tedarikci_id == t.id %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Ürün Kodu</label>
+          <input type="text" name="urun_kodu" value="{{ sekizd.urun_kodu if sekizd else '' }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Ürün Adı</label>
+          <input type="text" name="urun_adi" value="{{ sekizd.urun_adi if sekizd else '' }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Revizyon No</label>
+          <input type="text" name="revizyon_no" value="{{ sekizd.revizyon_no if sekizd else '1' }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        </div>
+      </div>
+    </div>
+
+    {% macro input_text(name, label, value='') -%}
+    <div>
+      <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">{{ label }}</label>
+      <input type="text" name="{{ name }}" value="{{ value or '' }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+    </div>
+    {%- endmacro %}
+
+    <div class="card mb-3">
+      <div onclick="toggleD(1)" style="padding:14px 20px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border-radius:8px">
+        <h3 style="font-weight:600;color:#1e293b">D1 — Ekip Oluşturma</h3><span id="chevron-1">▼</span>
+      </div>
+      <div id="d-block-1" style="padding:16px 20px;display:grid;gap:12px">
+        {{ input_text('d1_ekip_lideri', 'Ekip Lideri', sekizd.d1_ekip_lideri if sekizd else '') }}
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Ekip Üyeleri</label>
+          <textarea name="d1_ekip_uyeleri" rows="3" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical">{{ sekizd.d1_ekip_uyeleri if sekizd else '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div onclick="toggleD(2)" style="padding:14px 20px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border-radius:8px">
+        <h3 style="font-weight:600;color:#1e293b">D2 — Problem Tanımı</h3><span id="chevron-2">▼</span>
+      </div>
+      <div id="d-block-2" style="padding:16px 20px">
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Problem Özeti</label>
+        <textarea name="d2_problem_ozeti" rows="3" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical;margin-bottom:12px">{{ sekizd.d2_problem_ozeti if sekizd else '' }}</textarea>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+          {{ input_text('d2_kim', 'Kim', sekizd.d2_kim if sekizd else '') }}
+          {{ input_text('d2_ne', 'Ne', sekizd.d2_ne if sekizd else '') }}
+          {{ input_text('d2_nerede', 'Nerede', sekizd.d2_nerede if sekizd else '') }}
+          {{ input_text('d2_ne_zaman', 'Ne Zaman', sekizd.d2_ne_zaman if sekizd else '') }}
+          {{ input_text('d2_neden', 'Neden', sekizd.d2_neden if sekizd else '') }}
+          {{ input_text('d2_nasil', 'Nasıl', sekizd.d2_nasil if sekizd else '') }}
+          {{ input_text('d2_ne_kadar', 'Ne Kadar', sekizd.d2_ne_kadar if sekizd else '') }}
+          {{ input_text('d2_ilk_tespit', 'İlk Tespit Yeri', sekizd.d2_ilk_tespit if sekizd else '') }}
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div onclick="toggleD(3)" style="padding:14px 20px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border-radius:8px">
+        <h3 style="font-weight:600;color:#1e293b">D3 — Geçici Önlem</h3><span id="chevron-3">▼</span>
+      </div>
+      <div id="d-block-3" style="padding:16px 20px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px">
+        {{ input_text('d3_onlem', 'Geçici Önlem', sekizd.d3_onlem if sekizd else '') }}
+        {{ input_text('d3_sorumlu', 'Sorumlu', sekizd.d3_sorumlu if sekizd else '') }}
+        <div><label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Tarih</label><input type="date" name="d3_tarih" value="{{ sekizd.d3_tarih.isoformat() if sekizd and sekizd.d3_tarih else '' }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px"></div>
+        <div style="grid-column:1/-1">{{ input_text('d3_etkinlik', 'Etkinlik', sekizd.d3_etkinlik if sekizd else '') }}</div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div onclick="toggleD(4)" style="padding:14px 20px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border-radius:8px">
+        <h3 style="font-weight:600;color:#1e293b">D4 — Kök Neden</h3><span id="chevron-4">▼</span>
+      </div>
+      <div id="d-block-4" style="padding:16px 20px;display:grid;gap:12px">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:#475569">
+          {% for m, label in [('5why','5 Why'),('balik_kilcigi','Balık Kılçığı'),('diger','Diğer')] %}
+          <label><input type="radio" name="d4_analiz_metod" value="{{ m }}" {% if sekizd and sekizd.d4_analiz_metod == m %}checked{% endif %}> {{ label }}</label>
+          {% endfor %}
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Kök Neden</label>
+          <textarea name="d4_kok_neden" rows="4" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical">{{ sekizd.d4_kok_neden if sekizd else '' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    {% for n, title, field in [(5,'D5 — Kalıcı Düzeltici Aksiyon','d5_aksiyon'),(6,'D6 — Uygulama ve Doğrulama','d6_uygulama'),(7,'D7 — Önleyici Faaliyet','d7_onleyici'),(8,'D8 — Takdir ve Kapanış','d8_tadir')] %}
+    <div class="card mb-3">
+      <div onclick="toggleD({{ n }})" style="padding:14px 20px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;border-radius:8px">
+        <h3 style="font-weight:600;color:#1e293b">{{ title }}</h3><span id="chevron-{{ n }}">▼</span>
+      </div>
+      <div id="d-block-{{ n }}" style="padding:16px 20px;display:grid;gap:12px">
+        <textarea name="{{ field }}" rows="4" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical">{{ sekizd|attr(field) if sekizd else '' }}</textarea>
+        {% if n == 6 %}
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px">
+          <div><label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Uygulama Tarihi</label><input type="date" name="d6_tarih" value="{{ sekizd.d6_tarih.isoformat() if sekizd and sekizd.d6_tarih else '' }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px"></div>
+          {{ input_text('d6_dogrulama', 'Doğrulama', sekizd.d6_dogrulama if sekizd else '') }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+      <a href="{{ url_for('kalite.sekizd_listesi') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;text-decoration:none;color:#475569;background:#fff">İptal</a>
+      <button type="submit" name="eylem" value="taslak" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;background:#fff;cursor:pointer">Taslak Kaydet</button>
+      <button type="submit" name="eylem" value="gonderildi" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Tamamlandı Olarak Kaydet</button>
+    </div>
+  </form>
+</div>
+
+<script>
+function toggleD(n) {
+  const block = document.getElementById('d-block-' + n);
+  const ch = document.getElementById('chevron-' + n);
+  block.style.display = block.style.display === 'none' ? 'block' : 'none';
+  ch.textContent = block.style.display === 'none' ? '>' : 'v';
+}
+document.querySelectorAll('[id^="d-block-"]').forEach((el, i) => {
+  if (i > 0) {
+    el.style.display = 'none';
+    const ch = document.getElementById('chevron-' + (i + 1));
+    if (ch) ch.textContent = '>';
+  }
+});
+</script>
+{% endblock %}

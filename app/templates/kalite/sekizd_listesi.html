@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.kalite_dashboard') }}" class="text-sm text-gray-400 hover:underline">← Kalite Paneli</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">8D Raporları</h1>
+    </div>
+    {% if current_user.role in ['kalite', 'departman_yoneticisi', 'admin'] %}
+    <a href="{{ url_for('kalite.sekizd_yeni') }}" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Yeni 8D</a>
+    {% endif %}
+  </div>
+
+  <div class="card p-5 mb-5">
+    <form method="GET" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Durum</label>
+        <select name="durum" style="width:160px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <option value="">Tüm Durumlar</option>
+          {% for d in ['taslak','gonderildi','kapali'] %}
+          <option value="{{ d }}" {% if secili_durum == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Tedarikçi</label>
+        <select name="tedarikci_id" style="width:240px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <option value="">Tüm Tedarikçiler</option>
+          {% for t in tedarikciler %}
+          <option value="{{ t.id }}" {% if secili_tdr|string == t.id|string %}selected{% endif %}>{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" style="background:#3b82f6;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer">Filtrele</button>
+    </form>
+  </div>
+
+  <div class="card overflow-hidden">
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">8D No</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Tarih</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Tedarikçi</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Ürün</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Durum</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:600;color:#475569">İşlemler</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sekizd_listesi %}
+          <tr class="hover:bg-gray-50" style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:10px 12px;color:#1e293b;font-weight:700">{{ s.sekizd_no }}</td>
+            <td style="padding:10px 12px;color:#64748b">{{ s.tarih.strftime('%d.%m.%Y') if s.tarih else '—' }}</td>
+            <td style="padding:10px 12px;color:#475569">{{ s.tedarikci.name if s.tedarikci else '—' }}</td>
+            <td style="padding:10px 12px;color:#475569">{{ s.urun_adi or s.urun_kodu or '—' }}</td>
+            <td style="padding:10px 12px">
+              {% if s.durum == 'taslak' %}<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">taslak</span>
+              {% elif s.durum == 'gonderildi' %}<span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">gonderildi</span>
+              {% else %}<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">kapali</span>{% endif %}
+            </td>
+            <td style="padding:10px 12px;text-align:right">
+              <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+                <a href="{{ url_for('kalite.sekizd_detay', id=s.id) }}" style="font-size:12px;color:#2563eb;text-decoration:none;font-weight:600">Detay</a>
+                <a href="{{ url_for('kalite.sekizd_pdf', id=s.id) }}" target="_blank" style="font-size:12px;color:#475569;text-decoration:none;font-weight:600">PDF</a>
+                <a href="{{ url_for('kalite.sekizd_excel', id=s.id) }}" style="font-size:12px;color:#475569;text-decoration:none;font-weight:600">Excel</a>
+                <a href="{{ url_for('kalite.sekizd_eml', id=s.id) }}" style="font-size:12px;color:#475569;text-decoration:none;font-weight:600">Outlook</a>
+                {% if current_user.role == 'kalite' %}
+                <a href="{{ url_for('kalite.sekizd_duzenle', id=s.id) }}" style="font-size:12px;color:#2d7a3a;text-decoration:none;font-weight:600">Düzenle</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="padding:32px;text-align:center;color:#94a3b8">8D raporu bulunmadı.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

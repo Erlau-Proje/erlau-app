@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.dof_listesi') }}" class="text-sm text-gray-400 hover:underline">← DÖF Listesi</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">{{ dof.dof_no }}</h1>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start">
+    <div>
+      <div class="card p-5 mb-5">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+          <span style="font-size:12px;color:#64748b">{{ dof.tarih.strftime('%d.%m.%Y') if dof.tarih else '—' }}</span>
+          <span class="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{{ 'Tedarikçi DÖF' if dof.tip == 'tedis' else 'İç DÖF' }}</span>
+        </div>
+        <div style="display:grid;gap:14px">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#94a3b8">Hedef</div>
+            <div style="font-size:15px;font-weight:700;color:#1e293b">{{ dof.tedarikci.name if dof.tip == 'tedis' and dof.tedarikci else dof.hedef_departman }}</div>
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#94a3b8">Problem Tanımı</div>
+            <div style="font-size:14px;color:#334155;white-space:pre-wrap;margin-top:4px">{{ dof.problem_tanimi }}</div>
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#94a3b8">Kök Neden</div>
+            <div style="font-size:14px;color:#334155;white-space:pre-wrap;margin-top:4px">{{ dof.kok_neden or '—' }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card overflow-hidden mb-5">
+        <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9">
+          <h2 style="font-size:15px;font-weight:700;color:#1e293b">Aksiyonlar</h2>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+                <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Tanım</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Sorumlu</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Planlanan Tarih</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Tamamlama Tarihi</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Durum</th>
+                <th style="padding:10px 12px;text-align:right;font-weight:600;color:#475569">İşlem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in dof.aksiyonlar %}
+              <tr class="hover:bg-gray-50" style="border-bottom:1px solid #f1f5f9">
+                <td style="padding:10px 12px;color:#1e293b;font-weight:600">{{ a.aksiyon_tanimi }}</td>
+                <td style="padding:10px 12px;color:#475569">{{ a.sorumlu.name if a.sorumlu else '—' }}</td>
+                <td style="padding:10px 12px;color:#64748b">{{ a.planlanan_tarih.strftime('%d.%m.%Y') if a.planlanan_tarih else '—' }}</td>
+                <td style="padding:10px 12px;color:#64748b">{{ a.tamamlama_tarihi.strftime('%d.%m.%Y') if a.tamamlama_tarihi else '—' }}</td>
+                <td style="padding:10px 12px">
+                  {% if a.durum == 'tamamlandi' %}<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">tamamlandi</span>
+                  {% elif a.durum == 'gecikti' or (a.planlanan_tarih and a.planlanan_tarih < today and a.durum != 'tamamlandi') %}<span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">gecikti</span>
+                  {% else %}<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">bekliyor</span>{% endif %}
+                </td>
+                <td style="padding:10px 12px;text-align:right">
+                  {% if a.durum != 'tamamlandi' and (can_manage_actions or current_user.id == a.sorumlu_id) %}
+                  <form method="POST" action="{{ url_for('kalite.aksiyon_tamamla', aksiyon_id=a.id) }}" style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
+                    <input type="date" name="tamamlama_tarihi" value="{{ today }}" style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">
+                    <button type="submit" style="background:#16a34a;color:#fff;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:600;border:none;cursor:pointer">Tamamlandı</button>
+                  </form>
+                  {% else %}
+                  <span style="font-size:12px;color:#94a3b8">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6" style="padding:28px;text-align:center;color:#94a3b8">Aksiyon bulunmuyor.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {% if can_manage_actions and dof.durum != 'kapali' %}
+      <div class="card p-5 mb-5">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Yeni Aksiyon Ekle</h2>
+        <form method="POST" action="{{ url_for('kalite.dof_aksiyon_ekle', id=dof.id) }}" style="display:grid;grid-template-columns:1fr 220px 170px auto;gap:8px">
+          <input name="aksiyon_tanimi" required placeholder="Aksiyon tanımı" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <select name="sorumlu_id" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            <option value="">Sorumlu seç</option>
+            {% for k in kullanicilar %}
+            <option value="{{ k.id }}">{{ k.name }}</option>
+            {% endfor %}
+          </select>
+          <input type="date" name="planlanan_tarih" required style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <button type="submit" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Ekle</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="card p-5 mb-5">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Durum</h2>
+        <div style="margin-bottom:14px">
+          {% if dof.durum == 'acik' %}<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">acik</span>
+          {% elif dof.durum == 'isleniyor' %}<span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">isleniyor</span>
+          {% elif dof.durum == 'kapali' %}<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">kapali</span>
+          {% elif dof.durum == 'gecikti' %}<span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">gecikti</span>
+          {% else %}<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{{ dof.durum }}</span>{% endif %}
+        </div>
+        <div style="display:grid;gap:10px;font-size:13px">
+          <div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#64748b">Planlanan kapanış</span><strong style="color:{% if dof.planlanan_kapatma_tarihi and dof.planlanan_kapatma_tarihi < today and dof.durum != 'kapali' %}#dc2626{% else %}#1e293b{% endif %}">{{ dof.planlanan_kapatma_tarihi.strftime('%d.%m.%Y') if dof.planlanan_kapatma_tarihi else '—' }}</strong></div>
+          <div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#64748b">Gerçek kapanış</span><strong>{{ dof.gercek_kapatma_tarihi.strftime('%d.%m.%Y') if dof.gercek_kapatma_tarihi else '—' }}</strong></div>
+          <div style="display:flex;justify-content:space-between;gap:12px"><span style="color:#64748b">Açan</span><strong>{{ dof.acan_kullanici.name if dof.acan_kullanici else '—' }}</strong></div>
+        </div>
+      </div>
+
+      <div class="card p-5 mb-5">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Ekler</h2>
+        <div style="display:grid;gap:10px;margin-bottom:14px">
+          {% for e in dof.ekler %}
+          <div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px">
+            {% if e.dosya_turu == 'resim' %}
+            <img src="{{ url_for('static', filename=e.dosya_yolu) }}" alt="{{ e.dosya_adi }}" style="width:100%;max-height:140px;object-fit:cover;border-radius:6px;margin-bottom:6px">
+            {% endif %}
+            <a href="{{ url_for('static', filename=e.dosya_yolu) }}" target="_blank" style="font-size:12px;color:#2563eb;text-decoration:none;font-weight:600">{{ e.dosya_adi }}</a>
+          </div>
+          {% else %}
+          <div style="font-size:13px;color:#94a3b8">Ek dosya yok.</div>
+          {% endfor %}
+        </div>
+        {% if can_upload %}
+        <form method="POST" action="{{ url_for('kalite.dof_ek_yukle', id=dof.id) }}" enctype="multipart/form-data" style="display:grid;gap:8px">
+          <input type="file" name="dosya" accept="image/*,.pdf" style="font-size:13px">
+          <button type="submit" style="background:#3b82f6;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer">Yükle</button>
+        </form>
+        {% endif %}
+      </div>
+
+      {% if can_close and dof.durum != 'kapali' %}
+      <div class="card p-5 mb-5">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">DÖF Kapat</h2>
+        <form method="POST" action="{{ url_for('kalite.dof_kapat', id=dof.id) }}" onsubmit="return confirm('DÖF kapatılsın mı?')" style="display:grid;gap:10px">
+          <textarea name="kapatma_notu" placeholder="Kapatma notu (zorunlu)" required rows="3" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+          <input type="date" name="gercek_kapatma_tarihi" value="{{ today }}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <button type="submit" style="background:#dc2626;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer">DÖF'ü Kapat</button>
+        </form>
+      </div>
+      {% endif %}
+
+      <div class="card p-5">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Zaman Çizelgesi</h2>
+        <div style="position:relative;padding-left:20px;border-left:2px solid #e2e8f0;font-size:13px;color:#475569">
+          <div style="margin-bottom:10px"><strong>Açıldı</strong> — {{ dof.tarih.strftime('%d.%m.%Y') if dof.tarih else '—' }}</div>
+          {% for a in dof.aksiyonlar if a.tamamlama_tarihi %}
+          <div style="margin-bottom:10px"><strong>Aksiyon tamamlandı</strong> — {{ a.tamamlama_tarihi.strftime('%d.%m.%Y') }}</div>
+          {% endfor %}
+          {% if dof.gercek_kapatma_tarihi %}
+          <div><strong>Kapandı</strong> — {{ dof.gercek_kapatma_tarihi.strftime('%d.%m.%Y') }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+  <div>
+    <a href="{{ url_for('kalite.kalite_dashboard') }}" class="text-sm text-gray-400 hover:underline">← Kalite</a>
+    <h1 class="text-2xl font-semibold text-gray-800 mt-1">Günlük Kalite Kontrolü</h1>
+    <p class="text-sm text-gray-500 mt-0.5">{{ tarih.strftime('%d.%m.%Y') }}</p>
+  </div>
+  <form method="GET">
+    <input type="date" name="tarih" value="{{ tarih }}"
+      class="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+      onchange="this.form.submit()">
+  </form>
+</div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}
+  <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+{% if bugun_kayitlar %}
+<form method="POST">
+  <input type="hidden" name="tarih" value="{{ tarih }}">
+  <div class="card overflow-hidden mb-5">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div>
+        <h2 class="font-medium text-gray-800">Üretim Kayıtları ({{ bugun_kayitlar|length }})</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Her satır için OK ve NOK adetlerini girin</p>
+      </div>
+      <button type="submit" class="erlau-green text-white px-5 py-2 rounded-lg text-sm font-medium hover:opacity-90">Kaydet</button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-100">
+          <tr>
+            <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Ürün</th>
+            <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500">İstasyon</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Üretilen</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-green-700">OK Adet</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-red-600">NOK Adet</th>
+            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500">NOK Neden</th>
+            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500">Akıbet</th>
+            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500">Açıklama</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for kayit in bugun_kayitlar %}
+          {% set mevcut = mevcut_kontroller.get(kayit.id) %}
+          <tr class="hover:bg-gray-50" id="satir-{{ kayit.id }}">
+            <td class="px-4 py-3">
+              <div class="font-medium text-gray-800 text-xs">{{ kayit.urun.urun_adi if kayit.urun else '—' }}</div>
+              <div class="text-gray-400 text-xs">{{ kayit.urun.urun_kodu if kayit.urun else '' }}</div>
+            </td>
+            <td class="px-4 py-3 text-xs text-gray-600">{{ kayit.istasyon.istasyon_adi if kayit.istasyon else '—' }}</td>
+            <td class="px-3 py-3 text-right font-bold text-gray-700">{{ kayit.gerceklesen_adet }}</td>
+            <td class="px-3 py-3 text-right">
+              <input type="number" name="ok_{{ kayit.id }}" min="0" max="{{ kayit.gerceklesen_adet }}"
+                value="{{ mevcut.ok_adet if mevcut else kayit.gerceklesen_adet }}"
+                oninput="nokHesapla({{ kayit.id }}, {{ kayit.gerceklesen_adet }})"
+                style="width:70px;padding:5px 8px;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;text-align:right;font-weight:700;color:#16a34a">
+            </td>
+            <td class="px-3 py-3 text-right">
+              <input type="number" name="nok_{{ kayit.id }}" id="nok-{{ kayit.id }}" min="0" max="{{ kayit.gerceklesen_adet }}"
+                value="{{ mevcut.nok_adet if mevcut else 0 }}"
+                oninput="nokGoster({{ kayit.id }})"
+                style="width:70px;padding:5px 8px;border:1px solid #fecaca;border-radius:6px;font-size:13px;text-align:right;font-weight:700;color:#dc2626">
+            </td>
+            <td class="px-3 py-3" id="nok-detay-{{ kayit.id }}" style="{% if not mevcut or not mevcut.nok_adet %}display:none{% endif %}">
+              <select name="nok_neden_{{ kayit.id }}"
+                style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;min-width:130px">
+                <option value="">— Seçin —</option>
+                <option value="hammadde_hatasi" {% if mevcut and mevcut.nok_neden == 'hammadde_hatasi' %}selected{% endif %}>Hammadde Hatası</option>
+                <option value="isleme_hatasi" {% if mevcut and mevcut.nok_neden == 'isleme_hatasi' %}selected{% endif %}>İşleme Hatası</option>
+                <option value="olcu_hatasi" {% if mevcut and mevcut.nok_neden == 'olcu_hatasi' %}selected{% endif %}>Ölçü Hatası</option>
+                <option value="diger" {% if mevcut and mevcut.nok_neden == 'diger' %}selected{% endif %}>Diğer</option>
+              </select>
+            </td>
+            <td class="px-3 py-3" id="nok-akibet-{{ kayit.id }}" style="{% if not mevcut or not mevcut.nok_adet %}display:none{% endif %}">
+              <select name="nok_akibet_{{ kayit.id }}"
+                style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:11px">
+                <option value="">— Seçin —</option>
+                <option value="hurda" {% if mevcut and mevcut.nok_akibet == 'hurda' %}selected{% endif %}>Hurda</option>
+                <option value="tamir" {% if mevcut and mevcut.nok_akibet == 'tamir' %}selected{% endif %}>Tamir</option>
+              </select>
+            </td>
+            <td class="px-3 py-3" id="nok-aciklama-{{ kayit.id }}" style="{% if not mevcut or not mevcut.nok_adet %}display:none{% endif %}">
+              <input type="text" name="nok_aciklama_{{ kayit.id }}" placeholder="Not (opsiyonel)"
+                value="{{ mevcut.nok_neden_aciklama if mevcut else '' }}"
+                style="padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;min-width:100px">
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="flex justify-end gap-3">
+    <button type="submit" class="erlau-green text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:opacity-90">✓ Kaydet</button>
+  </div>
+</form>
+{% else %}
+<div class="card px-6 py-12 text-center text-gray-400">
+  <div style="font-size:32px;margin-bottom:8px">🔍</div>
+  <p class="font-medium">{{ tarih.strftime('%d.%m.%Y') }} tarihine ait üretim kaydı bulunamadı.</p>
+  <p class="text-sm mt-1">Üretim girişi yapılmamış veya farklı bir tarih seçin.</p>
+</div>
+{% endif %}
+
+<script>
+function nokHesapla(id, uretilen) {
+  const okInp = document.querySelector(`input[name="ok_${id}"]`);
+  const nokInp = document.getElementById(`nok-${id}`);
+  const ok = parseInt(okInp.value) || 0;
+  nokInp.value = Math.max(uretilen - ok, 0);
+  nokGoster(id);
+}
+
+function nokGoster(id) {
+  const nok = parseInt(document.getElementById(`nok-${id}`).value) || 0;
+  const goster = nok > 0;
+  ['nok-detay-','nok-akibet-','nok-aciklama-'].forEach(prefix => {
+    const el = document.getElementById(prefix + id);
+    if (el) el.style.display = goster ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

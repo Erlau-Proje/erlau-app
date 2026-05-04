@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+    <div>
+      <h1 style="font-size:22px;font-weight:700;color:#1e293b">Sunucu Durumu</h1>
+      <p style="font-size:13px;color:#64748b;margin-top:2px">Uptime: {{ uptime_str }} &nbsp;·&nbsp;
+        <span id="servis-badge" style="padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;
+          {% if servis_durum == 'active' %}background:#dcfce7;color:#16a34a{% else %}background:#fef2f2;color:#991b1b{% endif %}">
+          erlau: {{ servis_durum }}
+        </span>
+      </p>
+    </div>
+    <button onclick="yenile()" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;background:#fff;cursor:pointer">
+      ↻ Yenile
+    </button>
+  </div>
+
+  <!-- Kaynak kartları -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px">
+
+    <!-- CPU -->
+    <div class="card" style="padding:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <p style="font-size:13px;font-weight:600;color:#475569">CPU Kullanımı</p>
+        <p style="font-size:12px;color:#64748b">{{ cpu_sayisi }} çekirdek</p>
+      </div>
+      <p id="cpu-yuzde" style="font-size:32px;font-weight:700;color:
+        {% if cpu_yuzde > 80 %}#ef4444{% elif cpu_yuzde > 50 %}#f59e0b{% else %}#16a34a{% endif %}">
+        %{{ cpu_yuzde }}
+      </p>
+      <div style="margin-top:10px;height:8px;background:#f1f5f9;border-radius:99px;overflow:hidden">
+        <div id="cpu-bar" style="height:100%;width:{{ cpu_yuzde }}%;border-radius:99px;
+          background:{% if cpu_yuzde > 80 %}#ef4444{% elif cpu_yuzde > 50 %}#f59e0b{% else %}#16a34a{% endif %};
+          transition:width .4s ease"></div>
+      </div>
+    </div>
+
+    <!-- RAM -->
+    <div class="card" style="padding:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <p style="font-size:13px;font-weight:600;color:#475569">RAM Kullanımı</p>
+        <p id="ram-detay" style="font-size:12px;color:#64748b">{{ ram_kullanan_gb }} / {{ ram_toplam_gb }} GB</p>
+      </div>
+      <p id="ram-yuzde" style="font-size:32px;font-weight:700;color:
+        {% if ram_yuzde > 85 %}#ef4444{% elif ram_yuzde > 65 %}#f59e0b{% else %}#3b82f6{% endif %}">
+        %{{ ram_yuzde }}
+      </p>
+      <div style="margin-top:10px;height:8px;background:#f1f5f9;border-radius:99px;overflow:hidden">
+        <div id="ram-bar" style="height:100%;width:{{ ram_yuzde }}%;border-radius:99px;
+          background:{% if ram_yuzde > 85 %}#ef4444{% elif ram_yuzde > 65 %}#f59e0b{% else %}#3b82f6{% endif %};
+          transition:width .4s ease"></div>
+      </div>
+    </div>
+
+    <!-- Disk -->
+    <div class="card" style="padding:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <p style="font-size:13px;font-weight:600;color:#475569">Disk Kullanımı</p>
+        <p id="disk-detay" style="font-size:12px;color:#64748b">{{ disk_kullanan_gb }} / {{ disk_toplam_gb }} GB</p>
+      </div>
+      <p id="disk-yuzde" style="font-size:32px;font-weight:700;color:
+        {% if disk_yuzde > 90 %}#ef4444{% elif disk_yuzde > 75 %}#f59e0b{% else %}#475569{% endif %}">
+        %{{ disk_yuzde }}
+      </p>
+      <div style="margin-top:10px;height:8px;background:#f1f5f9;border-radius:99px;overflow:hidden">
+        <div id="disk-bar" style="height:100%;width:{{ disk_yuzde }}%;border-radius:99px;
+          background:{% if disk_yuzde > 90 %}#ef4444{% elif disk_yuzde > 75 %}#f59e0b{% else %}#475569{% endif %};
+          transition:width .4s ease"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alt satır: Aktif kullanıcılar + Restart -->
+  <div style="display:grid;grid-template-columns:1fr 360px;gap:20px">
+
+    <!-- Aktif kullanıcılar -->
+    <div>
+      <h2 style="font-size:14px;font-weight:600;color:#475569;margin-bottom:12px">
+        Son 30 Dakika Aktif Kullanıcılar ({{ aktif_kullanicilar|length }})
+      </h2>
+      {% if aktif_kullanicilar %}
+      <div class="card" style="padding:0;overflow:hidden">
+        {% for u in aktif_kullanicilar %}
+        <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;
+          {% if not loop.last %}border-bottom:1px solid #f1f5f9{% endif %}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:32px;height:32px;border-radius:50%;background:#e0e7ff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#4338ca">
+              {{ u.name[0].upper() }}
+            </div>
+            <div>
+              <p style="font-size:13px;font-weight:600;color:#1e293b">{{ u.name }}</p>
+              <p style="font-size:11px;color:#94a3b8">{{ u.role }} · {{ u.email }}</p>
+            </div>
+          </div>
+          <p style="font-size:12px;color:#64748b">
+            {{ u.son_giris.strftime('%H:%M') if u.son_giris else '—' }}
+          </p>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="card" style="padding:32px;text-align:center;color:#94a3b8">
+        <p style="font-size:13px">Son 30 dakikada aktif kullanıcı yok.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Servis yönetimi -->
+    <div>
+      <h2 style="font-size:14px;font-weight:600;color:#475569;margin-bottom:12px">Servis Yönetimi</h2>
+      <div class="card" style="padding:20px">
+        <p style="font-size:13px;color:#475569;margin-bottom:16px">
+          Erlau servisini yeniden başlatmak için admin şifrenizi girin.
+          Tüm aktif oturumlar kısa süreliğine kesilecektir.
+        </p>
+        <div id="restart-form">
+          <input type="password" id="restart-sifre" placeholder="Admin şifresi"
+            style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;margin-bottom:10px;box-sizing:border-box">
+          <button onclick="servisRestart()"
+            style="width:100%;padding:10px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
+            🔄 Servisi Yeniden Başlat
+          </button>
+          <p id="restart-mesaj" style="font-size:12px;margin-top:8px;text-align:center;min-height:18px"></p>
+        </div>
+      </div>
+
+      <!-- Otomatik yenileme -->
+      <div class="card" style="padding:16px;margin-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <p style="font-size:13px;color:#475569">Otomatik yenileme</p>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="oto-yenile" checked
+              style="width:14px;height:14px;cursor:pointer" onchange="toggleOtoYenile()">
+            <span style="font-size:12px;color:#64748b">5 sn'de bir</span>
+          </label>
+        </div>
+        <p id="son-guncelleme" style="font-size:11px;color:#94a3b8;margin-top:6px">—</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let yenileInterval = null;
+
+function renk(yuzde, esik1, esik2) {
+  if (yuzde > esik2) return '#ef4444';
+  if (yuzde > esik1) return '#f59e0b';
+  return null;
+}
+
+function barRengi(el, yuzde, esik1, esik2) {
+  el.style.width = yuzde + '%';
+  if (yuzde > esik2) el.style.background = '#ef4444';
+  else if (yuzde > esik1) el.style.background = '#f59e0b';
+}
+
+function yenile() {
+  fetch('{{ url_for("admin.sunucu_durum_api") }}')
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('cpu-yuzde').textContent = '%' + d.cpu;
+      barRengi(document.getElementById('cpu-bar'), d.cpu, 50, 80);
+
+      document.getElementById('ram-yuzde').textContent = '%' + d.ram;
+      document.getElementById('ram-detay').textContent = d.ram_kullanan + ' / ' + d.ram_toplam + ' GB';
+      barRengi(document.getElementById('ram-bar'), d.ram, 65, 85);
+
+      document.getElementById('disk-yuzde').textContent = '%' + d.disk;
+      document.getElementById('disk-detay').textContent = d.disk_kullanan + ' / ' + d.disk_toplam + ' GB';
+      barRengi(document.getElementById('disk-bar'), d.disk, 75, 90);
+
+      const now = new Date();
+      document.getElementById('son-guncelleme').textContent =
+        'Son güncelleme: ' + now.toLocaleTimeString('tr-TR');
+    })
+    .catch(() => {});
+}
+
+function toggleOtoYenile() {
+  if (document.getElementById('oto-yenile').checked) {
+    yenileInterval = setInterval(yenile, 5000);
+  } else {
+    clearInterval(yenileInterval);
+    yenileInterval = null;
+  }
+}
+
+function servisRestart() {
+  const sifre = document.getElementById('restart-sifre').value;
+  if (!sifre) { alert('Şifre boş olamaz.'); return; }
+  const mesaj = document.getElementById('restart-mesaj');
+  mesaj.textContent = 'Yeniden başlatılıyor...';
+  mesaj.style.color = '#f59e0b';
+
+  const fd = new FormData();
+  fd.append('sifre', sifre);
+
+  fetch('{{ url_for("admin.sunucu_restart") }}', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        mesaj.textContent = '✓ Servis yeniden başlatıldı. Sayfa birkaç saniye içinde yenilenecek.';
+        mesaj.style.color = '#16a34a';
+        document.getElementById('restart-sifre').value = '';
+        setTimeout(() => location.reload(), 4000);
+      } else {
+        mesaj.textContent = '✗ ' + d.hata;
+        mesaj.style.color = '#ef4444';
+      }
+    })
+    .catch(() => {
+      mesaj.textContent = '✗ Bağlantı hatası';
+      mesaj.style.color = '#ef4444';
+    });
+}
+
+// Başlangıçta otomatik yenilemeyi başlat
+yenileInterval = setInterval(yenile, 5000);
+</script>
+{% endblock %}

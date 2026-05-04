@@ -52,7 +52,7 @@ logs/
 
 ## Kullanıcı Rolleri ve Yetkiler
 
-**Roller:** `admin`, `satinalma`, `muhasebe`, `personel`, `uretim`
+**Roller:** `admin`, `satinalma`, `muhasebe`, `personel`, `uretim`, `planlama`, `kalite`, `bakim`, `departman_yoneticisi`, `gm`, `proje`
 
 **Boolean yetkiler (User modeli):**
 - `teknik_resim_yetki` — Teknik resim ekle/sil
@@ -128,6 +128,24 @@ Muhasebe → Fatura Yükle → Siparişle Eşleştir
 - Modal gizle/göster için `element.style.display='none'/'flex'` kullan, Tailwind `hidden` class'ı KULLANMA
 - Sunucuyu yeniden başlatmak için: `systemctl restart erlau`
 - 1000+ kayıtlı listeler için accordion + AJAX lazy load kullan
+- Jinja2 template'lerinde Python built-in fonksiyonlar çalışmaz (`enumerate`, `zip`, `dict`, `list`, `items()` gibi). Loop sayacı için `loop.index` / `loop.index0` kullan.
+
+## Güncelleme Sonrası Etki Kontrolü
+
+Her değişiklikten önce ve sonra şu etkileri kontrol et:
+
+| Değişiklik | Neyi kontrol et |
+|---|---|
+| `models.py` — yeni kolon / tablo | Migration oluşturuldu mu? `flask db migrate -m "..."` + `flask db upgrade`. Mevcut kayıtlar NULL değer alacaksa `nullable=True` veya `default` zorunlu. |
+| `models.py` — ilişki (relationship) / backref | Aynı backref adı başka bir yerde var mı? Çakışma SQLAlchemy başlatma hatasına neden olur. |
+| `routes.py` — route URL değişti | `url_for(...)` kullanan tüm template'leri ve diğer route'ları grep'le. |
+| `routes.py` — template'e geçilen değişken eklendi/silindi/yeniden adlandırıldı | İlgili template ve `render_template(...)` çağrısı senkron mu? |
+| `utils.py` — fonksiyon imzası değişti | Tüm çağrıcıları (`grep -rn "fonksiyon_adi"`) güncelle. |
+| `base.html` — navigasyon / layout değişikliği | Tüm blueprint dashboard'ları ve portal sayfasını görsel kontrol et. |
+| `__init__.py` — blueprint kayıt sırası | Blueprint prefix çakışması yok mu? (`/kalite` vs `/kalite-rapor` gibi) |
+| DB seed / veri değişikliği | Mevcut production verisi bozulur mu? Gerekirse migration ile `op.execute(UPDATE ...)`. |
+
+**Kural:** Bir dosyayı değiştirirken, o dosyayı import eden veya o dosyanın verilerini kullanan diğer dosyaları listele ve etkilenip etkilenmediğini doğrula. Şüphe durumunda `grep -rn "değişen_isim" app/` komutuyla tüm referansları tara.
 
 ## Bekleyen / Planlanan Özellikler
 

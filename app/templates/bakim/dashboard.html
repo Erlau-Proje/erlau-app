@@ -6,13 +6,120 @@
       <h1 style="font-size:22px;font-weight:700;color:#1e293b">Bakım Paneli</h1>
       <p style="font-size:13px;color:#64748b;margin-top:2px">{{ bugun.strftime('%d %B %Y') }}</p>
     </div>
+    {% if can(current_user, 'maintenance.record_plan') %}
     <a href="{{ url_for('bakim.bakim_kayit') }}" class="btn-primary">
       <svg style="width:15px;height:15px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
       Bakım Kaydı Ekle
     </a>
+    {% endif %}
   </div>
 
+  <!-- İstatistik Kartları -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px">
+
+    <!-- Bu ay arıza -->
+    <div class="card" style="padding:18px 20px">
+      <p style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Bu Ay Arıza</p>
+      <p style="font-size:28px;font-weight:700;color:#ef4444;margin:6px 0 4px">{{ bu_ay_ariza }}</p>
+      <div style="display:flex;align-items:center;gap:4px;font-size:12px">
+        {% if gec_ay_ariza == 0 %}
+          <span style="color:#64748b">Geçen ay: 0</span>
+        {% elif bu_ay_ariza < gec_ay_ariza %}
+          <span style="color:#16a34a">▼ {{ gec_ay_ariza - bu_ay_ariza }} azaldı</span>
+        {% elif bu_ay_ariza > gec_ay_ariza %}
+          <span style="color:#ef4444">▲ {{ bu_ay_ariza - gec_ay_ariza }} arttı</span>
+        {% else %}
+          <span style="color:#64748b">Geçen ayla aynı ({{ gec_ay_ariza }})</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Bu ay bakım süresi -->
+    <div class="card" style="padding:18px 20px">
+      <p style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Bu Ay Bakım Süresi</p>
+      <p style="font-size:28px;font-weight:700;color:#3b82f6;margin:6px 0 4px">{{ bu_ay_sure_saat }}<span style="font-size:14px;font-weight:500;color:#64748b"> saat</span></p>
+      <p style="font-size:12px;color:#64748b">Girilen süre toplamı</p>
+    </div>
+
+    <!-- Arıza oranı -->
+    <div class="card" style="padding:18px 20px">
+      <p style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Arıza Oranı</p>
+      <p style="font-size:28px;font-weight:700;color:{% if ariza_oran > 50 %}#ef4444{% elif ariza_oran > 25 %}#f59e0b{% else %}#16a34a{% endif %};margin:6px 0 4px">%{{ ariza_oran }}</p>
+      <p style="font-size:12px;color:#64748b">Bu ay bakım kayıtları içinde</p>
+    </div>
+
+    <!-- Periyodik uyarı -->
+    <div class="card" style="padding:18px 20px">
+      <p style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Periyodik Kontrol</p>
+      {% set gecikis = periyodik_uyari | selectattr('sonraki_kontrol_tarihi', 'lt', bugun) | list | length %}
+      <p style="font-size:28px;font-weight:700;color:{% if gecikis > 0 %}#ef4444{% else %}#f59e0b{% endif %};margin:6px 0 4px">{{ periyodik_uyari | length }}</p>
+      <p style="font-size:12px;color:#64748b">
+        {% if gecikis > 0 %}<span style="color:#ef4444;font-weight:600">{{ gecikis }} gecikmiş</span> · {% endif %}30 gün içinde
+      </p>
+    </div>
+  </div>
+
+  <!-- Orta satır: En sık arıza + Periyodik uyarılar -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+
+    <!-- En sık arıza yapan makineler -->
+    <div>
+      <h2 style="font-size:14px;font-weight:600;color:#475569;margin-bottom:12px">En Sık Arıza (Son 30 Gün)</h2>
+      {% if en_cok_ariza %}
+      <div class="card" style="padding:0;overflow:hidden">
+        {% set max_adet = en_cok_ariza[0][1] %}
+        {% for makine_adi, adet in en_cok_ariza %}
+        <div style="padding:12px 16px;{% if not loop.last %}border-bottom:1px solid #f1f5f9{% endif %}">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <p style="font-size:13px;font-weight:600;color:#1e293b">{{ makine_adi }}</p>
+            <span style="font-size:13px;font-weight:700;color:#ef4444">{{ adet }} arıza</span>
+          </div>
+          <div style="height:6px;background:#f1f5f9;border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:{{ (adet / max_adet * 100)|int }}%;background:#ef4444;border-radius:99px"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="card" style="padding:32px;text-align:center;color:#94a3b8">
+        <p style="font-size:13px">Son 30 günde arıza kaydı yok.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Periyodik kontrol uyarıları -->
+    <div>
+      <h2 style="font-size:14px;font-weight:600;color:#475569;margin-bottom:12px">Periyodik Kontrol Uyarıları</h2>
+      {% if periyodik_uyari %}
+      <div style="display:flex;flex-direction:column;gap:8px">
+        {% for k in periyodik_uyari %}
+        {% set kalan = (k.sonraki_kontrol_tarihi - bugun).days %}
+        <div class="card" style="padding:12px 16px;border-left:3px solid {% if kalan < 0 %}#ef4444{% elif kalan <= 7 %}#f59e0b{% else %}#3b82f6{% endif %}">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <p style="font-size:13px;font-weight:600;color:#1e293b">{{ k.kontrol_adi }}</p>
+            <span style="font-size:12px;font-weight:700;color:{% if kalan < 0 %}#ef4444{% elif kalan <= 7 %}#f59e0b{% else %}#3b82f6{% endif %}">
+              {% if kalan < 0 %}{{ kalan|abs }} gün geçti!{% elif kalan == 0 %}Bugün!{% else %}{{ kalan }} gün{% endif %}
+            </span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:3px">
+            {% if k.makine %}<p style="font-size:12px;color:#64748b">{{ k.makine.makine_adi }}</p>{% endif %}
+            {% if k.kontrol_eden_firma %}<p style="font-size:12px;color:#94a3b8">· {{ k.kontrol_eden_firma }}</p>{% endif %}
+          </div>
+          <p style="font-size:11px;color:#94a3b8;margin-top:2px">{{ k.sonraki_kontrol_tarihi.strftime('%d.%m.%Y') }}</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="card" style="padding:32px;text-align:center;color:#94a3b8">
+        <p style="font-size:13px">30 gün içinde periyodik kontrol yok.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Alt satır: Bugünkü bakımlar + Yaklaşan bakımlar -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
     <!-- Bugünkü bakımlar -->
     <div>
       <h2 style="font-size:14px;font-weight:600;color:#475569;margin-bottom:12px">Bugünkü Bakımlar ({{ bugunki_kayitlar|length }})</h2>
@@ -70,11 +177,25 @@
     </div>
   </div>
 
+  <!-- Hızlı linkler -->
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:20px">
+    {% if can(current_user, 'maintenance.record_plan') %}
     <a href="{{ url_for('bakim.bakim_plan') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">📋 Bakım Planları</a>
     <a href="{{ url_for('bakim.bakim_takvim') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">📅 Takvim</a>
     <a href="{{ url_for('bakim.makine_listesi') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">⚙️ Makineler</a>
+    {% endif %}
+    {% if can(current_user, 'maintenance.calendar_report') %}
     <a href="{{ url_for('bakim.bakim_raporlar') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">📊 Raporlar</a>
+    {% endif %}
+    {% if can(current_user, 'maintenance.program') %}
+    <a href="{{ url_for('bakim.bakim_program') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">📆 Planlı Bakım</a>
+    {% endif %}
+    {% if can(current_user, 'maintenance.repair') %}
+    <a href="{{ url_for('bakim.ariza_tamir_listesi') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">🔧 Arıza Tamir</a>
+    {% endif %}
+    {% if can(current_user, 'maintenance.periodic') %}
+    <a href="{{ url_for('bakim.periyodik_listesi') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;text-decoration:none;background:#fff">🔄 Periyodik Kontrol</a>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

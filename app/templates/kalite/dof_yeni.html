@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content" style="max-width:980px">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.dof_listesi') }}" class="text-sm text-gray-400 hover:underline">← DÖF Listesi</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">Yeni DÖF Aç</h1>
+    </div>
+  </div>
+
+  <form method="POST">
+    <div class="card p-5 mb-5">
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">DÖF Tipi</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <label style="border:1px solid #2d7a3a;border-radius:8px;padding:14px;cursor:pointer;background:#f0fdf4">
+          <input type="radio" name="tip" value="ic" checked onchange="tipDegisti()" style="margin-right:8px">
+          <span style="font-weight:700;color:#1e293b">İç DÖF</span>
+          <div style="font-size:12px;color:#64748b;margin-top:4px">Departman veya kullanıcı bazlı uygunsuzluk</div>
+        </label>
+        <label style="border:1px solid #e2e8f0;border-radius:8px;padding:14px;cursor:pointer;background:#fff">
+          <input type="radio" name="tip" value="tedis" onchange="tipDegisti()" style="margin-right:8px">
+          <span style="font-weight:700;color:#1e293b">Tedarikçi DÖF</span>
+          <div style="font-size:12px;color:#64748b;margin-top:4px">Tedarikçi kaynaklı uygunsuzluk ve 8D takibi</div>
+        </label>
+      </div>
+    </div>
+
+    <div class="card p-5 mb-5">
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Hedef</h2>
+      <div id="icAlanlari" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Hedef Departman</label>
+          <select name="hedef_departman" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            {% for d in departmanlar %}
+            <option value="{{ d }}">{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Hedef Kullanıcı</label>
+          <select name="hedef_kullanici_id" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            <option value="">— Opsiyonel —</option>
+            {% for k in kullanicilar %}
+            <option value="{{ k.id }}">{{ k.name }}{% if k.department %} / {{ k.department.name }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div id="tedarikciAlanlari" style="display:none">
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Tedarikçi</label>
+        <select name="tedarikci_id" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <option value="">Tedarikçi seçin</option>
+          {% for t in tedarikciler %}
+          <option value="{{ t.id }}">{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="card p-5 mb-5">
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Problem Bilgileri</h2>
+      <div style="display:grid;gap:14px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Problem Tanımı *</label>
+          <textarea name="problem_tanimi" rows="4" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Kök Neden</label>
+          <textarea name="kok_neden" rows="3" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+        </div>
+        <div style="max-width:260px">
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Planlanan Kapatma Tarihi *</label>
+          <input type="date" name="planlanan_kapatma_tarihi" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-5 mb-5">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b">Aksiyonlar</h2>
+        <button type="button" onclick="aksiyonEkle()" style="background:#3b82f6;color:#fff;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer">+ Aksiyon Ekle</button>
+      </div>
+      <div id="aksiyonlar"></div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <a href="{{ url_for('kalite.dof_listesi') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;text-decoration:none;color:#475569;background:#fff">İptal</a>
+      <button type="submit" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">DÖF Oluştur</button>
+    </div>
+  </form>
+</div>
+
+<template id="aksiyonTemplate">
+  <div class="aksiyon-satir" style="display:grid;grid-template-columns:1fr 1fr 170px auto;gap:8px;margin-bottom:8px">
+    <input name="aksiyon_tanimi[]" placeholder="Aksiyon tanımı" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+    <select name="sorumlu_id[]" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      <option value="">Sorumlu seç</option>
+      {% for k in kullanicilar %}
+      <option value="{{ k.id }}">{{ k.name }}</option>
+      {% endfor %}
+    </select>
+    <input type="date" name="planlanan_tarih[]" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+    <button type="button" onclick="satirSil(this)" class="text-xs text-red-400 hover:text-red-600" style="border:none;background:transparent;cursor:pointer">Sil</button>
+  </div>
+</template>
+
+<script>
+function tipDegisti() {
+  const tip = document.querySelector('input[name="tip"]:checked').value;
+  document.getElementById('icAlanlari').style.display = tip === 'ic' ? 'grid' : 'none';
+  document.getElementById('tedarikciAlanlari').style.display = tip === 'tedis' ? 'block' : 'none';
+}
+function aksiyonEkle() {
+  const tpl = document.getElementById('aksiyonTemplate');
+  document.getElementById('aksiyonlar').appendChild(tpl.content.cloneNode(true));
+}
+function satirSil(btn) {
+  btn.closest('.aksiyon-satir').remove();
+}
+tipDegisti();
+aksiyonEkle();
+</script>
+{% endblock %}

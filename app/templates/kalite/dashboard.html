@@ -1,0 +1,192 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <h1 class="text-2xl font-semibold text-gray-800">Kalite Dashboard</h1>
+      <p class="text-sm text-gray-500 mt-1">{{ bugun.strftime('%d.%m.%Y') }} · Kontrol ve uygunsuzluk özeti</p>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a href="{{ url_for('kalite.kontrol_giris') }}" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Günlük Kontrol Gir</a>
+      <a href="{{ url_for('kalite.dof_listesi') }}" style="background:#3b82f6;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">DÖF Listesi</a>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px">
+    <div class="card p-4 text-center">
+      <div style="font-size:12px;color:#64748b;font-weight:600">Bugün Kontrol Edilen</div>
+      <div style="font-size:30px;font-weight:700;color:#1e293b;margin-top:6px">{{ bugun_kontrol_edilen }}</div>
+      <div style="font-size:11px;color:#94a3b8">adet</div>
+    </div>
+    <div class="card p-4 text-center">
+      <div style="font-size:12px;color:#64748b;font-weight:600">OK Adet</div>
+      <div style="font-size:30px;font-weight:700;color:#16a34a;margin-top:6px">{{ bugun_ok }}</div>
+      <div style="font-size:11px;color:#94a3b8">uygun</div>
+    </div>
+    <div class="card p-4 text-center">
+      <div style="font-size:12px;color:#64748b;font-weight:600">NOK Adet</div>
+      <div style="font-size:30px;font-weight:700;color:#dc2626;margin-top:6px">{{ bugun_nok }}</div>
+      <div style="font-size:11px;color:#94a3b8">uygunsuz</div>
+    </div>
+    <div class="card p-4 text-center">
+      <div style="font-size:12px;color:#64748b;font-weight:600">NOK Oranı</div>
+      <div style="font-size:30px;font-weight:700;color:{% if bugun_nok_orani > 5 %}#dc2626{% elif bugun_nok_orani > 0 %}#f59e0b{% else %}#16a34a{% endif %};margin-top:6px">{{ "%.1f"|format(bugun_nok_orani) }}%</div>
+      <div style="height:6px;background:#f1f5f9;border-radius:99px;margin-top:8px">
+        <div style="height:6px;border-radius:99px;background:#dc2626;width:{{ [bugun_nok_orani, 100]|min }}%"></div>
+      </div>
+    </div>
+  </div>
+
+  {% if acik_dof_sayisi > 0 %}
+  <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <span style="font-size:13px;color:#92400e">Açık veya işlemde <strong>{{ acik_dof_sayisi }}</strong> DÖF var.</span>
+    <a href="{{ url_for('kalite.dof_listesi') }}" style="color:#1d4ed8;text-decoration:underline;font-size:13px;font-weight:600">Görüntüle</a>
+  </div>
+  {% endif %}
+
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px">
+    <div class="card p-5">
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">7 Günlük OK / NOK Trendi</h2>
+      <canvas id="kaliteTrendGrafik" height="110"></canvas>
+    </div>
+    <div class="card p-5">
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Hızlı Linkler</h2>
+      <div style="display:grid;gap:10px">
+        <a href="{{ url_for('kalite.kontrol_giris') }}" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;color:#1e293b;text-decoration:none;font-size:13px;font-weight:600;background:#fff">Günlük Kontrol Gir</a>
+        <a href="{{ url_for('kalite.dof_listesi') }}" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;color:#1e293b;text-decoration:none;font-size:13px;font-weight:600;background:#fff">DÖF Listesi</a>
+        <a href="{{ url_for('kalite.sekizd_listesi') }}" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;color:#1e293b;text-decoration:none;font-size:13px;font-weight:600;background:#fff">8D Raporları</a>
+        <a href="{{ url_for('kalite.surec_listesi') }}" style="padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;color:#1e293b;text-decoration:none;font-size:13px;font-weight:600;background:#fff">Süreçler</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card overflow-hidden mb-6">
+    <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9">
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b">İstasyon Bazlı Kalite</h2>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#475569">İstasyon</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">OK</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">NOK</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">OK Oranı (%)</th>
+            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#475569">Progress Bar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ist in istasyon_kalite %}
+          <tr class="hover:bg-gray-50" style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:10px 16px;color:#1e293b;font-weight:600">{{ ist.istasyon_adi }}</td>
+            <td style="padding:10px 16px;text-align:right;color:#16a34a;font-weight:700">{{ ist.ok }}</td>
+            <td style="padding:10px 16px;text-align:right;color:#dc2626;font-weight:700">{{ ist.nok }}</td>
+            <td style="padding:10px 16px;text-align:right;color:#1e293b;font-weight:700">{{ "%.1f"|format(ist.oran) }}</td>
+            <td style="padding:10px 16px;min-width:220px">
+              <div style="height:10px;background:#f1f5f9;border:{% if ist.nok > 0 %}1px solid #fecaca{% else %}1px solid #e2e8f0{% endif %};border-radius:99px;overflow:hidden">
+                <div style="height:100%;width:{{ [ist.oran, 100]|min }}%;background:#16a34a;border-radius:99px"></div>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="padding:28px;text-align:center;color:#94a3b8">İstasyon kalite verisi yok.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card overflow-hidden mb-6">
+      <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b">NOK Nedenleri Dağılımı</h2>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#475569">Neden</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">Adet</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">%</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">Hurda</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">Tamir</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for n in nok_neden_dagilim %}
+          <tr class="hover:bg-gray-50" style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:10px 16px;color:#1e293b;font-weight:600">{{ n.label }}</td>
+            <td style="padding:10px 16px;text-align:right">{{ n.adet }}</td>
+            <td style="padding:10px 16px;text-align:right">{{ "%.1f"|format(n.oran) }}</td>
+            <td style="padding:10px 16px;text-align:right;color:#dc2626">{{ n.hurda }}</td>
+            <td style="padding:10px 16px;text-align:right;color:#f59e0b">{{ n.tamir }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="padding:28px;text-align:center;color:#94a3b8">Son 7 günde NOK kaydı yok.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card overflow-hidden mb-6">
+      <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b">Tamir Kuyruğu</h2>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Ürün</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">İstasyon</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:600;color:#475569">Tamir Adedi</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Plan No</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Plan Tarihi</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Durum</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in tamir_kuyrugu %}
+          <tr class="hover:bg-gray-50" style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:10px 12px;color:#1e293b;font-weight:600">{{ s.urun.urun_adi if s.urun else '—' }}</td>
+            <td style="padding:10px 12px;color:#475569">{{ s.istasyon.istasyon_adi if s.istasyon else '—' }}</td>
+            <td style="padding:10px 12px;text-align:right;color:#f59e0b;font-weight:700">{{ s.planlanan_adet }}</td>
+            <td style="padding:10px 12px;color:#64748b">{{ s.plan.plan_no if s.plan else '—' }}</td>
+            <td style="padding:10px 12px;color:#64748b">{{ s.tarih.strftime('%d.%m.%Y') if s.tarih else '—' }}</td>
+            <td style="padding:10px 12px"><span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">{{ s.plan.durum if s.plan else '—' }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="padding:28px;text-align:center;color:#94a3b8">Tamir kuyruğunda satır yok.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const trend7gun = {{ trend_7gun | tojson }};
+new Chart(document.getElementById('kaliteTrendGrafik'), {
+  type: 'line',
+  data: {
+    labels: trend7gun.map(item => item.tarih),
+    datasets: [
+      { label: 'OK', data: trend7gun.map(item => item.ok_adet), borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.08)', tension: .25, fill: true },
+      { label: 'NOK', data: trend7gun.map(item => item.nok_adet), borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,.08)', tension: .25, fill: true }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } } },
+    scales: {
+      x: { grid: { display: false } },
+      y: { beginAtZero: true, grid: { color: '#f1f5f9' } }
+    }
+  }
+});
+</script>
+{% endblock %}

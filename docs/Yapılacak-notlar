@@ -1,0 +1,12 @@
+DÖF açılan kişiler, açılan döf'ü görüntüleyebiliyor. İşlem olarak alınan aksiyonları yazılı olarak girmesi ve tamamladıysa eğer tamamlandı butonuna basması gerekiyor. bunu düzenle.
+
+Departmanlar giriş yaptıklarında portal'da iken kendi departmanlarına tıklayarak giriş yapmalı. Anasayfa aslında bir satınalma ekranı değil, orada genel özet olmalı, her departmanın kendi bir anasayfa ekranı olmalı ve özet dashboard gibi gözükmeli.
+
+Kişiler hangi departmanda çalışıyor ise, sadece o departmanın vermiş olduğu satınalma taleplerini görüntüleyebilir. Bunu Sipariş raporunda yapabilir, Yeni talep ekranında sadece yeni talep açabilir, Satınalma Departmanında çalışan kişler tüm herkesin satınalma taleplerini görebilir ve işlem yapabilir. Sol menüde gördüğüm kadarı ile 
+Genel adı altında Uygulama Portalı, Ana Sayfa, Yeni Talep Sipariş Raporu var, 
+
+Bunu şu şekilde düzeltmelisin, 
+Genel, altında Uygulama Portalı, Anasayfa yer almalı, Anasayfa o departmanın dashboard'ı olmalı, onunla ilgili olması gereken özetler yer almalı, bu o departmanın sipariş özetleri yada kendi departmanının performans özetleri olabilir. 
+
+Satınalma altında Yeni Talep, Sipariş Raporu yer alabilir.
+ilgili kullanıcı, kendi yetkisi yok ise ilgili başlığı görmesin, Örneğin, Bakım Raporları Kalite departmanında çalışan kişilerin yetkisi olmadığı ve ilişkilendirilmediği için gözükmesine gerek yok. 

@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.kalite_dashboard') }}" class="text-sm text-gray-400 hover:underline">← Kalite Paneli</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">İş Akışı Süreçleri</h1>
+    </div>
+    {% if current_user.role in ['kalite','admin'] %}
+    <a href="{{ url_for('kalite.surec_yeni') }}" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Yeni Süreç</a>
+    {% endif %}
+  </div>
+
+  <div class="card p-5 mb-5">
+    <form method="GET" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Departman</label>
+        <select name="dept" style="width:240px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <option value="">Tüm Departmanlar</option>
+          {% for d in departmanlar %}
+          <option value="{{ d }}" {% if secili_dept == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Durum</label>
+        <select name="durum" style="width:160px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <option value="">Tüm Durumlar</option>
+          {% for d in ['taslak','aktif','arsiv'] %}
+          <option value="{{ d }}" {% if secili_durum == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" style="background:#3b82f6;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer">Filtrele</button>
+    </form>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
+    {% for s in surecler %}
+    <div class="card p-5">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <span style="font-size:11px;color:#94a3b8;font-family:monospace">{{ s.surec_kodu }}</span>
+          <h3 style="font-size:15px;font-weight:600;color:#1e293b;margin-top:2px">{{ s.surec_adi }}</h3>
+          <span style="font-size:12px;color:#6b7280">{{ s.departman }}</span>
+        </div>
+        {% if s.durum == 'aktif' %}<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">aktif</span>
+        {% elif s.durum == 'arsiv' %}<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">arsiv</span>
+        {% else %}<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">taslak</span>{% endif %}
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#9ca3af">v{{ s.versiyon }} · {{ s.adimlar|length }} adım</div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <a href="{{ url_for('kalite.surec_goruntur', id=s.id) }}" style="background:#3b82f6;color:#fff;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none">Görüntüle</a>
+        {% if current_user.role in ['kalite','admin'] %}
+        <a href="{{ url_for('kalite.surec_duzenle', id=s.id) }}" style="border:1px solid #e2e8f0;color:#475569;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;background:#fff">Düzenle</a>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="card p-5" style="grid-column:1/-1;text-align:center;color:#94a3b8">Süreç kaydı bulunmadı.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

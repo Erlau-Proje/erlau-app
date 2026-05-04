@@ -76,3 +76,38 @@ def generate_plan_no():
     yil = now.year
     son = UretimPlani.query.filter_by(hafta=hafta, yil=yil).count()
     return f"PLN-{yil}-W{hafta:02d}-{son+1:02d}"
+
+def generate_dof_no():
+    from app.models import DOF
+    yil = datetime.datetime.now().year
+    son = DOF.query.filter(DOF.dof_no.like(f"DOF-{yil}-%")).count()
+    return f"DOF-{yil}-{son+1:05d}"
+
+def generate_sekizd_no():
+    from app.models import SekizD
+    yil = datetime.datetime.now().year
+    son = SekizD.query.filter(SekizD.sekizd_no.like(f"8D-{yil}-%")).count()
+    return f"8D-{yil}-{son+1:05d}"
+
+def generate_surec_kodu():
+    from app.models import IsAkisiSurec
+    yil = datetime.datetime.now().year
+    son = IsAkisiSurec.query.filter(IsAkisiSurec.surec_kodu.like(f"SRC-{yil}-%")).count()
+    return f"SRC-{yil}-{son+1:03d}"
+
+def devir_gunu(tarih):
+    """Hafta sonu atlayarak bir sonraki çalışma gününü döndürür."""
+    sonraki = tarih + datetime.timedelta(days=1)
+    while sonraki.weekday() >= 5:  # 5=Cumartesi, 6=Pazar
+        sonraki += datetime.timedelta(days=1)
+    return sonraki
+
+def haftalik_gunden_gune_dagit(haftalik_adet: int, gun_sayisi: int = 5) -> list:
+    """Haftalık adet hedefini günlere eşit böler; kalan ilk güne eklenir."""
+    if gun_sayisi <= 0 or haftalik_adet <= 0:
+        return [0] * max(gun_sayisi, 1)
+    gun_basi = haftalik_adet // gun_sayisi
+    kalan = haftalik_adet % gun_sayisi
+    dagitim = [gun_basi] * gun_sayisi
+    dagitim[0] += kalan
+    return dagitim

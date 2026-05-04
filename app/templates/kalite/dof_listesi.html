@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.kalite_dashboard') }}" class="text-sm text-gray-400 hover:underline">← Kalite Paneli</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">DÖF Listesi</h1>
+    </div>
+    {% if current_user.role in ['kalite', 'departman_yoneticisi', 'admin'] %}
+    <a href="{{ url_for('kalite.dof_yeni') }}" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Yeni DÖF Aç</a>
+    {% endif %}
+  </div>
+
+  {% if acik_dof_sayisi is defined or geciken_aksiyon_sayisi is defined %}
+  <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400e">
+    Açık DÖF: <strong>{{ acik_dof_sayisi|default(0) }}</strong>
+    · Geciken aksiyon: <strong style="color:#dc2626">{{ geciken_aksiyon_sayisi|default(0) }}</strong>
+  </div>
+  {% endif %}
+
+  <div class="card p-5 mb-5">
+    <form method="GET" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Durum</label>
+        <select name="durum" style="width:160px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <option value="">Tüm Durumlar</option>
+          {% for d in ['acik','isleniyor','kapali','gecikti','iptal'] %}
+          <option value="{{ d }}" {% if secili_durum == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Departman</label>
+        <select name="dept" style="width:220px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          <option value="">Tüm Departmanlar</option>
+          {% for d in departmanlar %}
+          <option value="{{ d }}" {% if secili_dept == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Başlangıç</label>
+        <input type="date" name="bas" value="{{ secili_bas|default('') }}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Bitiş</label>
+        <input type="date" name="bit" value="{{ secili_bit|default('') }}" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      </div>
+      <button type="submit" style="background:#3b82f6;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer">Filtrele</button>
+    </form>
+  </div>
+
+  <div class="card p-4 mb-4">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" onclick="tabGoster('tum')" id="tab-tum" style="padding:7px 12px;border:1px solid #2d7a3a;background:#2d7a3a;color:#fff;border-radius:8px;font-size:13px;cursor:pointer">Tümü</button>
+      <button type="button" onclick="tabGoster('actiklarim')" id="tab-actiklarim" style="padding:7px 12px;border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:8px;font-size:13px;cursor:pointer">Benim Açtıklarım</button>
+      <button type="button" onclick="tabGoster('bana')" id="tab-bana" style="padding:7px 12px;border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:8px;font-size:13px;cursor:pointer">Bana Açılanlar</button>
+    </div>
+  </div>
+
+  <div class="card overflow-hidden">
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">DÖF No</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Tarih</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Tip</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Hedef Departman/Tedarikçi</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Problem</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Durum</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Planlanan Kapanış</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:600;color:#475569">İşlem</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in doflar %}
+          <tr class="hover:bg-gray-50 dof-row" data-acan="{{ d.acan_kullanici_id }}" data-hedef="{{ d.hedef_kullanici_id or '' }}" style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:10px 12px;color:#1e293b;font-weight:700">{{ d.dof_no }}</td>
+            <td style="padding:10px 12px;color:#64748b">{{ d.tarih.strftime('%d.%m.%Y') if d.tarih else '—' }}</td>
+            <td style="padding:10px 12px"><span class="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{{ 'Tedarikçi' if d.tip == 'tedis' else 'İç' }}</span></td>
+            <td style="padding:10px 12px;color:#475569">{{ d.tedarikci.name if d.tip == 'tedis' and d.tedarikci else d.hedef_departman }}</td>
+            <td style="padding:10px 12px;color:#475569;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.problem_tanimi }}</td>
+            <td style="padding:10px 12px">
+              {% if d.durum == 'acik' %}<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">acik</span>
+              {% elif d.durum == 'isleniyor' %}<span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">isleniyor</span>
+              {% elif d.durum == 'kapali' %}<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">kapali</span>
+              {% elif d.durum == 'gecikti' %}<span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">gecikti</span>
+              {% else %}<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{{ d.durum }}</span>{% endif %}
+            </td>
+            <td style="padding:10px 12px;color:#64748b">{{ d.planlanan_kapatma_tarihi.strftime('%d.%m.%Y') if d.planlanan_kapatma_tarihi else '—' }}</td>
+            <td style="padding:10px 12px;text-align:right"><a href="{{ url_for('kalite.dof_detay', id=d.id) }}" style="font-size:12px;color:#2563eb;text-decoration:none;font-weight:600">Detay</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" style="padding:32px;text-align:center;color:#94a3b8">DÖF kaydı bulunmadı.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const currentUserId = '{{ current_user.id }}';
+function tabGoster(tip) {
+  document.querySelectorAll('.dof-row').forEach(row => {
+    const acan = row.dataset.acan;
+    const hedef = row.dataset.hedef;
+    let show = true;
+    if (tip === 'actiklarim') show = acan === currentUserId;
+    if (tip === 'bana') show = hedef === currentUserId;
+    row.style.display = show ? 'table-row' : 'none';
+  });
+  ['tum','actiklarim','bana'].forEach(id => {
+    const btn = document.getElementById('tab-' + id);
+    const active = id === tip;
+    btn.style.background = active ? '#2d7a3a' : '#fff';
+    btn.style.borderColor = active ? '#2d7a3a' : '#e2e8f0';
+    btn.style.color = active ? '#fff' : '#475569';
+  });
+}
+</script>
+{% endblock %}

@@ -1,111 +1,274 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
   <div>
-    <h1 class="text-2xl font-semibold text-gray-800">Yeni Haftalık Plan</h1>
-    <p class="text-sm text-gray-500 mt-1">Ürün, istasyon ve gün bazında adetleri girin.</p>
+    <a href="{{ url_for('planlama.planlama_dashboard') }}" class="text-sm text-gray-400 hover:underline">← Planlama</a>
+    <h1 class="text-2xl font-semibold text-gray-800 mt-1">Yeni Haftalık Plan</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Haftalık toplam girin — sistem günlere otomatik dağıtır.</p>
   </div>
-  <a href="{{ url_for('planlama.planlama_dashboard') }}" class="text-sm text-gray-500 hover:underline">Geri</a>
 </div>
 
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}
+  <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
 <form method="POST" id="plan-form">
+
+  <!-- Plan Meta -->
   <div class="card p-6 mb-5">
     <h2 class="font-medium text-gray-800 mb-4">Plan Bilgileri</h2>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Hafta No</label>
-        <input type="number" name="hafta" value="{{ pzt.isocalendar()[1] }}" min="1" max="53" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Hafta No</label>
+        <input type="number" name="hafta" id="hafta" value="{{ pzt.isocalendar()[1] }}" min="1" max="53" required
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Yıl</label>
-        <input type="number" name="yil" value="{{ pzt.year }}" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Yıl</label>
+        <input type="number" name="yil" value="{{ pzt.year }}" required
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Başlangıç Tarihi</label>
-        <input type="date" name="baslangic_tarihi" id="baslangic_tarihi" value="{{ pzt.isoformat() }}" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Başlangıç (Pazartesi)</label>
+        <input type="date" name="baslangic_tarihi" id="baslangic_tarihi" value="{{ pzt.isoformat() }}" required
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Bitiş Tarihi</label>
-        <input type="date" name="bitis_tarihi" id="bitis_tarihi" value="{{ cum.isoformat() }}" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Bitiş (Cuma)</label>
+        <input type="date" name="bitis_tarihi" id="bitis_tarihi" value="{{ cum.isoformat() }}" required
+          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
       </div>
     </div>
   </div>
 
-  <div class="card p-6 mb-5">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="font-medium text-gray-800">Plan Satırları</h2>
-      <button type="button" onclick="satirEkle()" class="text-sm border border-green-600 text-green-700 px-3 py-1 rounded-lg hover:bg-green-50">+ Satır Ekle</button>
+  <!-- Satırlar -->
+  <div class="card overflow-hidden mb-5">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div>
+        <h2 class="font-medium text-gray-800">Plan Satırları</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Haftalık adet girin — günlük dağılım otomatik hesaplanır. Dilersen manuel düzenle.</p>
+      </div>
+      <button type="button" onclick="satirEkle()"
+        style="border:1px solid #16a34a;color:#16a34a;padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:600;background:#fff;cursor:pointer">
+        + Satır Ekle
+      </button>
     </div>
     <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50 text-xs text-gray-500">
+      <table class="w-full text-sm" id="plan-table">
+        <thead class="bg-gray-50 border-b border-gray-100">
           <tr>
-            <th class="px-2 py-2 text-left">Ürün</th>
-            <th class="px-2 py-2 text-left">İstasyon</th>
-            <th class="px-2 py-2 text-right">Pzt</th>
-            <th class="px-2 py-2 text-right">Sal</th>
-            <th class="px-2 py-2 text-right">Çar</th>
-            <th class="px-2 py-2 text-right">Per</th>
-            <th class="px-2 py-2 text-right">Cum</th>
-            <th class="px-2 py-2"></th>
+            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500" style="min-width:220px">Ürün</th>
+            <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500" style="min-width:160px">İstasyon</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-indigo-600 bg-indigo-50" style="min-width:90px">Haftalık</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500 border-l border-gray-200" id="th-pzt">Pzt</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500" id="th-sal">Sal</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500" id="th-car">Çar</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500" id="th-per">Per</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500" id="th-cum">Cum</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Toplam</th>
+            <th class="px-3 py-2.5"></th>
           </tr>
         </thead>
         <tbody id="plan-satirlari"></tbody>
       </table>
     </div>
+    <div id="bos-mesaj" class="px-6 py-8 text-center text-gray-400 text-sm" style="display:none">
+      Henüz satır eklenmedi. "+ Satır Ekle" butonuna tıklayın.
+    </div>
   </div>
 
+  <!-- Butonlar -->
   <div class="flex justify-end gap-3">
-    <button type="submit" name="eylem" value="taslak" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Taslak Kaydet</button>
-    <button type="submit" name="eylem" value="aktif" class="erlau-green text-white px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90">Aktif Et</button>
+    <a href="{{ url_for('planlama.planlama_dashboard') }}"
+      class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">İptal</a>
+    <button type="submit" name="eylem" value="taslak"
+      class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Taslak Kaydet</button>
+    <button type="submit" name="eylem" value="aktif"
+      class="erlau-green text-white px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90">Aktif Et</button>
   </div>
 </form>
 
-<template id="satir-template">
-  <tr class="border-t border-gray-100">
-    <td class="px-2 py-2">
-      <select name="urun_id[]" required class="w-64 border border-gray-200 rounded px-2 py-1 text-xs">
-        <option value="">Ürün seçin</option>
-        {% for urun in urunler %}
-        <option value="{{ urun.id }}">{{ urun.urun_adi }}</option>
-        {% endfor %}
-      </select>
-    </td>
-    <td class="px-2 py-2">
-      <select name="istasyon_id[]" class="w-48 border border-gray-200 rounded px-2 py-1 text-xs">
-        <option value="">İstasyon seçin</option>
-        {% for istasyon in istasyonlar %}
-        <option value="{{ istasyon.id }}">{{ istasyon.istasyon_adi }}</option>
-        {% endfor %}
-      </select>
-    </td>
-    <td class="px-2 py-2"><input type="number" name="adet_pzt[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
-    <td class="px-2 py-2"><input type="number" name="adet_sal[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
-    <td class="px-2 py-2"><input type="number" name="adet_car[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
-    <td class="px-2 py-2"><input type="number" name="adet_per[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
-    <td class="px-2 py-2"><input type="number" name="adet_cum[]" min="0" value="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-xs text-right"></td>
-    <td class="px-2 py-2"><button type="button" onclick="this.closest('tr').remove()" class="text-red-400 hover:text-red-600 text-xs">Sil</button></td>
-  </tr>
-</template>
-
 <script>
+const URUNLER = [
+  {% for urun in urunler %}
+  {id: {{ urun.id }}, adi: {{ urun.urun_adi | tojson }}},
+  {% endfor %}
+];
+const ISTASYONLAR = [
+  {% for ist in istasyonlar %}
+  {id: {{ ist.id }}, adi: {{ ist.istasyon_adi | tojson }}},
+  {% endfor %}
+];
+
+let satirSayac = 0;
+
+function gunBasliklariGuncelle() {
+  const bas = document.getElementById('baslangic_tarihi').value;
+  if (!bas) return;
+  const tarih = new Date(bas + 'T00:00:00');
+  const gunAdlari = ['Pzt','Sal','Çar','Per','Cum'];
+  const thIds = ['th-pzt','th-sal','th-car','th-per','th-cum'];
+  thIds.forEach((id, i) => {
+    const t = new Date(tarih);
+    t.setDate(t.getDate() + i);
+    const th = document.getElementById(id);
+    if (th) th.textContent = gunAdlari[i] + ' ' + t.getDate() + '/' + (t.getMonth()+1);
+  });
+  // Bitiş tarihi otomatik güncelle
+  const bit = new Date(tarih);
+  bit.setDate(bit.getDate() + 4);
+  document.getElementById('bitis_tarihi').value = bit.toISOString().slice(0,10);
+  // Hafta no
+  const haftaNo = getISOWeek(tarih);
+  document.getElementById('hafta').value = haftaNo;
+}
+
+function getISOWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function dagit(haftalik) {
+  const n = 5;
+  const base = Math.floor(haftalik / n);
+  const kalan = haftalik % n;
+  const sonuc = Array(n).fill(base);
+  sonuc[0] += kalan;
+  return sonuc;
+}
+
+function haftalikDegisti(input, rowId) {
+  const haftalik = parseInt(input.value) || 0;
+  const gunler = dagit(haftalik);
+  const adlar = ['pzt','sal','car','per','cum'];
+  adlar.forEach((gun, i) => {
+    const inp = document.querySelector(`input[name="adet_${gun}[]"][data-row="${rowId}"]`);
+    if (inp) inp.value = gunler[i] || 0;
+  });
+  toplamGuncelle(rowId);
+}
+
+function toplamGuncelle(rowId) {
+  const adlar = ['pzt','sal','car','per','cum'];
+  let toplam = 0;
+  adlar.forEach(gun => {
+    const inp = document.querySelector(`input[name="adet_${gun}[]"][data-row="${rowId}"]`);
+    if (inp) toplam += parseInt(inp.value) || 0;
+  });
+  const topEl = document.getElementById('toplam-' + rowId);
+  if (topEl) topEl.textContent = toplam;
+  // haftalik_adet alanını da güncelle
+  const hafEl = document.querySelector(`input[name="haftalik_adet[]"][data-row="${rowId}"]`);
+  if (hafEl) hafEl.value = toplam;
+}
+
+function urunSecimHtml(rowId) {
+  let html = `<select name="urun_id[]" required style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">
+    <option value="">Ürün seçin</option>`;
+  URUNLER.forEach(u => { html += `<option value="${u.id}">${u.adi}</option>`; });
+  html += '</select>';
+  return html;
+}
+
+function istasyonSecimHtml(rowId) {
+  let html = `<select name="istasyon_id[]" style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px">
+    <option value="">İstasyon seçin</option>`;
+  ISTASYONLAR.forEach(s => { html += `<option value="${s.id}">${s.adi}</option>`; });
+  html += '</select>';
+  return html;
+}
+
 function satirEkle() {
+  const rowId = ++satirSayac;
   const tbody = document.getElementById('plan-satirlari');
-  const tpl = document.getElementById('satir-template');
-  tbody.appendChild(tpl.content.cloneNode(true));
+  const tr = document.createElement('tr');
+  tr.className = 'border-t border-gray-100 hover:bg-gray-50';
+  tr.id = 'satir-' + rowId;
+  tr.innerHTML = `
+    <td class="px-3 py-2">${urunSecimHtml(rowId)}</td>
+    <td class="px-3 py-2">${istasyonSecimHtml(rowId)}</td>
+    <td class="px-3 py-2 bg-indigo-50">
+      <input type="number" name="haftalik_adet[]" data-row="${rowId}" min="0" value="0"
+        oninput="haftalikDegisti(this, ${rowId})"
+        style="width:80px;padding:6px 8px;border:1px solid #c7d2fe;border-radius:6px;font-size:12px;text-align:right;background:#eef2ff;font-weight:700;color:#4338ca">
+    </td>
+    <td class="px-3 py-2 border-l border-gray-200">
+      <input type="number" name="adet_pzt[]" data-row="${rowId}" min="0" value="0" oninput="toplamGuncelle(${rowId})"
+        style="width:62px;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;text-align:right">
+    </td>
+    <td class="px-3 py-2">
+      <input type="number" name="adet_sal[]" data-row="${rowId}" min="0" value="0" oninput="toplamGuncelle(${rowId})"
+        style="width:62px;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;text-align:right">
+    </td>
+    <td class="px-3 py-2">
+      <input type="number" name="adet_car[]" data-row="${rowId}" min="0" value="0" oninput="toplamGuncelle(${rowId})"
+        style="width:62px;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;text-align:right">
+    </td>
+    <td class="px-3 py-2">
+      <input type="number" name="adet_per[]" data-row="${rowId}" min="0" value="0" oninput="toplamGuncelle(${rowId})"
+        style="width:62px;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;text-align:right">
+    </td>
+    <td class="px-3 py-2">
+      <input type="number" name="adet_cum[]" data-row="${rowId}" min="0" value="0" oninput="toplamGuncelle(${rowId})"
+        style="width:62px;padding:6px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;text-align:right">
+    </td>
+    <td class="px-3 py-2 text-right font-semibold text-gray-700" id="toplam-${rowId}">0</td>
+    <td class="px-3 py-2">
+      <button type="button" onclick="satirSil(${rowId})" style="color:#f87171;font-size:18px;background:none;border:none;cursor:pointer;padding:0 4px" title="Sil">×</button>
+    </td>
+  `;
+  tbody.appendChild(tr);
+  document.getElementById('bos-mesaj').style.display = 'none';
 }
 
-function bitisGuncelle() {
-  const basInput = document.getElementById('baslangic_tarihi');
-  const bitInput = document.getElementById('bitis_tarihi');
-  if (!basInput.value) return;
-  const tarih = new Date(basInput.value + 'T00:00:00');
-  tarih.setDate(tarih.getDate() + 4);
-  bitInput.value = tarih.toISOString().slice(0, 10);
+function satirSil(rowId) {
+  const tr = document.getElementById('satir-' + rowId);
+  if (tr) tr.remove();
+  if (document.getElementById('plan-satirlari').children.length === 0) {
+    document.getElementById('bos-mesaj').style.display = 'block';
+  }
 }
 
-document.getElementById('baslangic_tarihi').addEventListener('change', bitisGuncelle);
-bitisGuncelle();
+document.getElementById('baslangic_tarihi').addEventListener('change', gunBasliklariGuncelle);
+gunBasliklariGuncelle();
 satirEkle();
+
+// Bakım uyarısı: istasyon seçilince API çağır
+document.addEventListener('change', function(e) {
+  if (e.target.name === 'istasyon_id[]') {
+    const row = e.target.closest('tr');
+    const bas = document.getElementById('baslangic_tarihi').value;
+    if (!e.target.value || !bas) return;
+    const gunler = ['pzt','sal','car','per','cum'];
+    const tarihler = [];
+    const t = new Date(bas + 'T00:00:00');
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(t); d.setDate(d.getDate() + i);
+      tarihler.push(d.toISOString().slice(0,10));
+    }
+    tarihler.forEach(function(tarih) {
+      fetch('/api/bakim-kontrol?istasyon_id=' + e.target.value + '&tarih=' + tarih)
+        .then(r => r.json())
+        .then(function(data) {
+          if (data.uyari) {
+            let uyariId = 'uyari-' + e.target.dataset.row + '-' + tarih;
+            if (!document.getElementById(uyariId)) {
+              const div = document.createElement('div');
+              div.id = uyariId;
+              div.style = 'background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:6px 10px;font-size:11px;color:#92400e;margin-top:4px';
+              div.innerHTML = '⚠️ ' + data.mesaj;
+              row.closest('tbody').parentElement.parentElement.before(div);
+              setTimeout(() => div.remove(), 8000);
+            }
+          }
+        }).catch(() => {});
+    });
+  }
+});
 </script>
 {% endblock %}

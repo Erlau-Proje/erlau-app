@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+  <div>
+    <a href="{{ url_for('kalite.kalite_dashboard') }}" class="text-sm text-gray-400 hover:underline">← Kalite</a>
+    <h1 class="text-2xl font-semibold text-gray-800 mt-1">Geçmiş Kontroller</h1>
+  </div>
+</div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}
+  <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<form method="GET" class="card p-4 mb-5">
+  <div class="flex flex-wrap gap-3 items-end">
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Başlangıç</label>
+      <input type="date" name="bas" value="{{ baslangic }}" class="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Bitiş</label>
+      <input type="date" name="bit" value="{{ bitis }}" class="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">İstasyon</label>
+      <select name="istasyon_id" class="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+        <option value="">Tümü</option>
+        {% for ist in istasyonlar %}
+        <option value="{{ ist.id }}" {% if istasyon_id == ist.id|string %}selected{% endif %}>{{ ist.istasyon_adi }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Filtrele</button>
+  </div>
+</form>
+
+{% if kontroller %}
+<div class="card overflow-hidden">
+  <div class="px-6 py-4 border-b border-gray-100">
+    <h2 class="font-medium text-gray-800">{{ kontroller|length }} kontrol kaydı</h2>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-100">
+        <tr>
+          <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Tarih</th>
+          <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Ürün</th>
+          <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500">İstasyon</th>
+          <th class="px-3 py-2.5 text-right text-xs font-medium text-green-700">OK</th>
+          <th class="px-3 py-2.5 text-right text-xs font-medium text-red-600">NOK</th>
+          <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500">OK %</th>
+          <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Neden</th>
+          <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Akıbet</th>
+          <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Kontrol Eden</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for k in kontroller %}
+        {% set toplam = k.ok_adet + k.nok_adet %}
+        {% set ok_oran = (k.ok_adet / toplam * 100)|round(1) if toplam else 100 %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-2.5 text-xs text-gray-600 whitespace-nowrap">{{ k.tarih.strftime('%d.%m.%Y') }}</td>
+          <td class="px-4 py-2.5 text-xs font-medium text-gray-800">{{ k.urun.urun_adi if k.urun else '—' }}</td>
+          <td class="px-4 py-2.5 text-xs text-gray-600">{{ k.istasyon.istasyon_adi if k.istasyon else '—' }}</td>
+          <td class="px-3 py-2.5 text-right text-xs font-bold text-green-700">{{ k.ok_adet }}</td>
+          <td class="px-3 py-2.5 text-right text-xs font-bold {% if k.nok_adet %}text-red-600{% else %}text-gray-300{% endif %}">{{ k.nok_adet }}</td>
+          <td class="px-3 py-2.5 text-right">
+            <span style="font-size:11px;font-weight:700;color:{% if ok_oran >= 95 %}#16a34a{% elif ok_oran >= 80 %}#d97706{% else %}#dc2626{% endif %}">{{ ok_oran }}%</span>
+          </td>
+          <td class="px-4 py-2.5 text-xs text-gray-500">
+            {{ {'hammadde_hatasi':'Hammadde','isleme_hatasi':'İşleme','olcu_hatasi':'Ölçü','diger':'Diğer'}.get(k.nok_neden or '', k.nok_neden or '—') }}
+          </td>
+          <td class="px-4 py-2.5">
+            {% if k.nok_akibet == 'hurda' %}
+            <span style="background:#fecaca;color:#dc2626;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px">Hurda</span>
+            {% elif k.nok_akibet == 'tamir' %}
+            <span style="background:#fed7aa;color:#c2410c;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px">Tamir</span>
+            {% else %}
+            <span class="text-gray-300 text-xs">—</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2.5 text-xs text-gray-500">{{ k.kontrol_eden.name if k.kontrol_eden else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card px-6 py-10 text-center text-gray-400">Seçilen tarih aralığında kayıt bulunamadı.</div>
+{% endif %}
+{% endblock %}

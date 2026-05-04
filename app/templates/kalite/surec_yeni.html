@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content" style="max-width:760px">
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.surec_listesi') }}" class="text-sm text-gray-400 hover:underline">← Süreçler</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">Yeni Süreç</h1>
+    </div>
+  </div>
+  <div class="card p-5">
+    <form method="POST" style="display:grid;gap:14px">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Süreç Adı</label>
+        <input name="surec_adi" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 160px;gap:12px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Departman</label>
+          <select name="departman" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            {% for d in departmanlar %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Versiyon</label>
+          <input name="versiyon" value="1.0" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Açıklama</label>
+        <textarea name="aciklama" rows="4" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px">
+        <a href="{{ url_for('kalite.surec_listesi') }}" style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;text-decoration:none;color:#475569;background:#fff">İptal</a>
+        <button type="submit" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Oluştur</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

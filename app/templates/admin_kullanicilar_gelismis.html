@@ -1,0 +1,352 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-800">Kullanıcı Yönetimi</h1>
+    <p class="text-sm text-gray-500 mt-1">Görev profili, kapsam, departman ve özel yetkileri tek yerden yönetin.</p>
+  </div>
+  <a href="{{ url_for('admin.yetki_matrisi') }}" style="background:#3b82f6;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">Yetki Matrisi</a>
+</div>
+
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}
+  <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
+  <div class="xl:col-span-3 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <h2 class="font-medium text-gray-800">Kullanıcılar</h2>
+      <span class="text-xs text-gray-400">{{ users|length }} kayıt</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Kullanıcı</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Departman</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Profil / Kapsam</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Özel Yetkiler</th>
+            <th class="px-4 py-3 text-center text-xs font-medium text-gray-500">Durum</th>
+            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">İşlem</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+          {% for user in users %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3">
+              <div class="font-medium text-gray-800">{{ user.name }}</div>
+              <div class="text-xs text-gray-400">{{ user.email }}</div>
+              {% if user.unvan or user.telefon %}
+              <div class="text-xs text-gray-400 mt-1">{{ user.unvan or '' }}{% if user.unvan and user.telefon %} · {% endif %}{{ user.telefon or '' }}</div>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-gray-500">{{ user.department.name if user.department else '-' }}</td>
+            <td class="px-4 py-3">
+              <span class="px-2 py-1 rounded-full text-xs {% if user.role == 'admin' %}bg-purple-100 text-purple-700{% elif user.role == 'satinalma' %}bg-blue-100 text-blue-700{% elif user.role == 'gm' %}bg-orange-100 text-orange-700{% else %}bg-gray-100 text-gray-700{% endif %}">{{ profile_labels.get(user.job_profile, user.job_profile or user.role) }}</span>
+              <div class="text-xs text-gray-400 mt-1">{{ scope_labels.get(user.scope_type, user.scope_type or '-') }}</div>
+              {% if user.uretim_personeli %}
+              <div class="text-xs text-gray-400 mt-1">{{ user.uretim_personeli.tam_ad }}</div>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3">
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                {% if user.liste_yetki or user.role == 'admin' %}<span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Liste</span>{% endif %}
+                {% if user.teknik_resim_yetki %}<span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Teknik Resim</span>{% endif %}
+                {% if user.unvan_pdf_goster %}<span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">PDF Ünvan</span>{% endif %}
+                {% if not user.liste_yetki and user.role != 'admin' and not user.teknik_resim_yetki and not user.unvan_pdf_goster %}<span class="text-xs text-gray-300">—</span>{% endif %}
+              </div>
+            </td>
+            <td class="px-4 py-3 text-center">
+              {% if user.is_active %}
+              <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">Aktif</span>
+              {% else %}
+              <span class="bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs">Pasif</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-right">
+              <button type="button" onclick='kullaniciDuzenle({{ {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "role": user.role,
+                "department_id": user.department_id or "",
+                "is_active": 1 if user.is_active else 0,
+                "unvan": user.unvan or "",
+                "telefon": user.telefon or "",
+                "user_type": user.user_type or "office",
+                "job_profile": user.job_profile or "sadece_goruntuleme",
+                "scope_type": user.scope_type or "self",
+                "uretim_personeli_id": user.uretim_personeli_id or "",
+                "scope_department_ids": user.kapsam_departmanlari | map(attribute="department_id") | list,
+                "scope_station_ids": user.kapsam_istasyonlari | map(attribute="station_id") | list,
+                "teknik_resim_yetki": 1 if user.teknik_resim_yetki else 0,
+                "liste_yetki": 1 if user.liste_yetki else 0,
+                "bildirim_email": 1 if user.bildirim_email else 0,
+                "unvan_pdf_goster": 1 if user.unvan_pdf_goster else 0
+              } | tojson }})' class="text-xs text-blue-600 hover:underline mr-2">Düzenle</button>
+              <button type="button" onclick="sifreSifirla({{ user.id }}, {{ user.name|tojson }})" class="text-xs text-yellow-600 hover:underline mr-2">Şifre</button>
+              {% if user.id != current_user.id %}
+              <form method="POST" action="{{ url_for('admin.kullanici_sil', user_id=user.id) }}" class="inline" onsubmit="return confirm('{{ user.name }} pasife alınacak. Emin misiniz?')">
+                <button type="submit" class="text-xs text-red-500 hover:underline">Pasife Al</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+    <h2 class="font-medium text-gray-800 mb-4">Yeni Kullanıcı Ekle</h2>
+    <form method="POST" action="{{ url_for('admin.kullanici_ekle') }}">
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Ad Soyad</label>
+          <input type="text" name="name" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">E-posta</label>
+          <input type="email" name="email" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Şifre</label>
+          <input type="password" name="password" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Ünvan</label>
+            <input type="text" name="unvan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Telefon</label>
+            <input type="text" name="telefon" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Rol</label>
+          <select name="role" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for value, label in roller %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Departman</label>
+          <select name="department_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">Departman yok</option>
+            {% for dep in departmanlar %}<option value="{{ dep.id }}">{{ dep.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kullanıcı Tipi</label>
+          <select name="user_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for value, label in user_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Görev Profili</label>
+          <select name="job_profile" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for value, label in job_profiles %}<option value="{{ value }}" {% if value == 'sadece_goruntuleme' %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kapsam</label>
+          <select name="scope_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for value, label in scope_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Üretim Personeli Bağlantısı</label>
+          <select name="uretim_personeli_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">Bağlı değil</option>
+            {% for p in uretim_personeller %}<option value="{{ p.id }}">{{ p.tam_ad }}{% if p.istasyon %} · {{ p.istasyon.istasyon_adi }}{% endif %}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kapsam Departmanları</label>
+          <select name="scope_department_ids" multiple size="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for dep in departmanlar %}<option value="{{ dep.id }}">{{ dep.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kapsam İstasyonları</label>
+          <select name="scope_station_ids" multiple size="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for ist in istasyonlar %}<option value="{{ ist.id }}">{{ ist.istasyon_adi }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="space-y-2 pt-1">
+          <label class="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" name="liste_yetki"> Malzeme/ürün listesi düzenleyebilir</label>
+          <label class="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" name="teknik_resim_yetki"> Teknik resim yükleyebilir/silebilir</label>
+          <label class="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" name="unvan_pdf_goster"> PDF çıktılarında ünvan göster</label>
+          <label class="flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" name="bildirim_email" checked> E-posta bildirimi</label>
+        </div>
+        <button type="submit" class="w-full erlau-green text-white py-2 rounded-lg text-sm font-medium hover:opacity-90">Kullanıcı Ekle</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="sifreModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center;padding:16px">
+  <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm mx-4">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold text-gray-800">Şifre Sıfırla</h3>
+      <button type="button" onclick="sifreModalKapat()" class="text-gray-400 hover:text-gray-600 text-xl">×</button>
+    </div>
+    <p class="text-sm text-gray-500 mb-4" id="sifreKullaniciAd"></p>
+    <form id="sifreForm" method="POST">
+      <label class="block text-xs font-medium text-gray-700 mb-1">Yeni Şifre</label>
+      <input type="password" name="yeni_sifre" id="sifre_input" required minlength="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <div class="flex gap-2 pt-4">
+        <button type="button" onclick="sifreModalKapat()" class="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">İptal</button>
+        <button type="submit" class="flex-1 erlau-green text-white py-2 rounded-lg text-sm font-medium hover:opacity-90">Sıfırla</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center;padding:16px">
+  <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-2xl mx-4" style="max-height:92vh;overflow:auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold text-gray-800">Kullanıcı Düzenle</h3>
+      <button type="button" onclick="modalKapat()" class="text-gray-400 hover:text-gray-600 text-xl">×</button>
+    </div>
+    <form id="editForm" method="POST">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Ad Soyad</label>
+          <input type="text" name="name" id="edit_name" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">E-posta</label>
+          <input type="text" id="edit_email" disabled class="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Ünvan</label>
+          <input type="text" name="unvan" id="edit_unvan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Telefon</label>
+          <input type="text" name="telefon" id="edit_telefon" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Rol</label>
+          <select name="role" id="edit_role" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for value, label in roller %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Departman</label>
+          <select name="department_id" id="edit_dept" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">Departman yok</option>
+            {% for dep in departmanlar %}<option value="{{ dep.id }}">{{ dep.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Durum</label>
+          <select name="is_active" id="edit_active" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="1">Aktif</option>
+            <option value="0">Pasif</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kullanıcı Tipi</label>
+          <select name="user_type" id="edit_user_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for value, label in user_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Görev Profili</label>
+          <select name="job_profile" id="edit_job_profile" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for value, label in job_profiles %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kapsam</label>
+          <select name="scope_type" id="edit_scope_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for value, label in scope_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Üretim Personeli Bağlantısı</label>
+          <select name="uretim_personeli_id" id="edit_uretim_personeli_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">Bağlı değil</option>
+            {% for p in uretim_personeller %}<option value="{{ p.id }}">{{ p.tam_ad }}{% if p.istasyon %} · {{ p.istasyon.istasyon_adi }}{% endif %}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kapsam Departmanları</label>
+          <select name="scope_department_ids" id="edit_scope_department_ids" multiple size="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for dep in departmanlar %}<option value="{{ dep.id }}">{{ dep.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Kapsam İstasyonları</label>
+          <select name="scope_station_ids" id="edit_scope_station_ids" multiple size="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            {% for ist in istasyonlar %}<option value="{{ ist.id }}">{{ ist.istasyon_adi }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">
+        <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" name="liste_yetki" id="edit_liste_yetki"> Malzeme/ürün listesi düzenleyebilir</label>
+        <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" name="teknik_resim_yetki" id="edit_teknik_resim_yetki"> Teknik resim yükleyebilir/silebilir</label>
+        <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" name="unvan_pdf_goster" id="edit_unvan_pdf_goster"> PDF çıktılarında ünvan göster</label>
+        <label class="flex items-center gap-2 text-sm text-gray-600"><input type="checkbox" name="bildirim_email" id="edit_bildirim_email"> E-posta bildirimi</label>
+      </div>
+      <div class="flex gap-2 pt-5">
+        <button type="button" onclick="modalKapat()" class="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm hover:bg-gray-50">İptal</button>
+        <button type="submit" class="flex-1 erlau-green text-white py-2 rounded-lg text-sm font-medium hover:opacity-90">Kaydet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function sifreSifirla(id, name) {
+  document.getElementById('sifreForm').action = '/admin/kullanici/' + id + '/sifre-sifirla';
+  document.getElementById('sifreKullaniciAd').textContent = name + ' kullanıcısının şifresini sıfırlıyorsunuz.';
+  document.getElementById('sifre_input').value = '';
+  document.getElementById('sifreModal').style.display = 'flex';
+}
+function sifreModalKapat() {
+  document.getElementById('sifreModal').style.display = 'none';
+}
+function kullaniciDuzenle(user) {
+  document.getElementById('editForm').action = '/admin/kullanici/' + user.id + '/duzenle';
+  document.getElementById('edit_name').value = user.name;
+  document.getElementById('edit_email').value = user.email;
+  document.getElementById('edit_role').value = user.role;
+  document.getElementById('edit_dept').value = user.department_id;
+  document.getElementById('edit_active').value = user.is_active;
+  document.getElementById('edit_user_type').value = user.user_type;
+  document.getElementById('edit_job_profile').value = user.job_profile;
+  document.getElementById('edit_scope_type').value = user.scope_type;
+  document.getElementById('edit_uretim_personeli_id').value = user.uretim_personeli_id;
+  cokluSecimAyarla('edit_scope_department_ids', user.scope_department_ids || []);
+  cokluSecimAyarla('edit_scope_station_ids', user.scope_station_ids || []);
+  document.getElementById('edit_unvan').value = user.unvan;
+  document.getElementById('edit_telefon').value = user.telefon;
+  document.getElementById('edit_liste_yetki').checked = Boolean(user.liste_yetki);
+  document.getElementById('edit_teknik_resim_yetki').checked = Boolean(user.teknik_resim_yetki);
+  document.getElementById('edit_bildirim_email').checked = Boolean(user.bildirim_email);
+  document.getElementById('edit_unvan_pdf_goster').checked = Boolean(user.unvan_pdf_goster);
+  document.getElementById('editModal').style.display = 'flex';
+}
+function cokluSecimAyarla(id, values) {
+  const normalized = values.map(String);
+  Array.from(document.getElementById(id).options).forEach(function(option) {
+    option.selected = normalized.includes(option.value);
+  });
+}
+function modalKapat() {
+  document.getElementById('editModal').style.display = 'none';
+}
+document.getElementById('sifreModal').addEventListener('click', function(e) {
+  if (e.target === this) sifreModalKapat();
+});
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) modalKapat();
+});
+</script>
+{% endblock %}

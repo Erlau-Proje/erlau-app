@@ -31,7 +31,41 @@ class User(db.Model, UserMixin):
     bildirim_email = db.Column(db.Boolean, default=True)
     teknik_resim_yetki = db.Column(db.Boolean, default=False)
     liste_yetki = db.Column(db.Boolean, default=False)
+    user_type = db.Column(db.String(30), default='office', index=True)
+    job_profile = db.Column(db.String(60), default='sadece_goruntuleme', index=True)
+    scope_type = db.Column(db.String(40), default='self', index=True)
+    uretim_personeli_id = db.Column(db.Integer, db.ForeignKey('uretim_personeli.id'), nullable=True, index=True)
+    uretim_personeli = db.relationship('UretimPersoneli', foreign_keys=[uretim_personeli_id])
     talepler = db.relationship('TalepFormu', backref='talep_eden', lazy=True)
+    yetkiler = db.relationship('UserPermission', foreign_keys='UserPermission.user_id', backref='user', lazy=True, cascade='all, delete-orphan')
+    kapsam_departmanlari = db.relationship('UserScopeDepartment', backref='user', lazy=True, cascade='all, delete-orphan')
+    kapsam_istasyonlari = db.relationship('UserScopeStation', backref='user', lazy=True, cascade='all, delete-orphan')
+
+class UserPermission(db.Model):
+    __tablename__ = 'user_permission'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    permission_code = db.Column(db.String(80), nullable=False, index=True)
+    allowed = db.Column(db.Boolean, default=False, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    __table_args__ = (db.UniqueConstraint('user_id', 'permission_code', name='uq_user_permission_code'),)
+
+class UserScopeDepartment(db.Model):
+    __tablename__ = 'user_scope_department'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    department_id = db.Column(db.Integer, db.ForeignKey('department.id'), nullable=False, index=True)
+    department = db.relationship('Department', foreign_keys=[department_id])
+    __table_args__ = (db.UniqueConstraint('user_id', 'department_id', name='uq_user_scope_department'),)
+
+class UserScopeStation(db.Model):
+    __tablename__ = 'user_scope_station'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    station_id = db.Column(db.Integer, db.ForeignKey('is_istasyonu.id'), nullable=False, index=True)
+    station = db.relationship('IsIstasyonu', foreign_keys=[station_id])
+    __table_args__ = (db.UniqueConstraint('user_id', 'station_id', name='uq_user_scope_station'),)
 
 class Tedarikci(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -230,6 +264,23 @@ class IsIstasyonu(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     uretim_kayitlari = db.relationship('UretimKaydi', backref='istasyon', lazy=True)
+    personeller = db.relationship('UretimPersoneli', backref='istasyon', lazy=True)
+
+
+class UretimPersoneli(db.Model):
+    __tablename__ = 'uretim_personeli'
+    id = db.Column(db.Integer, primary_key=True)
+    ad = db.Column(db.String(100), nullable=False)
+    soyad = db.Column(db.String(100))
+    sicil_no = db.Column(db.String(20), unique=True, nullable=True)
+    istasyon_id = db.Column(db.Integer, db.ForeignKey('is_istasyonu.id'), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    uretim_kayitlari = db.relationship('UretimKaydi', backref='uretim_personeli', lazy=True)
+
+    @property
+    def tam_ad(self):
+        return f"{self.ad} {self.soyad or ''}".strip()
 
 
 class UretimPlani(db.Model):
@@ -257,6 +308,8 @@ class UretimPlaniSatir(db.Model):
     istasyon = db.relationship('IsIstasyonu', foreign_keys=[istasyon_id])
     tarih = db.Column(db.Date, nullable=False)
     planlanan_adet = db.Column(db.Integer, default=0)
+    devir_adet = db.Column(db.Integer, default=0)
+    kaynak = db.Column(db.String(20), default='plan')  # plan | devir | tamir
     uretim_kayitlari = db.relationship('UretimKaydi', backref='plan_satir', lazy=True)
 
 
@@ -270,6 +323,7 @@ class UretimKaydi(db.Model):
     tarih = db.Column(db.Date, nullable=False, default=date.today)
     gerceklesen_adet = db.Column(db.Integer, default=0)
     fire_adet = db.Column(db.Integer, default=0)
+    uretim_personeli_id = db.Column(db.Integer, db.ForeignKey('uretim_personeli.id'), nullable=True)
     giren_personel_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     giren_personel = db.relationship('User', foreign_keys=[giren_personel_id])
     aciklama = db.Column(db.Text)
@@ -303,11 +357,19 @@ class Makine(db.Model):
     marka = db.Column(db.String(100))
     model = db.Column(db.String(100))
     seri_no = db.Column(db.String(100))
+    islev = db.Column(db.String(200))
+    lokasyon = db.Column(db.String(200))
+    guc_kw = db.Column(db.String(30))
+    uretim_yili = db.Column(db.Integer)
+    istasyon_id = db.Column(db.Integer, db.ForeignKey('is_istasyonu.id'), nullable=True)
+    istasyon = db.relationship('IsIstasyonu', foreign_keys=[istasyon_id])
     aciklama = db.Column(db.Text)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     bakim_planlari = db.relationship('BakimPlani', backref='makine', lazy=True)
     bakim_kayitlari = db.relationship('BakimKaydi', backref='makine', lazy=True)
+    planli_bakimlar = db.relationship('PlanliBakim', backref='makine', lazy=True)
+    periyodik_kontroller = db.relationship('PeriyodikKontrol', backref='makine', lazy=True)
 
 
 class BakimPlani(db.Model):
@@ -332,8 +394,50 @@ class BakimKaydi(db.Model):
     tarih = db.Column(db.Date, nullable=False, default=date.today)
     yapilan_isler = db.Column(db.Text)
     sure_dakika = db.Column(db.Integer)
+    baslangic_saati = db.Column(db.Time, nullable=True)
+    bitis_saati = db.Column(db.Time, nullable=True)
+    parca_kullanildi = db.Column(db.Boolean, default=False)
+    kullanilan_parcalar = db.Column(db.Text)
     giren_personel_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     giren_personel = db.relationship('User', foreign_keys=[giren_personel_id])
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PlanliBakim(db.Model):
+    """Bakım departmanının oluşturduğu tarihli bakım penceresi."""
+    __tablename__ = 'planli_bakim'
+    id = db.Column(db.Integer, primary_key=True)
+    makine_id = db.Column(db.Integer, db.ForeignKey('makine.id'), nullable=False)
+    bakim_adi = db.Column(db.String(200), nullable=False)
+    baslangic_tarihi = db.Column(db.Date, nullable=False)
+    bitis_tarihi = db.Column(db.Date, nullable=False)
+    baslangic_saati = db.Column(db.Time, nullable=True)
+    bitis_saati = db.Column(db.Time, nullable=True)
+    sure_saat = db.Column(db.Float, nullable=True)
+    # planli | devam_ediyor | tamamlandi | iptal
+    durum = db.Column(db.String(20), default='planli', index=True)
+    planlayan_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    planlayan = db.relationship('User', foreign_keys=[planlayan_id])
+    notlar = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PeriyodikKontrol(db.Model):
+    """Dış kaynaklı firma tarafından yapılan periyodik kontroller."""
+    __tablename__ = 'periyodik_kontrol'
+    id = db.Column(db.Integer, primary_key=True)
+    makine_id = db.Column(db.Integer, db.ForeignKey('makine.id'), nullable=True)
+    kontrol_adi = db.Column(db.String(200), nullable=False)
+    kontrol_turu = db.Column(db.String(50))  # elektrik, toprak, basinc, diger
+    periyot_ay = db.Column(db.Integer, nullable=False, default=12)  # 6 veya 12
+    son_kontrol_tarihi = db.Column(db.Date, nullable=True)
+    sonraki_kontrol_tarihi = db.Column(db.Date, nullable=True)
+    kontrol_eden_firma = db.Column(db.String(200))
+    son_kontrol_notu = db.Column(db.Text)
+    # aktif | pasif
+    durum = db.Column(db.String(20), default='aktif', index=True)
+    olusturan_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    olusturan = db.relationship('User', foreign_keys=[olusturan_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -351,3 +455,181 @@ class TeknikResim(db.Model):
     yukleyen_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     yukleyen = db.relationship('User', foreign_keys=[yukleyen_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+
+# ---------------------------------------------------------------------------
+# KALİTE KONTROL
+# ---------------------------------------------------------------------------
+
+class KaliteKontrol(db.Model):
+    __tablename__ = 'kalite_kontrol'
+    id = db.Column(db.Integer, primary_key=True)
+    tarih = db.Column(db.Date, nullable=False, default=date.today, index=True)
+    uretim_kaydi_id = db.Column(db.Integer, db.ForeignKey('uretim_kaydi.id'), nullable=True)
+    uretim_kaydi = db.relationship('UretimKaydi', foreign_keys=[uretim_kaydi_id])
+    urun_id = db.Column(db.Integer, db.ForeignKey('urun.id'), nullable=False)
+    urun = db.relationship('Urun', foreign_keys=[urun_id])
+    istasyon_id = db.Column(db.Integer, db.ForeignKey('is_istasyonu.id'), nullable=False)
+    kontrol_eden_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    kontrol_eden = db.relationship('User', foreign_keys=[kontrol_eden_id])
+    ok_adet = db.Column(db.Integer, default=0)
+    nok_adet = db.Column(db.Integer, default=0)
+    # hammadde_hatasi | isleme_hatasi | olcu_hatasi | diger
+    nok_neden = db.Column(db.String(50), nullable=True)
+    nok_neden_aciklama = db.Column(db.Text, nullable=True)
+    # hurda | tamir
+    nok_akibet = db.Column(db.String(20), nullable=True)
+    tamir_plan_satir_id = db.Column(db.Integer, db.ForeignKey('uretim_plani_satir.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# DÖF — DÜZELTİCİ VE ÖNLEYİCİ FAALİYET
+# ---------------------------------------------------------------------------
+
+class DOF(db.Model):
+    __tablename__ = 'dof'
+    id = db.Column(db.Integer, primary_key=True)
+    dof_no = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    tarih = db.Column(db.Date, nullable=False, default=date.today)
+    # acik | isleniyor | kapali | gecikti | iptal
+    durum = db.Column(db.String(20), default='acik', index=True)
+    hedef_departman = db.Column(db.String(50), nullable=False)
+    hedef_kullanici_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    hedef_kullanici = db.relationship('User', foreign_keys=[hedef_kullanici_id])
+    acan_kullanici_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    acan_kullanici = db.relationship('User', foreign_keys=[acan_kullanici_id])
+    problem_tanimi = db.Column(db.Text, nullable=False)
+    kok_neden = db.Column(db.Text, nullable=True)
+    planlanan_kapatma_tarihi = db.Column(db.Date, nullable=True)
+    gercek_kapatma_tarihi = db.Column(db.Date, nullable=True)
+    kapatan_kullanici_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    kapatan_kullanici = db.relationship('User', foreign_keys=[kapatan_kullanici_id])
+    kapatma_notu = db.Column(db.Text, nullable=True)
+    # ic | tedis (tedarikçi)
+    tip = db.Column(db.String(10), default='ic')
+    tedarikci_id = db.Column(db.Integer, db.ForeignKey('tedarikci.id'), nullable=True)
+    tedarikci = db.relationship('Tedarikci', foreign_keys=[tedarikci_id])
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    aksiyonlar = db.relationship('DOFAksiyon', backref='dof', lazy=True, cascade='all, delete-orphan')
+    ekler = db.relationship('DOFEk', backref='dof', lazy=True, cascade='all, delete-orphan')
+
+
+class DOFAksiyon(db.Model):
+    __tablename__ = 'dof_aksiyon'
+    id = db.Column(db.Integer, primary_key=True)
+    dof_id = db.Column(db.Integer, db.ForeignKey('dof.id'), nullable=False)
+    aksiyon_tanimi = db.Column(db.Text, nullable=False)
+    sorumlu_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    sorumlu = db.relationship('User', foreign_keys=[sorumlu_id])
+    planlanan_tarih = db.Column(db.Date, nullable=False)
+    tamamlama_tarihi = db.Column(db.Date, nullable=True)
+    # bekliyor | tamamlandi | gecikti
+    durum = db.Column(db.String(20), default='bekliyor')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class DOFEk(db.Model):
+    __tablename__ = 'dof_ek'
+    id = db.Column(db.Integer, primary_key=True)
+    dof_id = db.Column(db.Integer, db.ForeignKey('dof.id'), nullable=False)
+    dosya_adi = db.Column(db.String(200), nullable=False)
+    dosya_yolu = db.Column(db.String(500), nullable=False)
+    # resim | pdf | diger
+    dosya_turu = db.Column(db.String(20), default='diger')
+    yukleyen_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    yukleyen = db.relationship('User', foreign_keys=[yukleyen_id])
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# 8D RAPORU
+# ---------------------------------------------------------------------------
+
+class SekizD(db.Model):
+    __tablename__ = 'sekiz_d'
+    id = db.Column(db.Integer, primary_key=True)
+    sekizd_no = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    tarih = db.Column(db.Date, nullable=False, default=date.today)
+    tedarikci_id = db.Column(db.Integer, db.ForeignKey('tedarikci.id'), nullable=False)
+    tedarikci = db.relationship('Tedarikci', foreign_keys=[tedarikci_id])
+    urun_kodu = db.Column(db.String(50), nullable=True)
+    urun_adi = db.Column(db.String(200), nullable=True)
+    revizyon_no = db.Column(db.String(10), default='1')
+    # taslak | gonderildi | kapali
+    durum = db.Column(db.String(20), default='taslak')
+    # D1
+    d1_ekip_lideri = db.Column(db.String(100), nullable=True)
+    d1_ekip_uyeleri = db.Column(db.Text, nullable=True)
+    # D2 - Problem (5W2H)
+    d2_problem_ozeti = db.Column(db.Text, nullable=True)
+    d2_kim = db.Column(db.String(200), nullable=True)
+    d2_ne = db.Column(db.String(200), nullable=True)
+    d2_nerede = db.Column(db.String(200), nullable=True)
+    d2_ne_zaman = db.Column(db.String(200), nullable=True)
+    d2_neden = db.Column(db.String(200), nullable=True)
+    d2_nasil = db.Column(db.String(200), nullable=True)
+    d2_ne_kadar = db.Column(db.String(200), nullable=True)
+    d2_ilk_tespit = db.Column(db.String(100), nullable=True)
+    # D3 - Geçici Önlem
+    d3_onlem = db.Column(db.Text, nullable=True)
+    d3_sorumlu = db.Column(db.String(100), nullable=True)
+    d3_tarih = db.Column(db.Date, nullable=True)
+    d3_etkinlik = db.Column(db.String(200), nullable=True)
+    # D4 - Kök Neden
+    d4_kok_neden = db.Column(db.Text, nullable=True)
+    # 5why | balik_kilcigi | diger
+    d4_analiz_metod = db.Column(db.String(50), nullable=True)
+    # D5 - Kalıcı Düzeltici
+    d5_aksiyon = db.Column(db.Text, nullable=True)
+    # D6 - Uygulama
+    d6_uygulama = db.Column(db.Text, nullable=True)
+    d6_tarih = db.Column(db.Date, nullable=True)
+    d6_dogrulama = db.Column(db.String(200), nullable=True)
+    # D7 - Önleyici
+    d7_onleyici = db.Column(db.Text, nullable=True)
+    # D8
+    d8_tadir = db.Column(db.Text, nullable=True)
+    acan_kullanici_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    acan_kullanici = db.relationship('User', foreign_keys=[acan_kullanici_id])
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
+# İŞ AKIŞI SÜREÇLERİ
+# ---------------------------------------------------------------------------
+
+class IsAkisiSurec(db.Model):
+    __tablename__ = 'is_akisi_surec'
+    id = db.Column(db.Integer, primary_key=True)
+    surec_kodu = db.Column(db.String(20), unique=True, nullable=False)
+    surec_adi = db.Column(db.String(200), nullable=False)
+    departman = db.Column(db.String(50), nullable=False)
+    aciklama = db.Column(db.Text, nullable=True)
+    versiyon = db.Column(db.String(10), default='1.0')
+    # taslak | aktif | arsiv
+    durum = db.Column(db.String(20), default='taslak')
+    olusturan_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    olusturan = db.relationship('User', foreign_keys=[olusturan_id])
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    adimlar = db.relationship('IsAkisiAdim', backref='surec', lazy=True,
+                              order_by='IsAkisiAdim.sira', cascade='all, delete-orphan')
+
+
+class IsAkisiAdim(db.Model):
+    __tablename__ = 'is_akisi_adim'
+    id = db.Column(db.Integer, primary_key=True)
+    surec_id = db.Column(db.Integer, db.ForeignKey('is_akisi_surec.id'), nullable=False)
+    sira = db.Column(db.Integer, nullable=False, default=1)
+    # baslangic | islem | karar | belge | bitis
+    adim_tipi = db.Column(db.String(20), default='islem')
+    adim_adi = db.Column(db.String(200), nullable=False)
+    aciklama = db.Column(db.Text, nullable=True)
+    sorumlu_departman = db.Column(db.String(50), nullable=True)
+    sure_hedef_saat = db.Column(db.Integer, nullable=True)
+    evet_sonraki_sira = db.Column(db.Integer, nullable=True)
+    hayir_sonraki_sira = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

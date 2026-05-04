@@ -1,0 +1,13 @@
+- sol sütunda yer alan Satın alma 
+	Ürün Listesine eklenecek otomatik ürünler(aynısı var ise kayıt olmasın. otomatik listede var ise tamamlasın) 
+
+	Yeni satınalma Talebi oluşturulurken Proje/Makine/Ürün sütununa girilen data ile arşiv oluştursun, başka bir talep yapılırken otomatik tamamlansın, talebi yapan yazdıkça önerileri görsün.
+
+- Kullanıcı, Sol sütunda yer alan Panel ekranında, Sadece kendi departmanındaki siparişlere ulaşabilsin. Başka departmanların siparişlerine ulaşamasın. Satınalma departmanında çalışanlar tüm siparişlere ulaşabilsin, değiştirebilsin, düzenleyebilsin.
+
+	-Tedarik zinciri ve Planlama departmanındaki kişiler, üretim planı oluşturabilsin, Makine Ekleyebilsin, çıkarabilsin, Üretim departmanındaki kişiler, oluşturulan bu planlara ulaşabilsin. üretilen ürün adetlerini plana görerek girebilsin, buraya 2 yeni kullanıcı eklemeni istiyorum, bu kullanıcılar Üretim departmanında çalışan formen görevindeki kişiler, bunlar da üretim verilerini girebilsinler. personel ve üretim planına göre üretimdeki personelleri atayabilsin. Fire ve Hurda miktarını girebilsin.
+	Formen kullanıcıları: coskun.ucar@erlau.com.tr, ersen.gunaydin@erlau.com.tr
+	aynı şekilde üretim departmanında çalışan kişiler de bu üretim datalarını girebilsin.
+	Arıza olan makinelerin arızalarını ve tamir sürelerini girebilsin, arıza tamamlanmadıysa arıza devam ediyor yazabilsin. arıza gidince toplam duruş süresini girebilsin, formen dahil.
+
+Admin yetkilisi: Kullanıcıların şifrelerini değiştirebilsin. 

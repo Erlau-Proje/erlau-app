@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+{% block content %}
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in msgs %}
+  <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+  <div>
+    <a href="{{ url_for('bakim.bakim_dashboard') }}" class="text-sm text-gray-400 hover:underline">← Bakım Paneli</a>
+    <h1 class="text-2xl font-semibold text-gray-800 mt-1">Planlı Bakım Programı</h1>
+  </div>
+  <button type="button" onclick="document.getElementById('modalEkle').style.display='flex'"
+    class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">+ Yeni Bakım Planla</button>
+</div>
+
+<!-- Filtre -->
+<div class="card p-4 mb-5">
+  <form method="GET" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+    <div>
+      <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Durum</label>
+      <select name="durum" style="width:180px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        <option value="">Aktif (Planlı + Devam)</option>
+        {% for d in ['planli','devam_ediyor','tamamlandi','iptal'] %}
+        <option value="{{ d }}" {% if durum_filtre == d %}selected{% endif %}>
+          {{ {'planli':'Planlı','devam_ediyor':'Devam Ediyor','tamamlandi':'Tamamlandı','iptal':'İptal'}.get(d, d) }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" style="background:#3b82f6;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer">Filtrele</button>
+  </form>
+</div>
+
+<!-- Liste -->
+<div class="card overflow-hidden">
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+          <th style="padding:10px 14px;text-align:left;font-weight:600;color:#475569">Makine</th>
+          <th style="padding:10px 14px;text-align:left;font-weight:600;color:#475569">Bakım Adı</th>
+          <th style="padding:10px 14px;text-align:left;font-weight:600;color:#475569">Başlangıç</th>
+          <th style="padding:10px 14px;text-align:left;font-weight:600;color:#475569">Bitiş</th>
+          <th style="padding:10px 14px;text-align:left;font-weight:600;color:#475569">Süre</th>
+          <th style="padding:10px 14px;text-align:left;font-weight:600;color:#475569">Durum</th>
+          <th style="padding:10px 14px;text-align:right;font-weight:600;color:#475569">İşlem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in programlar %}
+        {% set gecti = p.bitis_tarihi < bugun and p.durum == 'planli' %}
+        <tr class="hover:bg-gray-50" style="border-bottom:1px solid #f1f5f9{% if gecti %};background:#fef2f2{% endif %}">
+          <td style="padding:10px 14px">
+            <div style="font-weight:600;color:#1e293b">{{ p.makine.makine_adi }}</div>
+            <div style="font-size:11px;color:#94a3b8">{{ p.makine.makine_kodu }} · {{ p.makine.lokasyon or '—' }}</div>
+          </td>
+          <td style="padding:10px 14px;color:#475569">{{ p.bakim_adi }}</td>
+          <td style="padding:10px 14px;color:#475569">
+            {{ p.baslangic_tarihi.strftime('%d.%m.%Y') }}
+            {% if p.baslangic_saati %}<span style="font-size:11px;color:#94a3b8"> {{ p.baslangic_saati.strftime('%H:%M') }}</span>{% endif %}
+          </td>
+          <td style="padding:10px 14px;color:#475569">
+            {{ p.bitis_tarihi.strftime('%d.%m.%Y') }}
+            {% if p.bitis_saati %}<span style="font-size:11px;color:#94a3b8"> {{ p.bitis_saati.strftime('%H:%M') }}</span>{% endif %}
+          </td>
+          <td style="padding:10px 14px;color:#64748b">{{ p.sure_saat|round(1) if p.sure_saat else '—' }}{% if p.sure_saat %} saat{% endif %}</td>
+          <td style="padding:10px 14px">
+            {% if p.durum == 'planli' %}
+              {% if gecti %}<span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Geçti!</span>
+              {% else %}<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Planlı</span>{% endif %}
+            {% elif p.durum == 'devam_ediyor' %}<span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Devam Ediyor</span>
+            {% elif p.durum == 'tamamlandi' %}<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Tamamlandı</span>
+            {% else %}<span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">İptal</span>{% endif %}
+          </td>
+          <td style="padding:10px 14px;text-align:right">
+            <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+              {% if p.durum in ['planli','devam_ediyor'] %}
+              <form method="POST" action="{{ url_for('bakim.program_durum', id=p.id) }}" style="display:inline">
+                <input type="hidden" name="durum" value="devam_ediyor">
+                <button type="submit" style="font-size:11px;color:#2563eb;border:none;background:transparent;cursor:pointer;font-weight:600">Başladı</button>
+              </form>
+              <form method="POST" action="{{ url_for('bakim.program_durum', id=p.id) }}" style="display:inline">
+                <input type="hidden" name="durum" value="tamamlandi">
+                <button type="submit" style="font-size:11px;color:#16a34a;border:none;background:transparent;cursor:pointer;font-weight:600">Tamamlandı</button>
+              </form>
+              <form method="POST" action="{{ url_for('bakim.program_durum', id=p.id) }}" style="display:inline" onsubmit="return confirm('İptal edilsin mi?')">
+                <input type="hidden" name="durum" value="iptal">
+                <button type="submit" style="font-size:11px;color:#ef4444;border:none;background:transparent;cursor:pointer;font-weight:600">İptal</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="padding:32px;text-align:center;color:#94a3b8">Planlı bakım kaydı yok.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Ekle Modal -->
+<div id="modalEkle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;padding:24px;border-radius:12px;width:580px;max-width:100%;max-height:90vh;overflow-y:auto">
+    <h3 style="font-size:17px;font-weight:700;color:#1e293b;margin-bottom:18px">Yeni Bakım Planla</h3>
+    <form method="POST">
+      <input type="hidden" name="eylem" value="ekle">
+      <div style="display:grid;gap:12px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Makine *</label>
+          <select name="makine_id" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            <option value="">Makine seçin</option>
+            {% for m in makineler %}
+            <option value="{{ m.id }}">{{ m.makine_adi }} ({{ m.makine_kodu }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Bakım Adı / Açıklaması *</label>
+          <input name="bakim_adi" required placeholder="Örn: Yıllık genel bakım, Yağ değişimi..." style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Başlangıç Tarihi *</label>
+            <input type="date" name="baslangic_tarihi" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Bitiş Tarihi *</label>
+            <input type="date" name="bitis_tarihi" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Başlangıç Saati</label>
+            <input type="time" name="baslangic_saati" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Bitiş Saati</label>
+            <input type="time" name="bitis_saati" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Tahmini Süre (saat)</label>
+            <input type="number" name="sure_saat" step="0.5" min="0" placeholder="8" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          </div>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Notlar</label>
+          <textarea name="notlar" rows="2" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
+        <button type="button" onclick="document.getElementById('modalEkle').style.display='none'"
+          style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;cursor:pointer;background:#fff;color:#475569">İptal</button>
+        <button type="submit" class="erlau-green text-white px-5 py-2 rounded-lg text-sm font-medium">Kaydet</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

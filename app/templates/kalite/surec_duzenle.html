@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.surec_goruntur', id=surec.id) }}" class="text-sm text-gray-400 hover:underline">← Süreci Görüntüle</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">Süreç Düzenle</h1>
+    </div>
+  </div>
+
+  <div class="card p-5 mb-5">
+    <form method="POST" style="display:grid;grid-template-columns:2fr 1fr 140px auto;gap:12px;align-items:end">
+      <input type="hidden" name="eylem" value="meta">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Süreç Adı</label>
+        <input name="surec_adi" value="{{ surec.surec_adi }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Departman</label>
+        <select name="departman" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+          {% for d in departmanlar %}<option value="{{ d }}" {% if surec.departman == d %}selected{% endif %}>{{ d }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Versiyon</label>
+        <input name="versiyon" value="{{ surec.versiyon }}" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      </div>
+      <button type="submit" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Güncelle</button>
+      <div style="grid-column:1/-1">
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:5px">Açıklama</label>
+        <textarea name="aciklama" rows="3" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical">{{ surec.aciklama or '' }}</textarea>
+      </div>
+    </form>
+  </div>
+
+  <div class="card overflow-hidden mb-5">
+    <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9">
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b">Adımlar</h2>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <th style="padding:10px;text-align:left">Sıra</th>
+            <th style="padding:10px;text-align:left">Tip</th>
+            <th style="padding:10px;text-align:left">Adım Adı</th>
+            <th style="padding:10px;text-align:left">Açıklama</th>
+            <th style="padding:10px;text-align:left">Sorumlu Dept</th>
+            <th style="padding:10px;text-align:right">Süre (h)</th>
+            <th style="padding:10px;text-align:center">Sıra</th>
+            <th style="padding:10px;text-align:right">Sil</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in surec.adimlar %}
+          <tr class="hover:bg-gray-50" style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:10px">{{ a.sira }}</td>
+            <td style="padding:10px">{{ a.adim_tipi }}</td>
+            <td style="padding:10px;font-weight:600;color:#1e293b">{{ a.adim_adi }}</td>
+            <td style="padding:10px;color:#64748b;max-width:260px">{{ a.aciklama or '—' }}</td>
+            <td style="padding:10px;color:#64748b">{{ a.sorumlu_departman or '—' }}</td>
+            <td style="padding:10px;text-align:right">{{ a.sure_hedef_saat or '—' }}</td>
+            <td style="padding:10px;text-align:center">
+              <form method="POST" action="{{ url_for('kalite.adim_sira_degistir', id=surec.id) }}" style="display:inline">
+                <input type="hidden" name="adim_id" value="{{ a.id }}"><input type="hidden" name="yon" value="yukari">
+                <button type="submit" style="border:1px solid #e2e8f0;background:#fff;border-radius:6px;padding:4px 7px;cursor:pointer">↑</button>
+              </form>
+              <form method="POST" action="{{ url_for('kalite.adim_sira_degistir', id=surec.id) }}" style="display:inline">
+                <input type="hidden" name="adim_id" value="{{ a.id }}"><input type="hidden" name="yon" value="asagi">
+                <button type="submit" style="border:1px solid #e2e8f0;background:#fff;border-radius:6px;padding:4px 7px;cursor:pointer">↓</button>
+              </form>
+            </td>
+            <td style="padding:10px;text-align:right">
+              <form method="POST" action="{{ url_for('kalite.adim_sil', id=surec.id) }}" onsubmit="return confirm('Adım silinsin mi?')">
+                <input type="hidden" name="adim_id" value="{{ a.id }}">
+                <button type="submit" class="text-xs text-red-400 hover:text-red-600" style="border:none;background:transparent;cursor:pointer">Sil</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" style="padding:28px;text-align:center;color:#94a3b8">Adım bulunmuyor.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card p-5">
+    <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Yeni Adım</h2>
+    <form method="POST" action="{{ url_for('kalite.adim_ekle', id=surec.id) }}" style="display:grid;grid-template-columns:150px 1fr 1fr 180px 110px;gap:8px">
+      <select name="adim_tipi" onchange="kararAlanlari(this)" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        {% for t in ['baslangic','islem','karar','belge','bitis'] %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+      </select>
+      <input name="adim_adi" required placeholder="Adım adı" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      <input name="aciklama" placeholder="Açıklama (opsiyonel)" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      <input name="sorumlu_departman" placeholder="Sorumlu departman" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      <input type="number" name="sure_hedef_saat" min="0" placeholder="Süre (h)" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      <div id="kararAlanlari" style="display:none;grid-column:1/-1;grid-template-columns:1fr 1fr;gap:8px">
+        <input type="number" name="evet_sonraki_sira" placeholder="Evet → Sıra" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+        <input type="number" name="hayir_sonraki_sira" placeholder="Hayır → Sıra" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+      </div>
+      <button type="submit" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium" style="grid-column:1/-1;justify-self:end">Ekle</button>
+    </form>
+  </div>
+</div>
+<script>
+function kararAlanlari(sel) {
+  document.getElementById('kararAlanlari').style.display = sel.value === 'karar' ? 'grid' : 'none';
+}
+</script>
+{% endblock %}

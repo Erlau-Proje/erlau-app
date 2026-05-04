@@ -28,6 +28,7 @@ def create_app():
     login_manager.login_message = 'Lütfen giriş yapın.'
 
     from app.routes import auth, main, satin_alma, admin, muhasebe, api, uretim, planlama, bakim, teknik_resim_bp
+    from app.kalite_routes import kalite
     app.register_blueprint(auth)
     app.register_blueprint(main)
     app.register_blueprint(satin_alma)
@@ -38,6 +39,7 @@ def create_app():
     app.register_blueprint(planlama)
     app.register_blueprint(bakim)
     app.register_blueprint(teknik_resim_bp)
+    app.register_blueprint(kalite)
 
     if not app.debug:
         log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
@@ -65,7 +67,31 @@ def create_app():
 
     @app.errorhandler(500)
     def sunucu_hatasi(e):
+        db.session.rollback()
         return render_template('hata.html', kod=500, mesaj='Sunucu hatası.', aciklama='Beklenmedik bir hata oluştu. Tekrar deneyin veya yönetici ile iletişime geçin.'), 500
+
+    from flask import request, redirect, url_for, flash, jsonify
+    from flask_login import current_user
+    from app.permissions import ENDPOINT_PERMISSIONS, has_permission
+    from app.menu_scope import menu_visible
+
+    @app.before_request
+    def yetki_matrisi_kontrol():
+        code = ENDPOINT_PERMISSIONS.get(request.endpoint)
+        if not code:
+            return None
+        if not current_user.is_authenticated:
+            return None
+        if has_permission(current_user, code):
+            return None
+        if request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json':
+            return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
+        flash('Bu işlem için yetkiniz yok.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    @app.context_processor
+    def yetki_helpers():
+        return {'can': has_permission, 'menu_visible': menu_visible}
 
     with app.app_context():
         db.create_all()

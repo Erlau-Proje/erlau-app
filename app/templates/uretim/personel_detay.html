@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+    <div class="mb-4 px-4 py-3 rounded-lg {% if cat=='success' %}bg-green-50 text-green-700{% else %}bg-red-50 text-red-700{% endif %} text-sm">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('uretim.personel_listesi') }}" class="text-sm text-gray-400 hover:underline">← Personel Listesi</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">{{ personel.ad }} {{ personel.soyad or '' }}</h1>
+    </div>
+  </div>
+
+  <div class="card p-5 mb-4">
+    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <div style="width:60px;height:60px;background:#3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700">{{ personel.ad[0] }}</div>
+      <div style="flex:1;min-width:220px">
+        <div style="font-size:22px;font-weight:700;color:#1e293b">{{ personel.ad }} {{ personel.soyad or '' }}</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px">{{ personel.istasyon.istasyon_adi if personel.istasyon else '—' }}</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px">Sicil No: {{ personel.sicil_no or '—' }} · Çalışma Başlangıcı: {{ personel.created_at.strftime('%d.%m.%Y') if personel.created_at else '—' }}</div>
+      </div>
+      <div>
+        {% if personel.is_active %}
+        <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Aktif</span>
+        {% else %}
+        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Pasif</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px">
+    <div class="card p-4 text-center">
+      <div style="font-size:12px;color:#64748b;font-weight:600">Bu Hafta Üretim</div>
+      <div style="font-size:28px;font-weight:700;color:#1e293b;margin-top:6px">{{ bu_hafta_toplam }} adet</div>
+    </div>
+    <div class="card p-4 text-center">
+      <div style="font-size:12px;color:#64748b;font-weight:600">Bu Ay Üretim</div>
+      <div style="font-size:28px;font-weight:700;color:#1e293b;margin-top:6px">{{ bu_ay_toplam }} adet</div>
+    </div>
+    <div class="card p-4 text-center">
+      <div style="font-size:12px;color:#64748b;font-weight:600">Günlük Ortalama</div>
+      <div style="font-size:28px;font-weight:700;color:#1e293b;margin-top:6px">{{ "%.1f"|format(gunluk_ortalama) }} adet</div>
+    </div>
+    <div class="card p-4 text-center">
+      <div style="font-size:12px;color:#64748b;font-weight:600">Çalıştığı İstasyon</div>
+      <div style="font-size:20px;font-weight:700;color:#1e293b;margin-top:10px">{{ personel.istasyon.istasyon_adi if personel.istasyon else '—' }}</div>
+    </div>
+  </div>
+
+  <div class="card p-5 mb-6">
+    <h2 style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:16px">Son 30 Gün Günlük Üretim</h2>
+    <canvas id="performansGrafik" height="90"></canvas>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card overflow-hidden mb-6">
+      <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b">Ürün Bazlı Dağılım (Bu Ay)</h2>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#475569">Ürün Adı</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">Toplam Adet</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">Oran (%)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in urun_dagilimi %}
+          <tr class="hover:bg-gray-50" style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:10px 16px;color:#1e293b">{{ u.urun_adi }}</td>
+            <td style="padding:10px 16px;text-align:right;color:#1e293b;font-weight:600">{{ u.toplam }}</td>
+            <td style="padding:10px 16px;text-align:right;color:#64748b">{{ "%.1f"|format(u.oran) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" style="padding:28px;text-align:center;color:#94a3b8">Bu ay üretim kaydı yok.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card overflow-hidden mb-6">
+      <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b">Son 10 Üretim Kaydı</h2>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
+            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#475569">Tarih</th>
+            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#475569">İstasyon</th>
+            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#475569">Ürün</th>
+            <th style="padding:10px 16px;text-align:right;font-weight:600;color:#475569">Adet</th>
+            <th style="padding:10px 16px;text-align:left;font-weight:600;color:#475569">Kaynak</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for k in son_kayitlar %}
+          <tr class="hover:bg-gray-50" style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:10px 16px;color:#64748b">{{ k.tarih.strftime('%d.%m.%Y') if k.tarih else '—' }}</td>
+            <td style="padding:10px 16px;color:#475569">{{ k.istasyon.istasyon_adi if k.istasyon else '—' }}</td>
+            <td style="padding:10px 16px;color:#475569">{{ k.urun.urun_adi if k.urun else '—' }}</td>
+            <td style="padding:10px 16px;text-align:right;color:#1e293b;font-weight:600">{{ k.gerceklesen_adet }}</td>
+            <td style="padding:10px 16px;color:#64748b">{{ k.plan_satir.kaynak if k.plan_satir and k.plan_satir.kaynak is defined else 'plan' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="padding:28px;text-align:center;color:#94a3b8">Üretim kaydı yok.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const labels = {{ performans_30gun | map(attribute='tarih') | list | tojson }};
+const data = {{ performans_30gun | map(attribute='toplam_adet') | list | tojson }};
+new Chart(document.getElementById('performansGrafik'), {
+  type: 'bar',
+  data: {
+    labels: labels,
+    datasets: [{
+      label: 'Adet',
+      data: data,
+      backgroundColor: '#3b82f6',
+      borderRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { display: false } },
+      y: { beginAtZero: true, grid: { color: '#f1f5f9' } }
+    }
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-content">
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('kalite.surec_listesi') }}" class="text-sm text-gray-400 hover:underline">← Süreçler</a>
+      <h1 class="text-2xl font-semibold text-gray-800 mt-1">{{ surec.surec_adi }}</h1>
+      <p class="text-sm text-gray-500 mt-1">{{ surec.surec_kodu }} · {{ surec.departman }} · v{{ surec.versiyon }}</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      {% if surec.durum == 'aktif' %}<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full" style="align-self:center">aktif</span>
+      {% elif surec.durum == 'arsiv' %}<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full" style="align-self:center">arsiv</span>
+      {% else %}<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full" style="align-self:center">taslak</span>{% endif %}
+      <button type="button" onclick="window.print()" style="background:#3b82f6;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer">Yazdır</button>
+      {% if current_user.role in ['kalite','admin'] %}
+      <a href="{{ url_for('kalite.surec_duzenle', id=surec.id) }}" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Düzenle</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start">
+    <div class="card p-5">
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b;margin-bottom:14px">Akış Şeması</h2>
+      <div style="overflow-x:auto">
+        {% set svg_width = 180 * (surec.adimlar|length) + 120 %}
+        <svg width="{{ [svg_width, 720]|max }}" height="300">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280"/>
+            </marker>
+          </defs>
+          {% for a in surec.adimlar %}
+          {% set cx = 80 + loop.index0 * 180 %}
+          {% set next_x = cx + 100 %}
+          {% if not loop.last %}
+          <line x1="{{ cx + 65 }}" y1="150" x2="{{ next_x }}" y2="150" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow)"/>
+          {% endif %}
+          {% if a.adim_tipi in ['baslangic','bitis'] %}
+          <ellipse cx="{{ cx }}" cy="150" rx="62" ry="34" fill="#dcfce7" stroke="#16a34a" stroke-width="2">
+            <title>{{ a.aciklama or '' }} · {{ a.sorumlu_departman or '—' }} · {{ a.sure_hedef_saat or '—' }} saat</title>
+          </ellipse>
+          {% elif a.adim_tipi == 'karar' %}
+          <polygon points="{{ cx }},110 {{ cx + 62 }},150 {{ cx }},190 {{ cx - 62 }},150" fill="#fef3c7" stroke="#f59e0b" stroke-width="2">
+            <title>{{ a.aciklama or '' }} · Evet: {{ a.evet_sonraki_sira or '—' }} · Hayır: {{ a.hayir_sonraki_sira or '—' }}</title>
+          </polygon>
+          <text x="{{ cx + 68 }}" y="128" font-size="10" fill="#92400e">Evet {{ a.evet_sonraki_sira or '' }}</text>
+          <text x="{{ cx + 68 }}" y="178" font-size="10" fill="#92400e">Hayır {{ a.hayir_sonraki_sira or '' }}</text>
+          {% elif a.adim_tipi == 'belge' %}
+          <rect x="{{ cx - 62 }}" y="120" width="124" height="60" rx="4" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2">
+            <title>{{ a.aciklama or '' }} · {{ a.sorumlu_departman or '—' }} · {{ a.sure_hedef_saat or '—' }} saat</title>
+          </rect>
+          {% else %}
+          <rect x="{{ cx - 62 }}" y="120" width="124" height="60" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="2">
+            <title>{{ a.aciklama or '' }} · {{ a.sorumlu_departman or '—' }} · {{ a.sure_hedef_saat or '—' }} saat</title>
+          </rect>
+          {% endif %}
+          <text x="{{ cx }}" y="146" text-anchor="middle" font-size="11" fill="#1f2937">{{ a.adim_adi[:20] }}</text>
+          <text x="{{ cx }}" y="162" text-anchor="middle" font-size="10" fill="#64748b">{{ a.adim_tipi }}</text>
+          {% else %}
+          <text x="40" y="150" font-size="13" fill="#94a3b8">Bu süreç için adım tanımlanmamış.</text>
+          {% endfor %}
+        </svg>
+      </div>
+    </div>
+
+    <div class="card overflow-hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f1f5f9">
+        <h2 style="font-size:15px;font-weight:700;color:#1e293b">Adım Listesi</h2>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f8fafc"><th style="padding:8px;text-align:left">Sıra</th><th style="padding:8px;text-align:left">Ad</th><th style="padding:8px;text-align:left">Tip</th><th style="padding:8px;text-align:left">Sorumlu</th><th style="padding:8px;text-align:right">Süre</th></tr></thead>
+        <tbody>
+          {% for a in surec.adimlar %}
+          <tr class="hover:bg-gray-50" style="border-top:1px solid #f1f5f9">
+            <td style="padding:8px">{{ a.sira }}</td>
+            <td style="padding:8px;font-weight:600;color:#1e293b">{{ a.adim_adi }}</td>
+            <td style="padding:8px;color:#64748b">{{ a.adim_tipi }}</td>
+            <td style="padding:8px;color:#64748b">{{ a.sorumlu_departman or '—' }}</td>
+            <td style="padding:8px;text-align:right">{{ a.sure_hedef_saat or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="padding:20px;text-align:center;color:#94a3b8">Adım yok.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

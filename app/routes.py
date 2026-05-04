@@ -3,8 +3,10 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import selectinload
 from app import db
-from app.models import User, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi, TeklifGrubu, TeklifKalem, TeknikResim
-from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu, generate_plan_no, generate_teklif_no
+from app.models import User, UserPermission, UserScopeDepartment, UserScopeStation, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPersoneli, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi, PlanliBakim, PeriyodikKontrol, TeklifGrubu, TeklifKalem, TeknikResim, KaliteKontrol, DOF, DOFAksiyon
+from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu, generate_plan_no, generate_teklif_no, devir_gunu
+from app.permissions import PERMISSIONS, PERMISSION_BY_CODE, ENDPOINT_PERMISSIONS, has_permission, default_permission_allowed
+from app.access_profiles import JOB_PROFILES, SCOPE_TYPES, USER_TYPES, PROFILE_LABELS, SCOPE_LABELS, USER_TYPE_LABELS, infer_profile
 from datetime import datetime, date, timedelta
 from functools import wraps
 
@@ -23,7 +25,7 @@ _TEKNIK_EDIT_ROLES = ('admin', 'satinalma', 'gm', 'departman_yoneticisi', 'proje
 def teknik_yetki_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.teknik_resim_yetki:
+        if not current_user.is_authenticated or not has_permission(current_user, 'technical.manage'):
             flash('Bu işlem için yetkiniz yok.', 'danger')
             return redirect(url_for('teknik_resim.teknik_resim_listesi'))
         return f(*args, **kwargs)
@@ -33,7 +35,9 @@ def role_required(*roles):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            if not current_user.is_authenticated or current_user.role not in roles:
+            endpoint_permission = ENDPOINT_PERMISSIONS.get(request.endpoint)
+            has_endpoint_permission = endpoint_permission and has_permission(current_user, endpoint_permission)
+            if not current_user.is_authenticated or (current_user.role not in roles and not has_endpoint_permission):
                 flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
                 return redirect(url_for('main.dashboard'))
             return f(*args, **kwargs)
@@ -73,9 +77,6 @@ def logout():
 @login_required
 def dashboard():
     from app.services import get_gm_dashboard_stats
-    if current_user.role in ['satinalma', 'admin']:
-        return redirect(url_for('satin_alma.panel'))
-
     bugun = date.today()
 
     if current_user.role == 'gm':
@@ -335,10 +336,8 @@ def siparis_raporu():
     # Rol bazlı kapsam
     if current_user.role in ['satinalma', 'admin', 'gm']:
         pass  # hepsini görür
-    elif current_user.role == 'departman_yoneticisi':
-        query = query.filter(TalepFormu.department_id == current_user.department_id)
     else:
-        query = query.filter(TalepFormu.talep_eden_id == current_user.id)
+        query = query.filter(TalepFormu.department_id == current_user.department_id)
 
     if bas_str:
         try:
@@ -633,9 +632,107 @@ def iptal(talep_id):
 @login_required
 @role_required('admin')
 def kullanicilar():
+    users = User.query.order_by(User.is_active.desc(), User.name).all()
+    for user in users:
+        if not user.job_profile or not user.user_type or not user.scope_type:
+            profile, user_type, scope_type = infer_profile(user)
+            user.job_profile = user.job_profile or profile
+            user.user_type = user.user_type or user_type
+            user.scope_type = user.scope_type or scope_type
+    departmanlar = Department.query.order_by(Department.name).all()
+    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).order_by(IsIstasyonu.istasyon_adi).all()
+    uretim_personeller = UretimPersoneli.query.filter_by(is_active=True).order_by(UretimPersoneli.ad, UretimPersoneli.soyad).all()
+    roller = [
+        ('personel', 'Personel'),
+        ('departman_yoneticisi', 'Departman Yöneticisi'),
+        ('proje', 'Proje Departmanı'),
+        ('satinalma', 'Satınalma'),
+        ('gm', 'Genel Müdür'),
+        ('muhasebe', 'Muhasebe'),
+        ('uretim', 'Üretim'),
+        ('planlama', 'Planlama'),
+        ('kalite', 'Kalite'),
+        ('bakim', 'Bakım'),
+        ('admin', 'Admin'),
+    ]
+    db.session.commit()
+    return render_template('admin_kullanicilar_gelismis.html',
+        users=users, departmanlar=departmanlar, roller=roller,
+        istasyonlar=istasyonlar, uretim_personeller=uretim_personeller,
+        job_profiles=JOB_PROFILES, scope_types=SCOPE_TYPES, user_types=USER_TYPES,
+        profile_labels=PROFILE_LABELS, scope_labels=SCOPE_LABELS, user_type_labels=USER_TYPE_LABELS)
+
+
+def _sync_user_scope(user):
+    UserScopeDepartment.query.filter_by(user_id=user.id).delete()
+    UserScopeStation.query.filter_by(user_id=user.id).delete()
+    for department_id in request.form.getlist('scope_department_ids'):
+        if department_id:
+            db.session.add(UserScopeDepartment(user_id=user.id, department_id=int(department_id)))
+    for station_id in request.form.getlist('scope_station_ids'):
+        if station_id:
+            db.session.add(UserScopeStation(user_id=user.id, station_id=int(station_id)))
+
+@admin.route('/yetki-matrisi')
+@login_required
+@role_required('admin')
+def yetki_matrisi():
+    users = User.query.order_by(User.is_active.desc(), User.name).all()
+    temel_kullanicilar = [
+        user for user in users
+        if user.is_active
+        and user.role == 'personel'
+        and not user.liste_yetki
+        and not user.teknik_resim_yetki
+    ]
+
+    satirlar = []
+    for yetki in PERMISSIONS:
+        izinler = {user.id: has_permission(user, yetki['code']) for user in users}
+        varsayilanlar = {user.id: default_permission_allowed(user, yetki) for user in users}
+        satirlar.append({
+            'grup': yetki['grup'],
+            'ad': yetki['ad'],
+            'code': yetki['code'],
+            'tip': yetki['tip'],
+            'izinler': izinler,
+            'varsayilanlar': varsayilanlar,
+            'atanmis_sayisi': sum(1 for izinli in izinler.values() if izinli)
+        })
+    mudahale_satirlari = [satir for satir in satirlar if satir['tip'] == 'mudahale']
+    atanmamis_mudahale_satirlari = [satir for satir in mudahale_satirlari if satir['atanmis_sayisi'] == 0]
+    return render_template('admin_yetki_matrisi.html',
+        users=users,
+        satirlar=satirlar,
+        temel_kullanicilar=temel_kullanicilar,
+        mudahale_satirlari=mudahale_satirlari,
+        atanmamis_mudahale_satirlari=atanmamis_mudahale_satirlari)
+
+@admin.route('/yetki-matrisi/kaydet', methods=['POST'])
+@login_required
+@role_required('admin')
+def yetki_matrisi_kaydet():
+    permission_codes = {p['code'] for p in PERMISSIONS}
     users = User.query.all()
-    departmanlar = Department.query.all()
-    return render_template('admin_kullanicilar.html', users=users, departmanlar=departmanlar)
+    if not has_permission(current_user, 'admin.permissions'):
+        flash('Yetki matrisi düzenleme yetkiniz yok.', 'danger')
+        return redirect(url_for('admin.yetki_matrisi'))
+
+    for user in users:
+        for code in permission_codes:
+            field = f'perm__{user.id}__{code}'
+            allowed = field in request.form
+            if user.id == current_user.id and code in ('admin.permissions', 'admin.user_manage'):
+                allowed = True
+            kayit = UserPermission.query.filter_by(user_id=user.id, permission_code=code).first()
+            if not kayit:
+                kayit = UserPermission(user_id=user.id, permission_code=code)
+                db.session.add(kayit)
+            kayit.allowed = allowed
+            kayit.updated_by_id = current_user.id
+    db.session.commit()
+    flash('Yetki matrisi güncellendi.', 'success')
+    return redirect(url_for('admin.yetki_matrisi'))
 
 @admin.route('/kullanici/ekle', methods=['POST'])
 @login_required
@@ -652,9 +749,22 @@ def kullanici_ekle():
     user = User(
         name=name, email=email,
         password=generate_password_hash(password),
-        role=role, department_id=department_id
+        role=role,
+        department_id=department_id or None,
+        user_type=request.form.get('user_type') or 'office',
+        job_profile=request.form.get('job_profile') or 'sadece_goruntuleme',
+        scope_type=request.form.get('scope_type') or 'self',
+        uretim_personeli_id=request.form.get('uretim_personeli_id') or None,
+        unvan=request.form.get('unvan', '').strip(),
+        telefon=request.form.get('telefon', '').strip(),
+        teknik_resim_yetki=bool(request.form.get('teknik_resim_yetki')),
+        liste_yetki=bool(request.form.get('liste_yetki')),
+        bildirim_email=bool(request.form.get('bildirim_email')),
+        unvan_pdf_goster=bool(request.form.get('unvan_pdf_goster')),
     )
     db.session.add(user)
+    db.session.flush()
+    _sync_user_scope(user)
     db.session.commit()
     flash(f'{name} başarıyla eklendi.', 'success')
     return redirect(url_for('admin.kullanicilar'))
@@ -667,7 +777,18 @@ def kullanici_duzenle(user_id):
     user.name = request.form.get('name')
     user.role = request.form.get('role')
     user.department_id = request.form.get('department_id') or None
+    user.user_type = request.form.get('user_type') or 'office'
+    user.job_profile = request.form.get('job_profile') or 'sadece_goruntuleme'
+    user.scope_type = request.form.get('scope_type') or 'self'
+    user.uretim_personeli_id = request.form.get('uretim_personeli_id') or None
+    user.unvan = request.form.get('unvan', '').strip()
+    user.telefon = request.form.get('telefon', '').strip()
+    user.teknik_resim_yetki = bool(request.form.get('teknik_resim_yetki'))
+    user.liste_yetki = bool(request.form.get('liste_yetki'))
+    user.bildirim_email = bool(request.form.get('bildirim_email'))
+    user.unvan_pdf_goster = bool(request.form.get('unvan_pdf_goster'))
     user.is_active = request.form.get('is_active') == '1'
+    _sync_user_scope(user)
     db.session.commit()
     flash(f'{user.name} güncellendi.', 'success')
     return redirect(url_for('admin.kullanicilar'))
@@ -2814,7 +2935,7 @@ def malzeme_listesi():
 @admin.route('/malzeme/ekle', methods=['POST'])
 @login_required
 def malzeme_ekle():
-    if not (current_user.liste_yetki or current_user.role == 'admin'):
+    if not has_permission(current_user, 'list.manage'):
         return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     adi = request.form.get('malzeme_adi', '').strip()
     if not adi:
@@ -2833,7 +2954,7 @@ def malzeme_ekle():
 @admin.route('/malzeme/<int:m_id>/duzenle', methods=['POST'])
 @login_required
 def malzeme_duzenle(m_id):
-    if not (current_user.liste_yetki or current_user.role == 'admin'):
+    if not has_permission(current_user, 'list.manage'):
         return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     m = db.get_or_404(Malzeme, m_id)
     alan = request.form.get('alan')
@@ -2846,7 +2967,7 @@ def malzeme_duzenle(m_id):
 @admin.route('/malzeme/<int:m_id>/sil', methods=['POST'])
 @login_required
 def malzeme_sil(m_id):
-    if not (current_user.liste_yetki or current_user.role == 'admin'):
+    if not has_permission(current_user, 'list.manage'):
         return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     m = db.get_or_404(Malzeme, m_id)
     m.is_active = False
@@ -2867,7 +2988,7 @@ def urun_listesi():
 @admin.route('/urun/ekle', methods=['POST'])
 @login_required
 def urun_ekle():
-    if not (current_user.liste_yetki or current_user.role == 'admin'):
+    if not has_permission(current_user, 'list.manage'):
         return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     adi = request.form.get('urun_adi', '').strip()
     if not adi:
@@ -2886,7 +3007,7 @@ def urun_ekle():
 @admin.route('/urun/<int:u_id>/duzenle', methods=['POST'])
 @login_required
 def urun_duzenle(u_id):
-    if not (current_user.liste_yetki or current_user.role == 'admin'):
+    if not has_permission(current_user, 'list.manage'):
         return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     u = db.get_or_404(Urun, u_id)
     alan = request.form.get('alan')
@@ -2899,12 +3020,105 @@ def urun_duzenle(u_id):
 @admin.route('/urun/<int:u_id>/sil', methods=['POST'])
 @login_required
 def urun_sil(u_id):
-    if not (current_user.liste_yetki or current_user.role == 'admin'):
+    if not has_permission(current_user, 'list.manage'):
         return jsonify({'ok': False, 'hata': 'Yetki yok'}), 403
     u = db.get_or_404(Urun, u_id)
     u.is_active = False
     db.session.commit()
     return jsonify({'ok': True})
+
+
+# ---------------------------------------------------------------------------
+# B-008: ADMIN SUNUCU DASHBOARD
+# ---------------------------------------------------------------------------
+
+@admin.route('/sunucu')
+@login_required
+@role_required('admin')
+def sunucu_dashboard():
+    import psutil, subprocess
+    from datetime import timedelta
+
+    # CPU
+    cpu_yuzde = psutil.cpu_percent(interval=0.5)
+    cpu_sayisi = psutil.cpu_count()
+
+    # RAM
+    ram = psutil.virtual_memory()
+    ram_toplam_gb = round(ram.total / 1024**3, 1)
+    ram_kullanan_gb = round(ram.used / 1024**3, 1)
+    ram_yuzde = ram.percent
+
+    # Disk
+    disk = psutil.disk_usage('/')
+    disk_toplam_gb = round(disk.total / 1024**3, 1)
+    disk_kullanan_gb = round(disk.used / 1024**3, 1)
+    disk_yuzde = disk.percent
+
+    # Uptime
+    boot_ts = psutil.boot_time()
+    import time
+    uptime_sn = int(time.time() - boot_ts)
+    uptime_str = str(timedelta(seconds=uptime_sn))
+
+    # Son 30 dk aktif kullanıcılar (son_giris bazlı)
+    otuz_dk_once = datetime.utcnow() - timedelta(minutes=30)
+    aktif_kullanicilar = User.query.filter(
+        User.son_giris >= otuz_dk_once,
+        User.is_active == True
+    ).order_by(User.son_giris.desc()).all()
+
+    # Erlau servis durumu
+    try:
+        result = subprocess.run(['systemctl', 'is-active', 'erlau'],
+                                capture_output=True, text=True, timeout=3)
+        servis_durum = result.stdout.strip()
+    except Exception:
+        servis_durum = 'bilinmiyor'
+
+    return render_template('admin/sunucu_dashboard.html',
+        cpu_yuzde=cpu_yuzde, cpu_sayisi=cpu_sayisi,
+        ram_toplam_gb=ram_toplam_gb, ram_kullanan_gb=ram_kullanan_gb, ram_yuzde=ram_yuzde,
+        disk_toplam_gb=disk_toplam_gb, disk_kullanan_gb=disk_kullanan_gb, disk_yuzde=disk_yuzde,
+        uptime_str=uptime_str, aktif_kullanicilar=aktif_kullanicilar,
+        servis_durum=servis_durum)
+
+
+@admin.route('/sunucu/durum')
+@login_required
+@role_required('admin')
+def sunucu_durum_api():
+    """AJAX: Canlı CPU/RAM/disk verileri döner."""
+    import psutil
+    cpu_yuzde = psutil.cpu_percent(interval=0.3)
+    ram = psutil.virtual_memory()
+    disk = psutil.disk_usage('/')
+    return jsonify({
+        'cpu': cpu_yuzde,
+        'ram': ram.percent,
+        'ram_kullanan': round(ram.used / 1024**3, 1),
+        'ram_toplam': round(ram.total / 1024**3, 1),
+        'disk': disk.percent,
+        'disk_kullanan': round(disk.used / 1024**3, 1),
+        'disk_toplam': round(disk.total / 1024**3, 1),
+    })
+
+
+@admin.route('/sunucu/restart', methods=['POST'])
+@login_required
+@role_required('admin')
+def sunucu_restart():
+    """Şifre doğrulandıktan sonra erlau servisini yeniden başlatır."""
+    import subprocess
+    from werkzeug.security import check_password_hash
+    sifre = request.form.get('sifre', '')
+    if not check_password_hash(current_user.password, sifre):
+        return jsonify({'ok': False, 'hata': 'Şifre hatalı'}), 403
+    try:
+        subprocess.Popen(['systemctl', 'restart', 'erlau'])
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'hata': str(e)}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -3041,71 +3255,292 @@ def urun_otomatik_ekle():
 def uretim_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role not in ('uretim', 'departman_yoneticisi', 'admin'):
+        endpoint_permission = ENDPOINT_PERMISSIONS.get(request.endpoint, 'production.dashboard')
+        production_profiles = ('uretim_operatoru', 'cnc_operatoru', 'uretim_sorumlusu', 'uretim_yoneticisi')
+        has_profile_access = getattr(current_user, 'job_profile', '') in production_profiles
+        if not current_user.is_authenticated or (not has_profile_access and current_user.role not in ('uretim', 'departman_yoneticisi', 'admin', 'gm') and not has_permission(current_user, endpoint_permission)):
             flash('Üretim modülüne erişim yetkiniz yok.', 'danger')
             return redirect(url_for('auth.portal'))
         return f(*args, **kwargs)
     return decorated
 
+
+def _production_manager_user():
+    return getattr(current_user, 'job_profile', '') in ('admin', 'gm', 'uretim_sorumlusu', 'uretim_yoneticisi') or current_user.role in ('admin', 'gm')
+
+
+def _station_scope_ids():
+    if getattr(current_user, 'scope_type', '') != 'assigned_station':
+        return None
+    ids = [row.station_id for row in getattr(current_user, 'kapsam_istasyonlari', [])]
+    if not ids and getattr(current_user, 'uretim_personeli', None) and current_user.uretim_personeli.istasyon_id:
+        ids = [current_user.uretim_personeli.istasyon_id]
+    return ids
+
+
+def _apply_station_scope(query, column):
+    ids = _station_scope_ids()
+    if ids is None:
+        return query
+    if not ids:
+        return query.filter(False)
+    return query.filter(column.in_(ids))
+
 @uretim.route('/')
 @login_required
 @uretim_required
 def uretim_dashboard():
+    from sqlalchemy import func
     bugun = date.today()
-    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).all()
-    plan_satirlari = UretimPlaniSatir.query.join(UretimPlani).filter(
+    hafta_baslangic = bugun - timedelta(days=bugun.weekday())
+    hafta_bitis = hafta_baslangic + timedelta(days=4)
+    aktif = UretimPlani.query.filter_by(durum='aktif').order_by(UretimPlani.id.desc()).first()
+    istasyonlar = _apply_station_scope(
+        IsIstasyonu.query.filter_by(is_active=True),
+        IsIstasyonu.id
+    ).order_by(IsIstasyonu.istasyon_adi).all()
+    visible_station_ids = [i.id for i in istasyonlar]
+    plan_q = UretimPlaniSatir.query.join(UretimPlani).filter(
         UretimPlaniSatir.tarih == bugun,
         UretimPlani.durum == 'aktif'
-    ).all()
-    kayitlar = UretimKaydi.query.filter_by(tarih=bugun).all()
-    kayit_map = {k.plan_satir_id: k for k in kayitlar}
-    toplam_planlanan = sum(s.planlanan_adet for s in plan_satirlari)
-    toplam_gerceklesen = sum(k.gerceklesen_adet for k in kayitlar)
+    )
+    if visible_station_ids:
+        plan_q = plan_q.filter(UretimPlaniSatir.istasyon_id.in_(visible_station_ids))
+    elif _station_scope_ids() is not None:
+        plan_q = plan_q.filter(False)
+    plan_satirlari = plan_q.all()
+    satir_ids = [s.id for s in plan_satirlari]
+    kayit_map = {}
+    if satir_ids:
+        rows = db.session.query(
+            UretimKaydi.plan_satir_id,
+            func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)
+        ).filter(UretimKaydi.plan_satir_id.in_(satir_ids)).group_by(UretimKaydi.plan_satir_id).all()
+        kayit_map = {satir_id: {'gerceklesen_adet': int(toplam or 0)} for satir_id, toplam in rows}
+
+    toplam_planlanan = sum((s.planlanan_adet or 0) + (getattr(s, 'devir_adet', 0) or 0) for s in plan_satirlari)
+    toplam_gerceklesen = sum(k['gerceklesen_adet'] for k in kayit_map.values())
+
+    personel_map = {}
+    for p in UretimPersoneli.query.filter_by(is_active=True).all():
+        if p.istasyon_id and p.istasyon_id not in personel_map:
+            personel_map[p.istasyon_id] = p.tam_ad
+
+    istasyon_durumlar = []
+    for istasyon in istasyonlar:
+        istasyon_satirlari = [s for s in plan_satirlari if s.istasyon_id == istasyon.id]
+        hedef = sum((s.planlanan_adet or 0) + (getattr(s, 'devir_adet', 0) or 0) for s in istasyon_satirlari)
+        gerceklesen = sum(kayit_map.get(s.id, {}).get('gerceklesen_adet', 0) for s in istasyon_satirlari)
+        yuzde = round(gerceklesen / hedef * 100, 0) if hedef else 0
+        renk = '#16a34a' if yuzde >= 100 else '#f59e0b' if yuzde >= 70 else '#dc2626'
+        istasyon_durumlar.append({
+            'istasyon': istasyon.istasyon_adi,
+            'personel_adi': personel_map.get(istasyon.id),
+            'hedef': hedef,
+            'gerceklesen': gerceklesen,
+            'fark': gerceklesen - hedef,
+            'yuzde': int(yuzde),
+            'renk': renk,
+        })
+
+    haftalik_ilerleme = []
+    gun_adlari = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma']
+    if aktif:
+        hafta_baslangic = aktif.baslangic_tarihi or hafta_baslangic
+    for idx, gun_adi in enumerate(gun_adlari):
+        gun = hafta_baslangic + timedelta(days=idx)
+        gun_satirlari = UretimPlaniSatir.query.join(UretimPlani).filter(
+            UretimPlaniSatir.tarih == gun,
+            UretimPlani.durum == 'aktif'
+        ).all()
+        gun_ids = [s.id for s in gun_satirlari]
+        gun_gerceklesen = 0
+        if gun_ids:
+            gun_gerceklesen = db.session.query(func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)).filter(UretimKaydi.plan_satir_id.in_(gun_ids)).scalar() or 0
+        gun_hedef = sum((s.planlanan_adet or 0) + (getattr(s, 'devir_adet', 0) or 0) for s in gun_satirlari)
+        haftalik_ilerleme.append({
+            'tarih': gun,
+            'gun_adi': gun_adi,
+            'toplam_hedef': int(gun_hedef or 0),
+            'toplam_gerceklesen': int(gun_gerceklesen or 0),
+            'yuzde': round(int(gun_gerceklesen or 0) / int(gun_hedef or 1) * 100, 0) if gun_hedef else 0,
+        })
+
+    personel_rows_q = db.session.query(
+        UretimPersoneli.id,
+        UretimPersoneli.ad,
+        UretimPersoneli.soyad,
+        IsIstasyonu.istasyon_adi,
+        func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0),
+        func.count(func.distinct(UretimKaydi.tarih))
+    ).join(UretimKaydi, UretimKaydi.uretim_personeli_id == UretimPersoneli.id)\
+     .outerjoin(IsIstasyonu, IsIstasyonu.id == UretimPersoneli.istasyon_id)\
+     .filter(UretimKaydi.tarih >= hafta_baslangic, UretimKaydi.tarih <= hafta_bitis)
+    personel_rows_q = _apply_station_scope(personel_rows_q, UretimKaydi.istasyon_id)
+    personel_rows = personel_rows_q.group_by(UretimPersoneli.id, UretimPersoneli.ad, UretimPersoneli.soyad, IsIstasyonu.istasyon_adi)\
+     .order_by(func.sum(UretimKaydi.gerceklesen_adet).desc()).limit(10).all()
+    personel_siralamasi = []
+    for row in personel_rows:
+        toplam_hafta = int(row[4] or 0)
+        gun_sayisi = int(row[5] or 0)
+        personel_siralamasi.append({
+            'ad': f"{row[1]} {row[2] or ''}".strip(),
+            'istasyon': row[3] or '—',
+            'toplam_hafta': toplam_hafta,
+            'gun_ort': round(toplam_hafta / gun_sayisi, 1) if gun_sayisi else 0,
+        })
+
+    ariza_q = ArizaKaydi.query.filter(ArizaKaydi.tarih >= hafta_baslangic, ArizaKaydi.tarih <= hafta_bitis)
+    ariza_q = _apply_station_scope(ariza_q, ArizaKaydi.istasyon_id)
+    arizalar = ariza_q.all()
+    toplam_dakika = 0
+    for ariza in arizalar:
+        if ariza.baslangic_saati and ariza.bitis_saati:
+            bas = datetime.combine(ariza.tarih, ariza.baslangic_saati)
+            bit = datetime.combine(ariza.tarih, ariza.bitis_saati)
+            if bit > bas:
+                toplam_dakika += int((bit - bas).total_seconds() // 60)
+    en_cok = db.session.query(IsIstasyonu.istasyon_adi, func.count(ArizaKaydi.id)).join(ArizaKaydi, ArizaKaydi.istasyon_id == IsIstasyonu.id)\
+        .filter(ArizaKaydi.tarih >= hafta_baslangic, ArizaKaydi.tarih <= hafta_bitis)\
+        .group_by(IsIstasyonu.istasyon_adi).order_by(func.count(ArizaKaydi.id).desc()).first()
+    ariza_ozet = {
+        'bu_hafta_adet': len(arizalar),
+        'bu_hafta_sure_saat': round(toplam_dakika / 60, 1),
+        'en_cok_ariza_istasyon': en_cok[0] if en_cok else '—',
+    }
+
+    acik_dof_sayisi = 0
+    geciken_aksiyon_sayisi = 0
+    try:
+        acik_dof_sayisi = DOF.query.filter(DOF.hedef_departman == 'Üretim', DOF.durum.in_(('acik', 'isleniyor', 'gecikti'))).count()
+        geciken_aksiyon_sayisi = db.session.query(DOFAksiyon).join(DOF).filter(
+            DOF.hedef_departman == 'Üretim',
+            DOFAksiyon.durum != 'tamamlandi',
+            DOFAksiyon.planlanan_tarih < bugun
+        ).count()
+    except Exception:
+        acik_dof_sayisi = 0
+        geciken_aksiyon_sayisi = 0
+
     return render_template('uretim/dashboard.html',
-        istasyonlar=istasyonlar, plan_satirlari=plan_satirlari,
+        istasyonlar=istasyonlar, istasyon_durumlar=istasyon_durumlar,
+        plan_satirlari=plan_satirlari,
         kayit_map=kayit_map, bugun=bugun,
-        toplam_planlanan=toplam_planlanan, toplam_gerceklesen=toplam_gerceklesen)
+        haftalik_ilerleme=haftalik_ilerleme,
+        personel_siralamasi=personel_siralamasi,
+        ariza_ozet=ariza_ozet,
+        toplam_hedef=toplam_planlanan,
+        toplam_gerceklesen=toplam_gerceklesen,
+        toplam_planlanan=toplam_planlanan,
+        acik_dof_sayisi=acik_dof_sayisi,
+        geciken_aksiyon_sayisi=geciken_aksiyon_sayisi)
 
 @uretim.route('/giris', methods=['GET', 'POST'])
 @login_required
 @uretim_required
 def uretim_giris():
     if request.method == 'POST':
-        k = UretimKaydi(
-            plan_satir_id=request.form.get('plan_satir_id') or None,
-            istasyon_id=request.form.get('istasyon_id'),
-            urun_id=request.form.get('urun_id') or None,
-            tarih=date.fromisoformat(request.form.get('tarih', str(date.today()))),
-            gerceklesen_adet=int(request.form.get('gerceklesen_adet', 0)),
-            fire_adet=int(request.form.get('fire_adet', 0)),
-            aciklama=request.form.get('aciklama', ''),
-            giren_personel_id=current_user.id,
-        )
-        db.session.add(k)
-        db.session.commit()
-        flash('Üretim kaydı eklendi.', 'success')
+        station_scope_ids = _station_scope_ids()
+        mode = request.form.get('mode', 'tek')
+        tarih_str = request.form.get('tarih', str(date.today()))
+        try:
+            kayit_tarihi = date.fromisoformat(tarih_str)
+        except ValueError:
+            kayit_tarihi = date.today()
+
+        if mode == 'batch':
+            satir_ids = request.form.getlist('plan_satir_id[]')
+            gerceklesenler = request.form.getlist('gerceklesen[]')
+            personel_ids = request.form.getlist('uretim_personeli_id[]')
+            eklenen = 0
+            for i, satir_id in enumerate(satir_ids):
+                gercek = int(gerceklesenler[i] or 0) if i < len(gerceklesenler) else 0
+                if gercek <= 0:
+                    continue
+                personel_id = personel_ids[i] if i < len(personel_ids) else None
+                satir = UretimPlaniSatir.query.get(int(satir_id))
+                if not satir:
+                    continue
+                if station_scope_ids is not None and satir.istasyon_id not in station_scope_ids:
+                    continue
+                mevcut = UretimKaydi.query.filter_by(plan_satir_id=satir.id, tarih=kayit_tarihi).first()
+                if mevcut:
+                    mevcut.gerceklesen_adet = gercek
+                    mevcut.uretim_personeli_id = personel_id or None
+                    mevcut.giren_personel_id = current_user.id
+                else:
+                    db.session.add(UretimKaydi(
+                        plan_satir_id=satir.id,
+                        istasyon_id=satir.istasyon_id,
+                        urun_id=satir.urun_id,
+                        tarih=kayit_tarihi,
+                        gerceklesen_adet=gercek,
+                        uretim_personeli_id=personel_id or None,
+                        giren_personel_id=current_user.id,
+                    ))
+                eklenen += 1
+            db.session.commit()
+            flash(f'{eklenen} üretim kaydı kaydedildi.', 'success')
+        else:
+            istasyon_id = request.form.get('istasyon_id', type=int)
+            if station_scope_ids is not None and istasyon_id not in station_scope_ids:
+                flash('Bu istasyona üretim kaydı girme yetkiniz yok.', 'danger')
+                return redirect(url_for('uretim.uretim_giris'))
+            db.session.add(UretimKaydi(
+                istasyon_id=istasyon_id,
+                urun_id=request.form.get('urun_id') or None,
+                tarih=kayit_tarihi,
+                gerceklesen_adet=int(request.form.get('gerceklesen_adet_tek', 0) or 0),
+                uretim_personeli_id=request.form.get('uretim_personeli_id_tek') or None,
+                giren_personel_id=current_user.id,
+            ))
+            db.session.commit()
+            flash('Üretim kaydı eklendi.', 'success')
         return redirect(url_for('uretim.uretim_dashboard'))
-    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).all()
+
+    tarih_str = request.args.get('tarih', str(date.today()))
+    try:
+        tarih = date.fromisoformat(tarih_str)
+    except ValueError:
+        tarih = date.today()
+    istasyonlar = _apply_station_scope(IsIstasyonu.query.filter_by(is_active=True), IsIstasyonu.id).all()
+    visible_station_ids = [i.id for i in istasyonlar]
     urunler = Urun.query.filter_by(is_active=True).order_by(Urun.urun_adi).all()
-    bugun = date.today()
-    plan_satirlari = UretimPlaniSatir.query.join(UretimPlani).filter(
-        UretimPlaniSatir.tarih == bugun,
+    personel_q = UretimPersoneli.query.filter_by(is_active=True)
+    if visible_station_ids:
+        personel_q = personel_q.filter((UretimPersoneli.istasyon_id.in_(visible_station_ids)) | (UretimPersoneli.istasyon_id == None))
+    elif _station_scope_ids() is not None:
+        personel_q = personel_q.filter(False)
+    personeller = personel_q.order_by(UretimPersoneli.ad, UretimPersoneli.soyad).all()
+    plan_q = UretimPlaniSatir.query.join(UretimPlani).filter(
+        UretimPlaniSatir.tarih == tarih,
         UretimPlani.durum == 'aktif'
-    ).all()
+    )
+    if visible_station_ids:
+        plan_q = plan_q.filter(UretimPlaniSatir.istasyon_id.in_(visible_station_ids))
+    elif _station_scope_ids() is not None:
+        plan_q = plan_q.filter(False)
+    plan_satirlari = plan_q.all()
     return render_template('uretim/giris.html',
         istasyonlar=istasyonlar, urunler=urunler,
-        plan_satirlari=plan_satirlari, bugun=bugun)
+        personeller=personeller,
+        plan_satirlari=plan_satirlari, bugun=tarih, tarih=tarih_str)
 
 @uretim.route('/ariza', methods=['GET', 'POST'])
 @login_required
 @uretim_required
 def ariza_kaydi():
     if request.method == 'POST':
+        station_scope_ids = _station_scope_ids()
+        istasyon_id = request.form.get('istasyon_id', type=int)
+        if station_scope_ids is not None and istasyon_id not in station_scope_ids:
+            flash('Bu istasyona arıza kaydı girme yetkiniz yok.', 'danger')
+            return redirect(url_for('uretim.ariza_kaydi'))
         from datetime import time as dtime
         bas = request.form.get('baslangic_saati')
         bit = request.form.get('bitis_saati')
         a = ArizaKaydi(
-            istasyon_id=request.form.get('istasyon_id'),
+            istasyon_id=istasyon_id,
             tarih=date.fromisoformat(request.form.get('tarih', str(date.today()))),
             baslangic_saati=dtime.fromisoformat(bas) if bas else None,
             bitis_saati=dtime.fromisoformat(bit) if bit else None,
@@ -3116,13 +3551,173 @@ def ariza_kaydi():
         db.session.commit()
         flash('Arıza kaydı oluşturuldu.', 'success')
         return redirect(url_for('uretim.uretim_dashboard'))
-    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).all()
+    istasyonlar = _apply_station_scope(IsIstasyonu.query.filter_by(is_active=True), IsIstasyonu.id).all()
     return render_template('uretim/ariza.html', istasyonlar=istasyonlar, bugun=date.today())
+
+@uretim.route('/personel')
+@login_required
+@uretim_required
+def personel_listesi():
+    if getattr(current_user, 'job_profile', '') in ('uretim_operatoru', 'cnc_operatoru'):
+        flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('uretim.uretim_dashboard'))
+    if not (_production_manager_user() or has_permission(current_user, 'production.staff_view')):
+        flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('uretim.uretim_dashboard'))
+    from sqlalchemy import func
+    bugun = date.today()
+    hafta_baslangic = bugun - timedelta(days=bugun.weekday())
+    ay_baslangic = date(bugun.year, bugun.month, 1)
+
+    hafta_rows = db.session.query(
+        UretimKaydi.uretim_personeli_id,
+        func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)
+    ).filter(
+        UretimKaydi.tarih >= hafta_baslangic,
+        UretimKaydi.uretim_personeli_id.isnot(None)
+    ).group_by(UretimKaydi.uretim_personeli_id).all()
+
+    ay_rows = db.session.query(
+        UretimKaydi.uretim_personeli_id,
+        func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)
+    ).filter(
+        UretimKaydi.tarih >= ay_baslangic,
+        UretimKaydi.uretim_personeli_id.isnot(None)
+    ).group_by(UretimKaydi.uretim_personeli_id).all()
+
+    hafta_map = {personel_id: int(toplam or 0) for personel_id, toplam in hafta_rows}
+    ay_map = {personel_id: int(toplam or 0) for personel_id, toplam in ay_rows}
+    personeller = UretimPersoneli.query.order_by(UretimPersoneli.is_active.desc(), UretimPersoneli.ad, UretimPersoneli.soyad).all()
+    for personel in personeller:
+        personel.bu_hafta = hafta_map.get(personel.id, 0)
+        personel.bu_ay = ay_map.get(personel.id, 0)
+    istasyonlar = IsIstasyonu.query.filter_by(is_active=True).order_by(IsIstasyonu.istasyon_adi).all()
+    return render_template('uretim/personel.html', personeller=personeller, istasyonlar=istasyonlar)
+
+@uretim.route('/personel/ekle', methods=['POST'])
+@login_required
+@uretim_required
+def personel_ekle():
+    if not (_production_manager_user() or has_permission(current_user, 'production.staff_manage')):
+        flash('Bu işlem için yetkiniz yok.', 'danger')
+        return redirect(url_for('uretim.personel_listesi'))
+    ad = request.form.get('ad', '').strip()
+    soyad = request.form.get('soyad', '').strip()
+    sicil_no = request.form.get('sicil_no', '').strip() or None
+    istasyon_id = request.form.get('istasyon_id') or None
+    if not ad:
+        flash('Ad alanı zorunludur.', 'danger')
+        return redirect(url_for('uretim.personel_listesi'))
+    if sicil_no and UretimPersoneli.query.filter_by(sicil_no=sicil_no).first():
+        flash('Bu sicil numarası zaten kayıtlı.', 'danger')
+        return redirect(url_for('uretim.personel_listesi'))
+    db.session.add(UretimPersoneli(ad=ad, soyad=soyad, sicil_no=sicil_no, istasyon_id=istasyon_id))
+    db.session.commit()
+    flash('Personel eklendi.', 'success')
+    return redirect(url_for('uretim.personel_listesi'))
+
+@uretim.route('/personel/<int:id>/duzenle', methods=['POST'])
+@login_required
+@uretim_required
+def personel_duzenle(id):
+    if not (_production_manager_user() or has_permission(current_user, 'production.staff_manage')):
+        flash('Bu işlem için yetkiniz yok.', 'danger')
+        return redirect(url_for('uretim.personel_listesi'))
+    personel = db.get_or_404(UretimPersoneli, id)
+    ad = request.form.get('ad', '').strip()
+    sicil_no = request.form.get('sicil_no', '').strip() or None
+    if not ad:
+        flash('Ad alanı zorunludur.', 'danger')
+        return redirect(url_for('uretim.personel_listesi'))
+    if sicil_no:
+        mevcut = UretimPersoneli.query.filter(UretimPersoneli.sicil_no == sicil_no, UretimPersoneli.id != id).first()
+        if mevcut:
+            flash('Bu sicil numarası başka bir personele ait.', 'danger')
+            return redirect(url_for('uretim.personel_listesi'))
+    personel.ad = ad
+    personel.soyad = request.form.get('soyad', '').strip()
+    personel.sicil_no = sicil_no
+    personel.istasyon_id = request.form.get('istasyon_id') or None
+    db.session.commit()
+    flash('Personel güncellendi.', 'success')
+    return redirect(url_for('uretim.personel_listesi'))
+
+@uretim.route('/personel/<int:id>/pasif', methods=['POST'])
+@login_required
+@uretim_required
+def personel_pasif(id):
+    if not (_production_manager_user() or has_permission(current_user, 'production.staff_manage')):
+        flash('Bu işlem için yetkiniz yok.', 'danger')
+        return redirect(url_for('uretim.personel_listesi'))
+    personel = db.get_or_404(UretimPersoneli, id)
+    personel.is_active = False
+    db.session.commit()
+    flash('Personel pasife alındı.', 'success')
+    return redirect(url_for('uretim.personel_listesi'))
+
+@uretim.route('/personel/<int:id>')
+@login_required
+@uretim_required
+def personel_detay(id):
+    from sqlalchemy import func
+    personel = db.get_or_404(UretimPersoneli, id)
+    bugun = date.today()
+    hafta_baslangic = bugun - timedelta(days=bugun.weekday())
+    ay_baslangic = date(bugun.year, bugun.month, 1)
+    otuz_gun_once = bugun - timedelta(days=29)
+
+    bu_hafta_toplam = db.session.query(func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)).filter(
+        UretimKaydi.uretim_personeli_id == personel.id,
+        UretimKaydi.tarih >= hafta_baslangic
+    ).scalar() or 0
+    bu_ay_toplam = db.session.query(func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)).filter(
+        UretimKaydi.uretim_personeli_id == personel.id,
+        UretimKaydi.tarih >= ay_baslangic
+    ).scalar() or 0
+    calisilan_gun = db.session.query(func.count(func.distinct(UretimKaydi.tarih))).filter(
+        UretimKaydi.uretim_personeli_id == personel.id,
+        UretimKaydi.tarih >= ay_baslangic
+    ).scalar() or 0
+    gunluk_ortalama = float(bu_ay_toplam) / calisilan_gun if calisilan_gun else 0
+
+    gun_rows = db.session.query(
+        UretimKaydi.tarih,
+        func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)
+    ).filter(
+        UretimKaydi.uretim_personeli_id == personel.id,
+        UretimKaydi.tarih >= otuz_gun_once
+    ).group_by(UretimKaydi.tarih).order_by(UretimKaydi.tarih).all()
+    gun_map = {tarih: int(toplam or 0) for tarih, toplam in gun_rows}
+    performans_30gun = [
+        {'tarih': (otuz_gun_once + timedelta(days=i)).isoformat(), 'toplam_adet': gun_map.get(otuz_gun_once + timedelta(days=i), 0)}
+        for i in range(30)
+    ]
+
+    urun_rows = db.session.query(
+        Urun.urun_adi,
+        func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)
+    ).join(UretimKaydi, UretimKaydi.urun_id == Urun.id).filter(
+        UretimKaydi.uretim_personeli_id == personel.id,
+        UretimKaydi.tarih >= ay_baslangic
+    ).group_by(Urun.urun_adi).order_by(func.sum(UretimKaydi.gerceklesen_adet).desc()).all()
+    urun_dagilimi = [
+        {'urun_adi': urun_adi, 'toplam': int(toplam or 0), 'oran': round((float(toplam or 0) / float(bu_ay_toplam) * 100), 1) if bu_ay_toplam else 0}
+        for urun_adi, toplam in urun_rows
+    ]
+    son_kayitlar = UretimKaydi.query.filter_by(uretim_personeli_id=personel.id).order_by(UretimKaydi.tarih.desc(), UretimKaydi.id.desc()).limit(10).all()
+    return render_template('uretim/personel_detay.html',
+        personel=personel,
+        bu_hafta_toplam=int(bu_hafta_toplam or 0),
+        bu_ay_toplam=int(bu_ay_toplam or 0),
+        gunluk_ortalama=gunluk_ortalama,
+        performans_30gun=performans_30gun,
+        urun_dagilimi=urun_dagilimi,
+        son_kayitlar=son_kayitlar)
 
 @uretim.route('/istasyonlar', methods=['GET', 'POST'])
 @login_required
 def istasyon_yonetim():
-    if current_user.role not in ('departman_yoneticisi', 'admin'):
+    if not (_production_manager_user() or has_permission(current_user, 'production.station_manage')):
         flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
         return redirect(url_for('uretim.uretim_dashboard'))
     if request.method == 'POST':
@@ -3147,7 +3742,10 @@ def istasyon_yonetim():
 @uretim.route('/raporlar')
 @login_required
 def uretim_raporlar():
-    if current_user.role not in ('uretim', 'departman_yoneticisi', 'gm', 'admin'):
+    if getattr(current_user, 'job_profile', '') in ('uretim_operatoru', 'cnc_operatoru'):
+        flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('uretim.uretim_dashboard'))
+    if not (_production_manager_user() or has_permission(current_user, 'production.reports')):
         flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
         return redirect(url_for('auth.portal'))
     baslangic = request.args.get('baslangic', str(date.today() - timedelta(days=6)))
@@ -3171,6 +3769,8 @@ def uretim_raporlar():
     if istasyon_id:
         kayit_q = kayit_q.filter(UretimKaydi.istasyon_id == istasyon_id)
         plan_q = plan_q.filter(UretimPlaniSatir.istasyon_id == istasyon_id)
+    kayit_q = _apply_station_scope(kayit_q, UretimKaydi.istasyon_id)
+    plan_q = _apply_station_scope(plan_q, UretimPlaniSatir.istasyon_id)
 
     kayitlar = kayit_q.order_by(UretimKaydi.tarih).all()
     plan_satirlari = plan_q.all()
@@ -3199,6 +3799,15 @@ def _planlama_ozet_satirlari(plan):
     ozet = {}
     gun_anahtarlari = ['pzt', 'sal', 'car', 'per', 'cum']
     hafta_baslangic = plan.baslangic_tarihi
+    satir_ids = [satir.id for satir in plan.satirlar]
+    gerceklesen_map = {}
+    if satir_ids:
+        from sqlalchemy import func
+        rows = db.session.query(
+            UretimKaydi.plan_satir_id,
+            func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)
+        ).filter(UretimKaydi.plan_satir_id.in_(satir_ids)).group_by(UretimKaydi.plan_satir_id).all()
+        gerceklesen_map = {satir_id: int(toplam or 0) for satir_id, toplam in rows}
     for satir in plan.satirlar:
         key = (satir.urun_id, satir.istasyon_id)
         row = ozet.setdefault(key, {
@@ -3210,29 +3819,187 @@ def _planlama_ozet_satirlari(plan):
             'per': 0,
             'cum': 0,
             'toplam': 0,
+            'gerceklesen': 0,
+            'kalan': 0,
+            'yuzde': 0,
         })
         if hafta_baslangic and satir.tarih:
             gun_index = (satir.tarih - hafta_baslangic).days
             if 0 <= gun_index < len(gun_anahtarlari):
                 row[gun_anahtarlari[gun_index]] += satir.planlanan_adet or 0
         row['toplam'] += satir.planlanan_adet or 0
+        row['gerceklesen'] += gerceklesen_map.get(satir.id, 0)
+    for row in ozet.values():
+        row['kalan'] = max((row['toplam'] or 0) - (row['gerceklesen'] or 0), 0)
+        row['yuzde'] = round((row['gerceklesen'] or 0) / (row['toplam'] or 1) * 100, 1) if row['toplam'] else 0
     return list(ozet.values())
+
+def _planlama_dashboard_verileri(aktif):
+    from sqlalchemy import func
+    bugun = date.today()
+    haftalik_veri = []
+    istasyon_kapasite = []
+    kalite_ozet = {'ok_adet': 0, 'nok_adet': 0, 'ok_oran': 0, 'hurda_adet': 0, 'tamir_adet': 0}
+    toplam_hedef = 0
+    toplam_gerceklesen = 0
+    toplam_devir = 0
+
+    if aktif:
+        satirlar = list(aktif.satirlar)
+        satir_ids = [satir.id for satir in satirlar]
+        gerceklesen_map = {}
+        if satir_ids:
+            rows = db.session.query(
+                UretimKaydi.plan_satir_id,
+                func.coalesce(func.sum(UretimKaydi.gerceklesen_adet), 0)
+            ).filter(UretimKaydi.plan_satir_id.in_(satir_ids)).group_by(UretimKaydi.plan_satir_id).all()
+            gerceklesen_map = {satir_id: int(toplam or 0) for satir_id, toplam in rows}
+
+        toplam_hedef = sum(s.planlanan_adet or 0 for s in satirlar)
+        toplam_devir = sum(getattr(s, 'devir_adet', 0) or 0 for s in satirlar)
+        toplam_gerceklesen = sum(gerceklesen_map.values())
+
+        gun_adlari = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma']
+        hafta_baslangic = aktif.baslangic_tarihi or (bugun - timedelta(days=bugun.weekday()))
+        for idx, gun_adi in enumerate(gun_adlari):
+            gun = hafta_baslangic + timedelta(days=idx)
+            gun_satirlari = [s for s in satirlar if s.tarih == gun]
+            haftalik_veri.append({
+                'gun_adi': gun_adi,
+                'planlanan': sum(s.planlanan_adet or 0 for s in gun_satirlari),
+                'gerceklesen': sum(gerceklesen_map.get(s.id, 0) for s in gun_satirlari),
+                'devir': sum(getattr(s, 'devir_adet', 0) or 0 for s in gun_satirlari),
+            })
+
+        istasyon_map = {}
+        for satir in satirlar:
+            key = satir.istasyon_id or 0
+            row = istasyon_map.setdefault(key, {
+                'istasyon_adi': satir.istasyon.istasyon_adi if satir.istasyon else '—',
+                'planlanan': 0,
+                'gerceklesen': 0,
+                'oran': 0,
+            })
+            row['planlanan'] += satir.planlanan_adet or 0
+            row['gerceklesen'] += gerceklesen_map.get(satir.id, 0)
+        for row in istasyon_map.values():
+            row['oran'] = round(row['gerceklesen'] / row['planlanan'] * 100, 1) if row['planlanan'] else 0
+            istasyon_kapasite.append(row)
+        istasyon_kapasite.sort(key=lambda r: r['istasyon_adi'])
+
+        try:
+            bas = aktif.baslangic_tarihi
+            bit = aktif.bitis_tarihi
+            if bas and bit:
+                ok_adet = db.session.query(func.coalesce(func.sum(KaliteKontrol.ok_adet), 0)).filter(KaliteKontrol.tarih >= bas, KaliteKontrol.tarih <= bit).scalar() or 0
+                nok_adet = db.session.query(func.coalesce(func.sum(KaliteKontrol.nok_adet), 0)).filter(KaliteKontrol.tarih >= bas, KaliteKontrol.tarih <= bit).scalar() or 0
+                hurda_adet = db.session.query(func.coalesce(func.sum(KaliteKontrol.nok_adet), 0)).filter(KaliteKontrol.tarih >= bas, KaliteKontrol.tarih <= bit, KaliteKontrol.nok_akibet == 'hurda').scalar() or 0
+                tamir_adet = db.session.query(func.coalesce(func.sum(KaliteKontrol.nok_adet), 0)).filter(KaliteKontrol.tarih >= bas, KaliteKontrol.tarih <= bit, KaliteKontrol.nok_akibet == 'tamir').scalar() or 0
+                toplam_kontrol = int(ok_adet or 0) + int(nok_adet or 0)
+                kalite_ozet = {
+                    'ok_adet': int(ok_adet or 0),
+                    'nok_adet': int(nok_adet or 0),
+                    'ok_oran': round(int(ok_adet or 0) / toplam_kontrol * 100, 1) if toplam_kontrol else 0,
+                    'hurda_adet': int(hurda_adet or 0),
+                    'tamir_adet': int(tamir_adet or 0),
+                }
+        except Exception:
+            kalite_ozet = {'ok_adet': 0, 'nok_adet': 0, 'ok_oran': 0, 'hurda_adet': 0, 'tamir_adet': 0}
+
+    acik_dof_sayisi = 0
+    geciken_aksiyon_sayisi = 0
+    try:
+        planlama_dept = ('Planlama', 'Planlama ve Tedarik Zinciri')
+        acik_dof_sayisi = DOF.query.filter(
+            DOF.hedef_departman.in_(planlama_dept),
+            DOF.durum.in_(('acik', 'isleniyor', 'gecikti'))
+        ).count()
+        geciken_aksiyon_sayisi = db.session.query(DOFAksiyon).join(DOF).filter(
+            DOF.hedef_departman.in_(planlama_dept),
+            DOFAksiyon.durum != 'tamamlandi',
+            DOFAksiyon.planlanan_tarih < bugun
+        ).count()
+    except Exception:
+        acik_dof_sayisi = 0
+        geciken_aksiyon_sayisi = 0
+
+    tamamlanma_yuzdesi = round(toplam_gerceklesen / toplam_hedef * 100, 1) if toplam_hedef else 0
+    return {
+        'haftalik_veri': haftalik_veri,
+        'istasyon_kapasite': istasyon_kapasite,
+        'kalite_ozet': kalite_ozet,
+        'toplam_hedef': toplam_hedef,
+        'toplam_gerceklesen': toplam_gerceklesen,
+        'tamamlanma_yuzdesi': tamamlanma_yuzdesi,
+        'toplam_devir': toplam_devir,
+        'bugun': bugun,
+        'acik_dof_sayisi': acik_dof_sayisi,
+        'geciken_aksiyon_sayisi': geciken_aksiyon_sayisi,
+    }
 
 @planlama.route('/')
 @login_required
 def planlama_dashboard():
-    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin'):
+    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin') and not has_permission(current_user, 'planning.dashboard'):
         flash('Erişim yetkiniz yok.', 'danger')
         return redirect(url_for('auth.portal'))
     aktif = UretimPlani.query.filter_by(durum='aktif').order_by(UretimPlani.id.desc()).first()
     planlar = UretimPlani.query.order_by(UretimPlani.id.desc()).limit(5).all()
+    dashboard_verileri = _planlama_dashboard_verileri(aktif)
     return render_template('planlama/dashboard.html',
-        aktif=aktif, planlar=planlar, aktif_ozet=_planlama_ozet_satirlari(aktif))
+        aktif=aktif, planlar=planlar, aktif_ozet=_planlama_ozet_satirlari(aktif),
+        **dashboard_verileri)
+
+@planlama.route('/gun-sonu-devir', methods=['POST'])
+@login_required
+def gun_sonu_devir():
+    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin') and not has_permission(current_user, 'planning.carryover'):
+        flash('Erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('auth.portal'))
+    bugun = date.today()
+    aktif = UretimPlani.query.filter_by(durum='aktif').order_by(UretimPlani.id.desc()).first()
+    if not aktif:
+        flash('Aktif plan bulunmuyor.', 'danger')
+        return redirect(url_for('planlama.planlama_dashboard'))
+
+    bugun_satirlari = UretimPlaniSatir.query.filter_by(plan_id=aktif.id, tarih=bugun).all()
+    olusturulan = 0
+    for satir in bugun_satirlari:
+        gerceklesen = db.session.query(db.func.coalesce(db.func.sum(UretimKaydi.gerceklesen_adet), 0)).filter_by(plan_satir_id=satir.id).scalar() or 0
+        hedef = (satir.planlanan_adet or 0) + (getattr(satir, 'devir_adet', 0) or 0)
+        kalan = max(hedef - int(gerceklesen or 0), 0)
+        if kalan <= 0:
+            continue
+        sonraki_gun = devir_gunu(bugun)
+        mevcut_devir = UretimPlaniSatir.query.filter_by(
+            plan_id=aktif.id,
+            urun_id=satir.urun_id,
+            istasyon_id=satir.istasyon_id,
+            tarih=sonraki_gun,
+            kaynak='devir'
+        ).first()
+        if mevcut_devir:
+            mevcut_devir.planlanan_adet = (mevcut_devir.planlanan_adet or 0) + kalan
+            mevcut_devir.devir_adet = (mevcut_devir.devir_adet or 0) + kalan
+        else:
+            db.session.add(UretimPlaniSatir(
+                plan_id=aktif.id,
+                urun_id=satir.urun_id,
+                istasyon_id=satir.istasyon_id,
+                tarih=sonraki_gun,
+                planlanan_adet=kalan,
+                devir_adet=kalan,
+                kaynak='devir',
+            ))
+        olusturulan += kalan
+    db.session.commit()
+    flash(f'Gün sonu devir işlemi tamamlandı. Devreden adet: {olusturulan}', 'success')
+    return redirect(url_for('planlama.planlama_dashboard'))
 
 @planlama.route('/yeni', methods=['GET', 'POST'])
 @login_required
 def yeni_plan():
-    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin'):
+    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin') and not has_permission(current_user, 'planning.create'):
         flash('Erişim yetkiniz yok.', 'danger')
         return redirect(url_for('auth.portal'))
     if request.method == 'POST':
@@ -3282,7 +4049,7 @@ def yeni_plan():
 @planlama.route('/planlar')
 @login_required
 def plan_listesi():
-    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin', 'gm'):
+    if current_user.role not in ('planlama', 'departman_yoneticisi', 'admin', 'gm') and not has_permission(current_user, 'planning.list'):
         flash('Erişim yetkiniz yok.', 'danger')
         return redirect(url_for('auth.portal'))
     planlar = UretimPlani.query.order_by(UretimPlani.id.desc()).all()
@@ -3296,7 +4063,8 @@ def plan_listesi():
 def bakim_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role not in ('bakim', 'departman_yoneticisi', 'admin'):
+        endpoint_permission = ENDPOINT_PERMISSIONS.get(request.endpoint, 'maintenance.dashboard')
+        if not current_user.is_authenticated or not has_permission(current_user, endpoint_permission):
             flash('Bakım modülüne erişim yetkiniz yok.', 'danger')
             return redirect(url_for('auth.portal'))
         return f(*args, **kwargs)
@@ -3307,16 +4075,84 @@ def bakim_required(f):
 @bakim_required
 def bakim_dashboard():
     from datetime import timedelta
+    from sqlalchemy import func
     bugun = date.today()
     yedi_gun = bugun + timedelta(days=7)
+    otuz_gun_once = bugun - timedelta(days=30)
+    otuz_gun_sonra = bugun + timedelta(days=30)
+
+    # Bu ay / geçen ay sınırları
+    bu_ay_bas = bugun.replace(day=1)
+    gec_ay_son = bu_ay_bas - timedelta(days=1)
+    gec_ay_bas = gec_ay_son.replace(day=1)
+
     bugunki_kayitlar = BakimKaydi.query.filter_by(tarih=bugun).order_by(BakimKaydi.id.desc()).all()
     yaklasan = BakimPlani.query.filter(
         BakimPlani.sonraki_bakim_tarihi <= yedi_gun,
         BakimPlani.sonraki_bakim_tarihi >= bugun,
         BakimPlani.is_active == True
     ).order_by(BakimPlani.sonraki_bakim_tarihi).all()
+
+    # --- Arıza istatistikleri ---
+    bu_ay_ariza = BakimKaydi.query.filter(
+        BakimKaydi.bakim_turu == 'ariza',
+        BakimKaydi.tarih >= bu_ay_bas
+    ).count()
+    gec_ay_ariza = BakimKaydi.query.filter(
+        BakimKaydi.bakim_turu == 'ariza',
+        BakimKaydi.tarih >= gec_ay_bas,
+        BakimKaydi.tarih <= gec_ay_son
+    ).count()
+
+    # --- Bu ay toplam bakım süresi (dakika → saat) ---
+    bu_ay_sure_dk = db.session.query(func.sum(BakimKaydi.sure_dakika)).filter(
+        BakimKaydi.tarih >= bu_ay_bas
+    ).scalar() or 0
+    bu_ay_sure_saat = round(bu_ay_sure_dk / 60, 1)
+
+    # --- Arıza oranı (bu ay) ---
+    bu_ay_toplam = BakimKaydi.query.filter(BakimKaydi.tarih >= bu_ay_bas).count()
+    ariza_oran = round(bu_ay_ariza / bu_ay_toplam * 100) if bu_ay_toplam else 0
+
+    # --- En sık arıza yapan makineler (son 30 gün, top 5) ---
+    en_cok_ariza = db.session.query(
+        Makine.makine_adi,
+        func.count(BakimKaydi.id).label('adet')
+    ).join(BakimKaydi, BakimKaydi.makine_id == Makine.id).filter(
+        BakimKaydi.bakim_turu == 'ariza',
+        BakimKaydi.tarih >= otuz_gun_once
+    ).group_by(Makine.id, Makine.makine_adi).order_by(
+        func.count(BakimKaydi.id).desc()
+    ).limit(5).all()
+
+    # --- Periyodik kontrol uyarıları (gecikmiş + 30 gün içinde) ---
+    periyodik_uyari = PeriyodikKontrol.query.filter(
+        PeriyodikKontrol.durum == 'aktif',
+        PeriyodikKontrol.sonraki_kontrol_tarihi != None,
+        PeriyodikKontrol.sonraki_kontrol_tarihi <= otuz_gun_sonra
+    ).order_by(PeriyodikKontrol.sonraki_kontrol_tarihi).limit(10).all()
+
+    try:
+        acik_dof_sayisi = DOF.query.filter(
+            DOF.hedef_departman == 'Bakım',
+            DOF.durum.in_(('acik', 'isleniyor', 'gecikti'))
+        ).count()
+        geciken_aksiyon_sayisi = db.session.query(DOFAksiyon).join(DOF).filter(
+            DOF.hedef_departman == 'Bakım',
+            DOFAksiyon.durum != 'tamamlandi',
+            DOFAksiyon.planlanan_tarih < bugun
+        ).count()
+    except Exception:
+        acik_dof_sayisi = 0
+        geciken_aksiyon_sayisi = 0
+
     return render_template('bakim/dashboard.html',
-        bugunki_kayitlar=bugunki_kayitlar, yaklasan=yaklasan, bugun=bugun)
+        bugunki_kayitlar=bugunki_kayitlar, yaklasan=yaklasan, bugun=bugun,
+        acik_dof_sayisi=acik_dof_sayisi, geciken_aksiyon_sayisi=geciken_aksiyon_sayisi,
+        bu_ay_ariza=bu_ay_ariza, gec_ay_ariza=gec_ay_ariza,
+        bu_ay_sure_saat=bu_ay_sure_saat, ariza_oran=ariza_oran,
+        en_cok_ariza=en_cok_ariza, periyodik_uyari=periyodik_uyari,
+        otuz_gun_sonra=otuz_gun_sonra)
 
 @bakim.route('/kayit', methods=['GET', 'POST'])
 @login_required
@@ -3439,7 +4275,7 @@ def bakim_takvim():
 @bakim.route('/raporlar')
 @login_required
 def bakim_raporlar():
-    if current_user.role not in ('bakim', 'departman_yoneticisi', 'gm', 'admin'):
+    if current_user.role not in ('bakim', 'departman_yoneticisi', 'gm', 'admin') and not has_permission(current_user, 'maintenance.calendar_report'):
         flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
         return redirect(url_for('auth.portal'))
     baslangic = request.args.get('baslangic', str(date.today() - timedelta(days=29)))
@@ -3461,6 +4297,230 @@ def bakim_raporlar():
         makine_id=makine_id, baslangic=baslangic, bitis=bitis)
 
 
+# ── PLANLİ BAKIM ────────────────────────────────────────────────────────────
+
+@bakim.route('/program', methods=['GET', 'POST'])
+@login_required
+@bakim_required
+def bakim_program():
+    from app.models import PlanliBakim
+    if request.method == 'POST':
+        eylem = request.form.get('eylem', 'ekle')
+        if eylem == 'ekle':
+            bas_str = request.form.get('baslangic_tarihi')
+            bit_str = request.form.get('bitis_tarihi') or bas_str
+            bas_saat = request.form.get('baslangic_saati') or None
+            bit_saat = request.form.get('bitis_saati') or None
+            sure = request.form.get('sure_saat') or None
+            from datetime import time as dtime
+            def parse_time(s):
+                if not s:
+                    return None
+                try:
+                    h, m = s.split(':')
+                    return dtime(int(h), int(m))
+                except Exception:
+                    return None
+            p = PlanliBakim(
+                makine_id=request.form.get('makine_id'),
+                bakim_adi=request.form.get('bakim_adi', '').strip(),
+                baslangic_tarihi=date.fromisoformat(bas_str),
+                bitis_tarihi=date.fromisoformat(bit_str),
+                baslangic_saati=parse_time(bas_saat),
+                bitis_saati=parse_time(bit_saat),
+                sure_saat=float(sure) if sure else None,
+                notlar=request.form.get('notlar', '').strip() or None,
+                planlayan_id=current_user.id,
+            )
+            db.session.add(p)
+            db.session.commit()
+            flash(f'Planlı bakım eklendi: {p.makine.makine_adi} — {p.baslangic_tarihi.strftime("%d.%m.%Y")}', 'success')
+        elif eylem == 'durum':
+            p = db.get_or_404(PlanliBakim, request.form.get('program_id'))
+            p.durum = request.form.get('durum', p.durum)
+            db.session.commit()
+            flash('Durum güncellendi.', 'success')
+        return redirect(url_for('bakim.bakim_program'))
+
+    durum_filtre = request.args.get('durum', '')
+    q = PlanliBakim.query
+    if durum_filtre:
+        q = q.filter_by(durum=durum_filtre)
+    else:
+        q = q.filter(PlanliBakim.durum.in_(['planli', 'devam_ediyor']))
+    programlar = q.order_by(PlanliBakim.baslangic_tarihi).all()
+    makineler = Makine.query.filter_by(is_active=True).order_by(Makine.makine_adi).all()
+    return render_template('bakim/program.html',
+        programlar=programlar, makineler=makineler,
+        durum_filtre=durum_filtre, bugun=date.today())
+
+
+@bakim.route('/program/<int:id>/durum', methods=['POST'])
+@login_required
+@bakim_required
+def program_durum(id):
+    from app.models import PlanliBakim
+    p = db.get_or_404(PlanliBakim, id)
+    p.durum = request.form.get('durum', p.durum)
+    db.session.commit()
+    flash('Durum güncellendi.', 'success')
+    return redirect(url_for('bakim.bakim_program'))
+
+
+# ── PERİYODİK KONTROL ───────────────────────────────────────────────────────
+
+@bakim.route('/periyodik', methods=['GET', 'POST'])
+@login_required
+def periyodik_listesi():
+    if not has_permission(current_user, 'maintenance.periodic'):
+        flash('Erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('auth.portal'))
+    from app.models import PeriyodikKontrol
+    if request.method == 'POST':
+        eylem = request.form.get('eylem', 'ekle')
+        if eylem == 'ekle':
+            son_str = request.form.get('son_kontrol_tarihi') or None
+            periyot = int(request.form.get('periyot_ay', 12))
+            son_dt = date.fromisoformat(son_str) if son_str else None
+            from dateutil.relativedelta import relativedelta
+            sonraki = (son_dt + relativedelta(months=periyot)) if son_dt else None
+            pk = PeriyodikKontrol(
+                makine_id=request.form.get('makine_id') or None,
+                kontrol_adi=request.form.get('kontrol_adi', '').strip(),
+                kontrol_turu=request.form.get('kontrol_turu', 'diger'),
+                periyot_ay=periyot,
+                son_kontrol_tarihi=son_dt,
+                sonraki_kontrol_tarihi=sonraki,
+                kontrol_eden_firma=request.form.get('kontrol_eden_firma', '').strip() or None,
+                son_kontrol_notu=request.form.get('son_kontrol_notu', '').strip() or None,
+                olusturan_id=current_user.id,
+            )
+            db.session.add(pk)
+            db.session.commit()
+            flash('Periyodik kontrol eklendi.', 'success')
+        elif eylem == 'guncelle':
+            pk = db.get_or_404(PeriyodikKontrol, request.form.get('kontrol_id'))
+            son_str = request.form.get('son_kontrol_tarihi')
+            if son_str:
+                from dateutil.relativedelta import relativedelta
+                son_dt = date.fromisoformat(son_str)
+                pk.son_kontrol_tarihi = son_dt
+                pk.sonraki_kontrol_tarihi = son_dt + relativedelta(months=pk.periyot_ay)
+            pk.kontrol_eden_firma = request.form.get('kontrol_eden_firma', '').strip() or pk.kontrol_eden_firma
+            pk.son_kontrol_notu = request.form.get('son_kontrol_notu', '').strip() or None
+            db.session.commit()
+            flash('Kontrol güncellendi.', 'success')
+        elif eylem == 'pasif':
+            pk = db.get_or_404(PeriyodikKontrol, request.form.get('kontrol_id'))
+            pk.durum = 'pasif'
+            db.session.commit()
+            flash('Kontrol pasife alındı.', 'warning')
+        return redirect(url_for('bakim.periyodik_listesi'))
+
+    bugun = date.today()
+    bir_ay_sonra = bugun + timedelta(days=30)
+    kontroller = PeriyodikKontrol.query.filter_by(durum='aktif').order_by(PeriyodikKontrol.sonraki_kontrol_tarihi).all()
+    yaklaşan = [k for k in kontroller if k.sonraki_kontrol_tarihi and k.sonraki_kontrol_tarihi <= bir_ay_sonra]
+    makineler = Makine.query.filter_by(is_active=True).order_by(Makine.makine_adi).all()
+    return render_template('bakim/periyodik.html',
+        kontroller=kontroller, yaklaşan=yaklaşan,
+        makineler=makineler, bugun=bugun, bir_ay_sonra=bir_ay_sonra)
+
+
+# ── ARIZ TAMIR KAYIT (bakım personeli giriyor) ──────────────────────────────
+
+@bakim.route('/ariza-tamir', methods=['GET', 'POST'])
+@login_required
+@bakim_required
+def ariza_tamir_listesi():
+    from datetime import time as dtime
+    if request.method == 'POST':
+        bas_saat_str = request.form.get('baslangic_saati') or None
+        bit_saat_str = request.form.get('bitis_saati') or None
+        def parse_time(s):
+            if not s:
+                return None
+            try:
+                h, m = s.split(':')
+                return dtime(int(h), int(m))
+            except Exception:
+                return None
+        sure = None
+        bas_t = parse_time(bas_saat_str)
+        bit_t = parse_time(bit_saat_str)
+        if bas_t and bit_t:
+            bas_min = bas_t.hour * 60 + bas_t.minute
+            bit_min = bit_t.hour * 60 + bit_t.minute
+            if bit_min > bas_min:
+                sure = bit_min - bas_min
+        k = BakimKaydi(
+            makine_id=request.form.get('makine_id'),
+            bakim_turu='ariza',
+            tarih=date.fromisoformat(request.form.get('tarih', str(date.today()))),
+            yapilan_isler=request.form.get('yapilan_isler', '').strip(),
+            sure_dakika=sure or (int(request.form.get('sure_dakika')) if request.form.get('sure_dakika') else None),
+            baslangic_saati=bas_t,
+            bitis_saati=bit_t,
+            parca_kullanildi=bool(request.form.get('parca_kullanildi')),
+            kullanilan_parcalar=request.form.get('kullanilan_parcalar', '').strip() or None,
+            giren_personel_id=current_user.id,
+        )
+        db.session.add(k)
+        db.session.commit()
+        flash('Arıza tamir kaydı eklendi.', 'success')
+        return redirect(url_for('bakim.ariza_tamir_listesi'))
+
+    bas = request.args.get('baslangic', str(date.today() - timedelta(days=29)))
+    bit = request.args.get('bitis', str(date.today()))
+    makine_id = request.args.get('makine_id', '')
+    try:
+        bas_dt = date.fromisoformat(bas)
+        bit_dt = date.fromisoformat(bit)
+    except ValueError:
+        bas_dt = date.today() - timedelta(days=29)
+        bit_dt = date.today()
+    q = BakimKaydi.query.filter_by(bakim_turu='ariza').filter(
+        BakimKaydi.tarih >= bas_dt, BakimKaydi.tarih <= bit_dt)
+    if makine_id:
+        q = q.filter_by(makine_id=makine_id)
+    kayitlar = q.order_by(BakimKaydi.tarih.desc(), BakimKaydi.id.desc()).all()
+    makineler = Makine.query.filter_by(is_active=True).order_by(Makine.makine_adi).all()
+    return render_template('bakim/ariza_tamir.html',
+        kayitlar=kayitlar, makineler=makineler,
+        makine_id=makine_id, baslangic=bas, bitis=bit, bugun=date.today())
+
+
+# ── API: Üretim planı için bakım uyarısı ───────────────────────────────────
+
+@api.route('/bakim-kontrol')
+@login_required
+def api_bakim_kontrol():
+    """Verilen istasyon ve tarihe bakım var mı? Üretim planı uyarısı için."""
+    from app.models import PlanliBakim
+    istasyon_id = request.args.get('istasyon_id', type=int)
+    tarih_str = request.args.get('tarih', '')
+    if not istasyon_id or not tarih_str:
+        return jsonify({'uyari': False})
+    try:
+        tarih = date.fromisoformat(tarih_str)
+    except ValueError:
+        return jsonify({'uyari': False})
+    planli = (PlanliBakim.query
+        .join(Makine, Makine.id == PlanliBakim.makine_id)
+        .filter(
+            Makine.istasyon_id == istasyon_id,
+            PlanliBakim.baslangic_tarihi <= tarih,
+            PlanliBakim.bitis_tarihi >= tarih,
+            PlanliBakim.durum.in_(['planli', 'devam_ediyor'])
+        ).first())
+    if planli:
+        return jsonify({
+            'uyari': True,
+            'mesaj': f'{planli.makine.makine_adi} makinesi bu gün planlı bakımda ({planli.bakim_adi})'
+        })
+    return jsonify({'uyari': False})
+
+
 # ---------------------------------------------------------------------------
 # TEKNİK RESİM BLUEPRINT
 # ---------------------------------------------------------------------------
@@ -3470,7 +4530,7 @@ def bakim_raporlar():
 def teknik_resim_listesi():
     from sqlalchemy import func
     q = request.args.get('q', '').strip()
-    edit_yetkili = bool(current_user.teknik_resim_yetki)
+    edit_yetkili = has_permission(current_user, 'technical.manage')
 
     if q:
         # Arama: eşleşen dosyaları getir, klasöre göre grupla
@@ -3512,7 +4572,7 @@ def klasor_icerik():
     else:
         resimler = TeknikResim.query.filter_by(klasor=klasor)\
                     .order_by(TeknikResim.dosya_adi_gosterim).all()
-    edit_yetkili = bool(current_user.teknik_resim_yetki)
+    edit_yetkili = has_permission(current_user, 'technical.manage')
     return render_template('teknik_resim_satirlar.html', resimler=resimler, edit_yetkili=edit_yetkili)
 
 
