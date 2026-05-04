@@ -555,8 +555,12 @@ def panel():
     )
     if durum != 'hepsi':
         q = q.filter_by(durum=durum)
-    if dept:
-        q = q.filter_by(department_id=dept)
+    # Satınalma/admin/gm tüm siparişleri görebilir; diğerleri sadece kendi departmanını
+    if current_user.role in ('satinalma', 'admin', 'gm'):
+        if dept:
+            q = q.filter_by(department_id=dept)
+    else:
+        q = q.filter_by(department_id=current_user.department_id)
     if arama:
         from sqlalchemy import or_
         q = q.filter(or_(
@@ -3233,6 +3237,22 @@ def urun_ara():
         'makine': u.makine or ''
     } for u in sonuclar])
 
+@api.route('/proje-makine-ara')
+@login_required
+def proje_makine_ara():
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    sonuclar = db.session.query(TalepKalem.proje_makine)\
+        .filter(TalepKalem.proje_makine.isnot(None))\
+        .filter(TalepKalem.proje_makine != '')\
+        .filter(TalepKalem.proje_makine.ilike(f'%{q}%'))\
+        .distinct()\
+        .order_by(TalepKalem.proje_makine)\
+        .limit(12).all()
+    return jsonify([r[0] for r in sonuclar])
+
+
 @api.route('/urun-ekle', methods=['POST'])
 @login_required
 def urun_otomatik_ekle():
@@ -3452,12 +3472,16 @@ def uretim_giris():
             satir_ids = request.form.getlist('plan_satir_id[]')
             gerceklesenler = request.form.getlist('gerceklesen[]')
             personel_ids = request.form.getlist('uretim_personeli_id[]')
+            fire_adetler = request.form.getlist('fire_adet[]')
+            hurda_adetler = request.form.getlist('hurda_adet[]')
             eklenen = 0
             for i, satir_id in enumerate(satir_ids):
                 gercek = int(gerceklesenler[i] or 0) if i < len(gerceklesenler) else 0
                 if gercek <= 0:
                     continue
                 personel_id = personel_ids[i] if i < len(personel_ids) else None
+                fire = int(fire_adetler[i] or 0) if i < len(fire_adetler) else 0
+                hurda = int(hurda_adetler[i] or 0) if i < len(hurda_adetler) else 0
                 satir = UretimPlaniSatir.query.get(int(satir_id))
                 if not satir:
                     continue
@@ -3466,6 +3490,8 @@ def uretim_giris():
                 mevcut = UretimKaydi.query.filter_by(plan_satir_id=satir.id, tarih=kayit_tarihi).first()
                 if mevcut:
                     mevcut.gerceklesen_adet = gercek
+                    mevcut.fire_adet = fire
+                    mevcut.hurda_adet = hurda
                     mevcut.uretim_personeli_id = personel_id or None
                     mevcut.giren_personel_id = current_user.id
                 else:
@@ -3475,6 +3501,8 @@ def uretim_giris():
                         urun_id=satir.urun_id,
                         tarih=kayit_tarihi,
                         gerceklesen_adet=gercek,
+                        fire_adet=fire,
+                        hurda_adet=hurda,
                         uretim_personeli_id=personel_id or None,
                         giren_personel_id=current_user.id,
                     ))
@@ -3491,6 +3519,8 @@ def uretim_giris():
                 urun_id=request.form.get('urun_id') or None,
                 tarih=kayit_tarihi,
                 gerceklesen_adet=int(request.form.get('gerceklesen_adet_tek', 0) or 0),
+                fire_adet=int(request.form.get('fire_adet_tek', 0) or 0),
+                hurda_adet=int(request.form.get('hurda_adet_tek', 0) or 0),
                 uretim_personeli_id=request.form.get('uretim_personeli_id_tek') or None,
                 giren_personel_id=current_user.id,
             ))
@@ -4453,16 +4483,18 @@ def ariza_tamir_listesi():
             bit_min = bit_t.hour * 60 + bit_t.minute
             if bit_min > bas_min:
                 sure = bit_min - bas_min
+        ariza_devam = bool(request.form.get('ariza_devam_ediyor'))
         k = BakimKaydi(
             makine_id=request.form.get('makine_id'),
             bakim_turu='ariza',
             tarih=date.fromisoformat(request.form.get('tarih', str(date.today()))),
             yapilan_isler=request.form.get('yapilan_isler', '').strip(),
-            sure_dakika=sure or (int(request.form.get('sure_dakika')) if request.form.get('sure_dakika') else None),
+            sure_dakika=None if ariza_devam else (sure or (int(request.form.get('sure_dakika')) if request.form.get('sure_dakika') else None)),
             baslangic_saati=bas_t,
-            bitis_saati=bit_t,
+            bitis_saati=None if ariza_devam else bit_t,
             parca_kullanildi=bool(request.form.get('parca_kullanildi')),
             kullanilan_parcalar=request.form.get('kullanilan_parcalar', '').strip() or None,
+            ariza_devam_ediyor=ariza_devam,
             giren_personel_id=current_user.id,
         )
         db.session.add(k)

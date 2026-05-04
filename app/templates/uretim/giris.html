@@ -50,6 +50,8 @@
             <th class="px-3 py-2.5 text-right text-xs font-medium text-indigo-600">Hedef</th>
             <th class="px-3 py-2.5 text-left text-xs font-medium text-gray-500" style="min-width:160px">Personel</th>
             <th class="px-3 py-2.5 text-right text-xs font-medium text-green-700" style="min-width:100px">Gerçekleşen</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-orange-600" style="min-width:80px">Fire</th>
+            <th class="px-3 py-2.5 text-right text-xs font-medium text-red-600" style="min-width:80px">Hurda</th>
             <th class="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Fark</th>
           </tr>
         </thead>
@@ -96,6 +98,14 @@
                 data-hedef="{{ hedef }}"
                 oninput="farkGuncelle(this)"
                 style="width:80px;padding:5px 8px;border:1px solid #bbf7d0;border-radius:6px;font-size:13px;text-align:right;font-weight:700;color:#15803d">
+            </td>
+            <td class="px-3 py-2.5 text-right">
+              <input type="number" name="fire_adet[]" min="0" value="0"
+                style="width:70px;padding:5px 8px;border:1px solid #fed7aa;border-radius:6px;font-size:12px;text-align:right;color:#c2410c">
+            </td>
+            <td class="px-3 py-2.5 text-right">
+              <input type="number" name="hurda_adet[]" min="0" value="0"
+                style="width:70px;padding:5px 8px;border:1px solid #fecaca;border-radius:6px;font-size:12px;text-align:right;color:#dc2626">
             </td>
             <td class="px-3 py-2.5 text-right text-xs font-semibold fark-cell" data-satir="{{ satir.id }}">0</td>
           </tr>
@@ -168,6 +178,16 @@
         <label class="block text-xs font-medium text-gray-600 mb-1">Adet *</label>
         <input type="number" name="gerceklesen_adet_tek" min="0" required
           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="0">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-orange-600 mb-1">Fire Adet</label>
+        <input type="number" name="fire_adet_tek" min="0" value="0"
+          class="w-full border border-orange-200 rounded-lg px-3 py-2 text-sm" placeholder="0">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-red-600 mb-1">Hurda Adet</label>
+        <input type="number" name="hurda_adet_tek" min="0" value="0"
+          class="w-full border border-red-200 rounded-lg px-3 py-2 text-sm" placeholder="0">
       </div>
     </div>
     <button type="submit" class="text-sm border border-gray-300 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-50">Ekle</button>

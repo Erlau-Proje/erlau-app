@@ -166,6 +166,9 @@ function renderDropdown(state) {
   if (!state.items.length) {
     if (state.type === 'urun' && state.query.length >= 3) {
       dropdown.innerHTML = `<button type="button" data-create-urun="1" class="block w-full px-3 py-2 text-left text-gray-600 hover:bg-green-50 hover:text-green-700">"${escapeHtml(state.query)}" yeni ürün olarak eklensin</button>`;
+    } else if (state.type === 'proje') {
+      dropdown.classList.add('hidden');
+      return;
     } else {
       dropdown.innerHTML = '<div class="px-3 py-2 text-gray-400">Sonuç bulunamadı</div>';
     }
@@ -184,6 +187,11 @@ function renderDropdown(state) {
           <span style="font-size:11px;color:#94a3b8;margin-left:8px;flex-shrink:0">${escapeHtml(item.stok_kodu || '')}${katBadge}</span>
         </div>
         ${kullanim}
+      </button>`;
+    }
+    if (state.type === 'proje') {
+      return `<button type="button" data-index="${index}" class="block w-full px-3 py-2 text-left ${isActive ? 'bg-green-50 text-green-800' : 'text-gray-700 hover:bg-gray-50'}">
+        <span class="font-medium">${escapeHtml(item)}</span>
       </button>`;
     }
     return `<button type="button" data-index="${index}" class="block w-full px-3 py-2 text-left ${isActive ? 'bg-green-50 text-green-800' : 'text-gray-700 hover:bg-gray-50'}">
@@ -209,6 +217,8 @@ function selectAutocompleteItem(item) {
       }
     }
     sonAlimSorgula(input);
+  } else if (type === 'proje') {
+    input.value = typeof item === 'string' ? item : (item.proje_makine || '');
   } else {
     input.value = item.urun_adi || '';
     input.dataset.urunSelected = '1';
@@ -225,7 +235,7 @@ function scheduleAutocomplete(input, type) {
     return;
   }
   debounceTimer = window.setTimeout(() => {
-    const endpoint = type === 'malzeme' ? '/api/malzeme-ara' : '/api/urun-ara';
+    const endpoint = type === 'malzeme' ? '/api/malzeme-ara' : type === 'proje' ? '/api/proje-makine-ara' : '/api/urun-ara';
     fetch(`${endpoint}?q=${encodeURIComponent(query)}`)
       .then(r => r.ok ? r.json() : [])
       .then(items => {
@@ -272,13 +282,7 @@ tbody.addEventListener('input', function(e) {
     oneriTimer = window.setTimeout(() => aiOneriGoster(inp), 1500);
   }
   if (e.target.classList.contains('proje-makine-input')) {
-    scheduleAutocomplete(e.target, 'urun');
-    window.clearTimeout(urunKayitTimer);
-    urunKayitTimer = window.setTimeout(() => {
-      if (document.activeElement !== e.target) {
-        createUrunIfNeeded(e.target);
-      }
-    }, 500);
+    scheduleAutocomplete(e.target, 'proje');
   }
 });
 
@@ -337,9 +341,7 @@ tbody.addEventListener('blur', function(e) {
   if (e.target.classList.contains('malzeme-adi-input')) {
     sonAlimSorgula(e.target);
   }
-  if (e.target.classList.contains('proje-makine-input')) {
-    window.setTimeout(() => createUrunIfNeeded(e.target), 120);
-  }
+  /* proje-makine blur: kayıt gerekmez */
 }, true);
 
 let satirSayisi = 1;

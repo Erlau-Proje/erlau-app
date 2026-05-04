@@ -58,7 +58,7 @@ PERMISSIONS = [
     {'code': 'maintenance.record_plan', 'grup': 'Bakım', 'ad': 'Bakım kayıt ve bakım plan ekranları', 'tip': 'mudahale', 'roles': ('bakim', 'departman_yoneticisi', 'admin')},
     {'code': 'maintenance.calendar_report', 'grup': 'Bakım', 'ad': 'Bakım takvimi ve raporları', 'tip': 'goruntuleme', 'roles': ('bakim', 'departman_yoneticisi', 'admin')},
     {'code': 'maintenance.program', 'grup': 'Bakım', 'ad': 'Bakım programı oluşturma/güncelleme', 'tip': 'mudahale', 'roles': ('bakim', 'departman_yoneticisi', 'gm', 'admin')},
-    {'code': 'maintenance.repair', 'grup': 'Bakım', 'ad': 'Arıza tamir kayıtları', 'tip': 'mudahale', 'roles': ('bakim', 'departman_yoneticisi', 'gm', 'admin')},
+    {'code': 'maintenance.repair', 'grup': 'Bakım', 'ad': 'Arıza tamir kayıtları', 'tip': 'mudahale', 'roles': ('bakim', 'uretim', 'departman_yoneticisi', 'gm', 'admin')},
     {'code': 'maintenance.periodic', 'grup': 'Bakım', 'ad': 'Periyodik dış kontrol kayıtları', 'tip': 'mudahale', 'roles': ('bakim', 'departman_yoneticisi', 'gm', 'admin')},
     {'code': 'maintenance.api_check', 'grup': 'Bakım', 'ad': 'Üretim planı için bakım uyarısı API', 'tip': 'goruntuleme', 'all_active': True},
     {'code': 'quality.dashboard', 'grup': 'Kalite', 'ad': 'Kalite dashboard, DÖF, 8D ve süreç ekranları', 'tip': 'goruntuleme', 'roles': ('kalite', 'departman_yoneticisi', 'gm', 'admin')},
