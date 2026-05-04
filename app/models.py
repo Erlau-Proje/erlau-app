@@ -180,6 +180,43 @@ class TedarikciSablon(db.Model):
 
 
 # ---------------------------------------------------------------------------
+# FASON ÜRÜNLER
+# ---------------------------------------------------------------------------
+
+class FasonUrun(db.Model):
+    __tablename__ = 'fason_urun'
+    id = db.Column(db.Integer, primary_key=True)
+    tedarikci_id = db.Column(db.Integer, db.ForeignKey('tedarikci.id'), nullable=False, index=True)
+    tedarikci = db.relationship('Tedarikci', foreign_keys=[tedarikci_id])
+    urun_adi = db.Column(db.String(300), nullable=False, index=True)
+    urun_kodu = db.Column(db.String(100))
+    birim = db.Column(db.String(20), default='Adet')
+    aciklama = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    fiyatlar = db.relationship('FasonFiyat', backref='fason_urun', lazy=True,
+                               cascade='all, delete-orphan',
+                               order_by='FasonFiyat.tarih.desc()')
+
+    @property
+    def son_fiyat(self):
+        return self.fiyatlar[0] if self.fiyatlar else None
+
+
+class FasonFiyat(db.Model):
+    __tablename__ = 'fason_fiyat'
+    id = db.Column(db.Integer, primary_key=True)
+    fason_urun_id = db.Column(db.Integer, db.ForeignKey('fason_urun.id'), nullable=False)
+    fiyat = db.Column(db.Float, nullable=False)
+    para_birimi = db.Column(db.String(10), default='TL')
+    tarih = db.Column(db.Date, nullable=False, default=date.today)
+    notlar = db.Column(db.Text)
+    giren_personel_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    giren_personel = db.relationship('User', foreign_keys=[giren_personel_id])
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ---------------------------------------------------------------------------
 # MALZEME LİSTESİ
 # ---------------------------------------------------------------------------
 

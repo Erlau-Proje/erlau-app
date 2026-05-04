@@ -389,15 +389,28 @@ function aiOneriGoster(input) {
   panel.innerHTML = '<span style="color:#d97706">⟳ AI düşünüyor...</span>';
   panel.style.display = 'block';
 
-  fetch('/api/malzeme-oneri', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({malzeme_adi: malzemeAdi, proje_makine: projeMakine, kullanim_amaci: kullanAmaci})
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (!data.oneri && !data.benzerler?.length) { panel.style.display='none'; return; }
+  Promise.all([
+    fetch('/api/malzeme-oneri', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({malzeme_adi: malzemeAdi, proje_makine: projeMakine, kullanim_amaci: kullanAmaci})
+    }).then(r => r.json()).catch(() => ({})),
+    fetch('/api/fason-oneri?q=' + encodeURIComponent(malzemeAdi)).then(r => r.json()).catch(() => [])
+  ]).then(([data, fasonlar]) => {
     let html = '';
+    // Fason önerileri
+    if (fasonlar.length) {
+      html += `<div style="font-weight:700;color:#065f46;margin-bottom:4px">📦 Fason Kayıt:</div>`;
+      fasonlar.forEach(f => {
+        const fiyatStr = f.son_fiyat ? ` — <strong style="color:#16a34a">${f.son_fiyat.toLocaleString('tr-TR', {minimumFractionDigits:2})} ${f.para_birimi}</strong> <span style="color:#94a3b8;font-size:10px">(${f.son_fiyat_tarihi})</span>` : '';
+        html += `<div style="margin-top:3px;padding:4px 8px;background:#f0fdf4;border-radius:6px;cursor:pointer"
+          onclick="fasonSec(this,'${escapeHtml(f.urun_adi)}',${f.tedarikci_id},'${escapeHtml(f.tedarikci_adi)}')">
+          → <strong>${escapeHtml(f.urun_adi)}</strong> <span style="color:#94a3b8">${escapeHtml(f.tedarikci_adi)}</span>${fiyatStr}
+        </div>`;
+      });
+      html += '<div style="border-top:1px solid #fde68a;margin:6px 0"></div>';
+    }
+    if (!data.oneri && !data.benzerler?.length && !fasonlar.length) { panel.style.display='none'; return; }
     if (data.oneri) html += `<div>💡 ${escapeHtml(data.oneri)}</div>`;
     if (data.benzerler?.length) {
       html += `<div style="margin-top:6px;font-weight:600">Stok listesinde benzerler:</div>`;
@@ -410,8 +423,16 @@ function aiOneriGoster(input) {
     }
     html += `<div style="margin-top:6px;text-align:right"><a href="#" onclick="this.closest('.ai-oneri-panel').style.display='none';return false;" style="font-size:10px;color:#94a3b8">kapat ✕</a></div>`;
     panel.innerHTML = html;
-  })
-  .catch(() => { panel.style.display='none'; });
+  });
+}
+
+function fasonSec(el, urunAdi, tedId, tedAdi) {
+  const panel = el.closest('.ai-oneri-panel');
+  const td = panel.parentNode;
+  const input = td.querySelector('.malzeme-adi-input');
+  if (input) { input.value = urunAdi; sonAlimSorgula(input); }
+  panel.style.display = 'none';
+  showToast('Fason: ' + tedAdi);
 }
 
 function malzemeSecFromPanel(el, malzemeAdi, stokKodu) {

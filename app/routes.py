@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import selectinload
 from app import db
-from app.models import User, UserPermission, UserScopeDepartment, UserScopeStation, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPersoneli, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi, PlanliBakim, PeriyodikKontrol, TeklifGrubu, TeklifKalem, TeknikResim, KaliteKontrol, DOF, DOFAksiyon
+from app.models import User, UserPermission, UserScopeDepartment, UserScopeStation, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPersoneli, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi, PlanliBakim, PeriyodikKontrol, TeklifGrubu, TeklifKalem, TeknikResim, KaliteKontrol, DOF, DOFAksiyon, FasonUrun, FasonFiyat
 from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu, generate_plan_no, generate_teklif_no, devir_gunu
 from app.permissions import PERMISSIONS, PERMISSION_BY_CODE, ENDPOINT_PERMISSIONS, has_permission, default_permission_allowed
 from app.access_profiles import JOB_PROFILES, SCOPE_TYPES, USER_TYPES, PROFILE_LABELS, SCOPE_LABELS, USER_TYPE_LABELS, infer_profile
@@ -76,6 +76,18 @@ def logout():
 @main.route('/dashboard')
 @login_required
 def dashboard():
+    # Departman bazlı yönlendirme — her rol kendi modülüne gider
+    _role_redirects = {
+        'bakim':    ('bakim.bakim_dashboard', {}),
+        'uretim':   ('uretim.uretim_dashboard', {}),
+        'planlama': ('planlama.planlama_dashboard', {}),
+        'kalite':   ('kalite.kalite_dashboard', {}),
+        'muhasebe': ('muhasebe.fatura_listesi', {}),
+    }
+    if current_user.role in _role_redirects:
+        endpoint, kwargs = _role_redirects[current_user.role]
+        return redirect(url_for(endpoint, **kwargs))
+
     from app.services import get_gm_dashboard_stats
     bugun = date.today()
 
@@ -2927,6 +2939,89 @@ def fatura_pdf_indir(fatura_id):
 
 
 # ---------------------------------------------------------------------------
+# FASON ÜRÜNLER
+# ---------------------------------------------------------------------------
+
+@satin_alma.route('/fason')
+@login_required
+@role_required('satinalma', 'admin')
+def fason_listesi():
+    tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
+    secili_ted = request.args.get('tedarikci_id', '', type=str)
+    q = FasonUrun.query.filter_by(is_active=True)
+    if secili_ted:
+        q = q.filter_by(tedarikci_id=int(secili_ted))
+    urunler = q.order_by(FasonUrun.tedarikci_id, FasonUrun.urun_adi).all()
+    return render_template('satinalma/fason.html',
+        urunler=urunler, tedarikciler=tedarikciler, secili_ted=secili_ted)
+
+
+@satin_alma.route('/fason/ekle', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def fason_urun_ekle():
+    adi = request.form.get('urun_adi', '').strip()
+    ted_id = request.form.get('tedarikci_id', type=int)
+    if not adi or not ted_id:
+        flash('Ürün adı ve tedarikçi zorunlu.', 'danger')
+        return redirect(url_for('satin_alma.fason_listesi'))
+    u = FasonUrun(
+        tedarikci_id=ted_id,
+        urun_adi=adi,
+        urun_kodu=request.form.get('urun_kodu', '').strip() or None,
+        birim=request.form.get('birim', 'Adet'),
+        aciklama=request.form.get('aciklama', '').strip() or None,
+    )
+    db.session.add(u)
+    db.session.flush()
+    fiyat_str = request.form.get('fiyat', '').strip()
+    if fiyat_str:
+        db.session.add(FasonFiyat(
+            fason_urun_id=u.id,
+            fiyat=float(fiyat_str),
+            para_birimi=request.form.get('para_birimi', 'TL'),
+            tarih=date.today(),
+            giren_personel_id=current_user.id,
+        ))
+    db.session.commit()
+    flash(f'"{adi}" fason ürün listesine eklendi.', 'success')
+    return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=ted_id))
+
+
+@satin_alma.route('/fason/<int:urun_id>/fiyat-ekle', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def fason_fiyat_ekle(urun_id):
+    u = db.get_or_404(FasonUrun, urun_id)
+    fiyat_str = request.form.get('fiyat', '').strip()
+    if not fiyat_str:
+        flash('Fiyat boş bırakılamaz.', 'danger')
+        return redirect(url_for('satin_alma.fason_listesi'))
+    db.session.add(FasonFiyat(
+        fason_urun_id=u.id,
+        fiyat=float(fiyat_str),
+        para_birimi=request.form.get('para_birimi', 'TL'),
+        tarih=date.today(),
+        notlar=request.form.get('notlar', '').strip() or None,
+        giren_personel_id=current_user.id,
+    ))
+    db.session.commit()
+    flash(f'"{u.urun_adi}" için yeni fiyat kaydedildi.', 'success')
+    return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=u.tedarikci_id))
+
+
+@satin_alma.route('/fason/<int:urun_id>/sil', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def fason_urun_sil(urun_id):
+    u = db.get_or_404(FasonUrun, urun_id)
+    u.is_active = False
+    db.session.commit()
+    flash(f'"{u.urun_adi}" pasife alındı.', 'warning')
+    return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=u.tedarikci_id))
+
+
+# ---------------------------------------------------------------------------
 # G-004: MALZEME LİSTESİ
 # ---------------------------------------------------------------------------
 
@@ -3236,6 +3331,35 @@ def urun_ara():
         'proje': u.proje or '',
         'makine': u.makine or ''
     } for u in sonuclar])
+
+@api.route('/fason-oneri')
+@login_required
+def fason_oneri():
+    q = request.args.get('q', '').strip()
+    ted_id = request.args.get('tedarikci_id', '', type=str)
+    if len(q) < 2:
+        return jsonify([])
+    sorgu = FasonUrun.query.filter_by(is_active=True)\
+        .filter(FasonUrun.urun_adi.ilike(f'%{q}%'))
+    if ted_id:
+        sorgu = sorgu.filter_by(tedarikci_id=int(ted_id))
+    urunler = sorgu.order_by(FasonUrun.urun_adi).limit(8).all()
+    sonuc = []
+    for u in urunler:
+        sf = u.son_fiyat
+        sonuc.append({
+            'id': u.id,
+            'urun_adi': u.urun_adi,
+            'urun_kodu': u.urun_kodu or '',
+            'birim': u.birim or 'Adet',
+            'tedarikci_id': u.tedarikci_id,
+            'tedarikci_adi': u.tedarikci.name,
+            'son_fiyat': sf.fiyat if sf else None,
+            'son_fiyat_tarihi': sf.tarih.strftime('%d.%m.%Y') if sf else None,
+            'para_birimi': sf.para_birimi if sf else u.tedarikci.para_birimi,
+        })
+    return jsonify(sonuc)
+
 
 @api.route('/proje-makine-ara')
 @login_required
