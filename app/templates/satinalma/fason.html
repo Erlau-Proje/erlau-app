@@ -7,10 +7,11 @@
     {% endfor %}
   {% endwith %}
 
+  <!-- Başlık -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
     <div>
       <h1 style="font-size:22px;font-weight:700;color:#1e293b">Fason Ürünler</h1>
-      <p style="font-size:13px;color:#64748b;margin-top:2px">Tedarikçi bazlı fason ürün listesi ve fiyat arşivi</p>
+      <p style="font-size:13px;color:#64748b;margin-top:2px">Ürün bazlı fiyat arşivi — birden fazla firmadan karşılaştırmalı takip</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       {% if current_user.role == 'admin' %}
@@ -23,108 +24,117 @@
       {% endif %}
       <button onclick="document.getElementById('modalEkle').style.display='flex'" class="btn-primary">
         <svg style="width:15px;height:15px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        Fason Ürün Ekle
+        Yeni Ürün
       </button>
     </div>
   </div>
 
-  <!-- Tedarikçi filtresi -->
+  <!-- Arama -->
   <div class="card p-4 mb-5">
     <form method="GET" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <label style="font-size:13px;font-weight:600;color:#475569">Tedarikçi:</label>
-      <div style="position:relative;min-width:260px">
-        <input type="text" id="tedFilterBar" placeholder="Tedarikçi adı yazın..."
-          oninput="filterSelectOptions('tedSelectBar', this.value)"
-          style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-radius:8px 8px 0 0;font-size:13px;box-sizing:border-box;outline:none">
-        <select name="tedarikci_id" id="tedSelectBar" size="1" onchange="this.form.submit()"
-          style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;font-size:13px;max-height:180px">
-          <option value="">— Tümü —</option>
-          {% for t in tedarikciler %}
-          <option value="{{ t.id }}" {% if secili_ted == t.id|string %}selected{% endif %}>{{ t.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
+      <input type="text" name="ara" value="{{ ara }}" placeholder="Ürün adı veya kod ara..."
+        style="flex:1;min-width:220px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none">
+      <button type="submit" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Ara</button>
+      {% if ara %}
+      <a href="{{ url_for('satin_alma.fason_listesi') }}" style="font-size:13px;color:#64748b;text-decoration:none;padding:7px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff">✕ Temizle</a>
+      {% endif %}
       <span style="font-size:12px;color:#94a3b8">{{ urunler|length }} ürün</span>
     </form>
   </div>
 
   {% if urunler %}
-    {% set ns = namespace(current_ted=None) %}
-    {% for u in urunler %}
-      {% if u.tedarikci_id != ns.current_ted %}
-        {% if ns.current_ted is not none %}</tbody></table></div></div>{% endif %}
-        {% set ns.current_ted = u.tedarikci_id %}
-        <div class="card overflow-hidden mb-5">
-          <div style="padding:14px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px">
-            <svg style="width:16px;height:16px;color:#2d7a3a" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-            <span style="font-size:15px;font-weight:700;color:#1e293b">{{ u.tedarikci.name }}</span>
-            <span style="font-size:11px;color:#94a3b8">{{ u.tedarikci.para_birimi }}</span>
-          </div>
-          <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <thead>
-              <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0">
-                <th style="padding:10px 16px;text-align:left;font-weight:600;color:#475569">Ürün Adı</th>
-                <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Kod</th>
-                <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569">Birim</th>
-                <th style="padding:10px 12px;text-align:right;font-weight:600;color:#16a34a">Son Fiyat</th>
-                <th style="padding:10px 12px;text-align:left;font-weight:600;color:#475569;min-width:320px">Fiyat Geçmişi</th>
-                <th style="padding:10px 12px;text-align:right;font-weight:600;color:#475569">İşlem</th>
-              </tr>
-            </thead>
-            <tbody>
-      {% endif %}
-      <tr style="border-bottom:1px solid #f1f5f9" class="hover:bg-gray-50">
-        <td style="padding:11px 16px;font-weight:600;color:#1e293b">
-          {{ u.urun_adi }}
-          {% if u.aciklama %}<div style="font-size:11px;color:#94a3b8;margin-top:2px">{{ u.aciklama }}</div>{% endif %}
-        </td>
-        <td style="padding:11px 12px;color:#64748b;font-size:12px">{{ u.urun_kodu or '—' }}</td>
-        <td style="padding:11px 12px;color:#475569">{{ u.birim or 'Adet' }}</td>
-        <td style="padding:11px 12px;text-align:right">
-          {% if u.son_fiyat %}
-          <span style="font-size:15px;font-weight:700;color:#16a34a">
-            {{ '%.2f'|format(u.son_fiyat.fiyat) }} {{ u.son_fiyat.para_birimi }}
-          </span>
-          <div style="font-size:10px;color:#94a3b8">{{ u.son_fiyat.tarih.strftime('%m/%Y') }}</div>
-          {% else %}
-          <span style="color:#cbd5e1;font-size:12px">Fiyat yok</span>
-          {% endif %}
-        </td>
-        <td style="padding:8px 12px">
-          <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">
-            {% for f in u.fiyatlar %}
-            <div style="background:{% if loop.first %}#f0fdf4{% else %}#f8fafc{% endif %};border:1px solid {% if loop.first %}#bbf7d0{% else %}#e2e8f0{% endif %};border-radius:8px;padding:5px 10px;text-align:center;min-width:90px">
-              <div style="font-size:13px;font-weight:{% if loop.first %}700{% else %}500{% endif %};color:{% if loop.first %}#16a34a{% else %}#374151{% endif %}">{{ '%.2f'|format(f.fiyat) }} {{ f.para_birimi }}</div>
-              <div style="font-size:10px;color:#94a3b8">{{ f.tarih.strftime('%m/%Y') }}</div>
-              {% if f.proje %}<div style="font-size:10px;color:#2563eb;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ f.proje }}">📌 {{ f.proje }}</div>{% endif %}
-              {% if f.notlar %}<div style="font-size:10px;color:#64748b;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ f.notlar }}">{{ f.notlar }}</div>{% endif %}
+  <div class="card overflow-hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">
+          <th style="padding:11px 16px;text-align:left;font-weight:600;color:#475569;width:30%">Ürün Adı</th>
+          <th style="padding:11px 12px;text-align:left;font-weight:600;color:#475569;width:12%">Kod</th>
+          <th style="padding:11px 12px;text-align:left;font-weight:600;color:#475569;width:7%">Birim</th>
+          <th style="padding:11px 12px;text-align:left;font-weight:600;color:#475569">Tedarikçi Fiyatları</th>
+          <th style="padding:11px 12px;text-align:right;font-weight:600;color:#475569;width:100px">İşlem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in urunler %}
+        {% set grups = u.fiyatlar_by_tedarikci() %}
+        <tr style="border-bottom:1px solid #f1f5f9" class="hover:bg-slate-50">
+          <!-- Ürün adı -->
+          <td style="padding:12px 16px;vertical-align:top">
+            <div style="font-weight:600;color:#1e293b">{{ u.urun_adi }}</div>
+            {% if u.aciklama %}<div style="font-size:11px;color:#94a3b8;margin-top:2px">{{ u.aciklama }}</div>{% endif %}
+          </td>
+          <!-- Kod -->
+          <td style="padding:12px 12px;vertical-align:top;color:#64748b;font-size:12px">{{ u.urun_kodu or '—' }}</td>
+          <!-- Birim -->
+          <td style="padding:12px 12px;vertical-align:top;color:#475569">{{ u.birim or 'Adet' }}</td>
+          <!-- Tedarikçi fiyatları -->
+          <td style="padding:10px 12px;vertical-align:top">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start">
+
+              {% if grups %}
+                {% for sg in grups %}
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;min-width:140px;max-width:200px">
+                  <!-- Firma adı -->
+                  <div style="font-size:11px;font-weight:700;color:#2563eb;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                    {% if sg.tedarikci %}{{ sg.tedarikci.name }}{% else %}<span style="color:#94a3b8;font-style:italic">Firma belirtilmedi</span>{% endif %}
+                  </div>
+                  <!-- Son fiyat (en büyük badge) -->
+                  {% set sf = sg.fiyatlar[0] %}
+                  <div style="font-size:16px;font-weight:700;color:#16a34a">
+                    {{ '%.2f'|format(sf.fiyat) }} <span style="font-size:11px">{{ sf.para_birimi }}</span>
+                  </div>
+                  <div style="font-size:10px;color:#94a3b8;margin-top:1px">{{ sf.tarih.strftime('%m/%Y') }}{% if sf.proje %} · {{ sf.proje }}{% endif %}</div>
+                  <!-- Önceki fiyatlar -->
+                  {% if sg.fiyatlar|length > 1 %}
+                  <div style="margin-top:6px;border-top:1px solid #e2e8f0;padding-top:5px;display:flex;flex-direction:column;gap:3px">
+                    {% for f in sg.fiyatlar[1:] %}
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                      <span style="font-size:11px;color:#64748b">{{ '%.2f'|format(f.fiyat) }} {{ f.para_birimi }}</span>
+                      <span style="font-size:10px;color:#94a3b8">{{ f.tarih.strftime('%m/%Y') }}</span>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
+                </div>
+                {% endfor %}
+              {% else %}
+              <span style="font-size:12px;color:#cbd5e1;font-style:italic">Henüz fiyat girilmedi</span>
+              {% endif %}
+
+              <!-- + Fiyat Ekle butonu -->
+              <button type="button"
+                onclick="fiyatEkle({{ u.id }}, {{ u.urun_adi|tojson }})"
+                style="align-self:flex-start;background:#fff;border:1px dashed #2d7a3a;color:#2d7a3a;border-radius:10px;padding:8px 12px;font-size:12px;cursor:pointer;font-weight:600;white-space:nowrap;height:fit-content"
+                title="Yeni fiyat / firma ekle">+ Fiyat Ekle</button>
             </div>
-            {% endfor %}
+          </td>
+          <!-- İşlem -->
+          <td style="padding:12px 12px;vertical-align:top;text-align:right;white-space:nowrap">
             <button type="button"
-              onclick="fiyatEkle({{ u.id }}, {{ u.urun_adi|tojson }}, {{ u.tedarikci.para_birimi|tojson }})"
-              style="background:#fff;border:1px dashed #2d7a3a;color:#2d7a3a;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;min-width:44px;font-weight:600"
-              title="Yeni fiyat ekle">+ Fiyat</button>
-          </div>
-        </td>
-        <td style="padding:11px 12px;text-align:right;white-space:nowrap">
-          <button type="button"
-            onclick="duzenleAc({{ u.id }}, {{ u.urun_adi|tojson }}, {{ u.tedarikci_id }}, {{ (u.urun_kodu or '')|tojson }}, {{ (u.birim or 'Adet')|tojson }}, {{ (u.aciklama or '')|tojson }})"
-            style="font-size:12px;color:#2563eb;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px;margin-right:4px"
-            onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='none'">Düzenle</button>
-          <form method="POST" action="{{ url_for('satin_alma.fason_urun_sil', urun_id=u.id) }}"
-            onsubmit="return confirm('{{ u.urun_adi }} silinsin mi?')" style="display:inline">
-            <button type="submit" style="font-size:12px;color:#ef4444;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='none'">Sil</button>
-          </form>
-        </td>
-      </tr>
-    {% endfor %}
-    {% if urunler %}</tbody></table></div></div>{% endif %}
+              onclick="duzenleAc({{ u.id }}, {{ u.urun_adi|tojson }}, {{ (u.urun_kodu or '')|tojson }}, {{ (u.birim or 'Adet')|tojson }}, {{ (u.aciklama or '')|tojson }})"
+              style="font-size:12px;color:#2563eb;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px"
+              onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='none'">Düzenle</button>
+            <form method="POST" action="{{ url_for('satin_alma.fason_urun_sil', urun_id=u.id) }}"
+              onsubmit="return confirm('{{ u.urun_adi }} ve tüm fiyat kayıtları silinsin mi?')" style="display:inline">
+              <button type="submit" style="font-size:12px;color:#ef4444;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px"
+                onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='none'">Sil</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
   {% else %}
   <div class="card p-10 text-center text-gray-400">
     <div style="font-size:32px;margin-bottom:8px">📋</div>
+    {% if ara %}
+    <p class="font-medium">"{{ ara }}" için sonuç bulunamadı.</p>
+    {% else %}
     <p class="font-medium">Henüz fason ürün kaydı yok.</p>
-    <p class="text-sm mt-1">Sağ üstten yeni ürün ekleyebilirsiniz.</p>
+    <p class="text-sm mt-1">Sağ üstten yeni ürün ekleyebilir veya Geçmiş Tarama ile mevcut siparişleri aktarabilirsiniz.</p>
+    {% endif %}
   </div>
   {% endif %}
 </div>
@@ -132,32 +142,20 @@
 <!-- Yeni Ürün Modal -->
 <div id="modalEkle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center;padding:16px"
   onclick="if(event.target===this)this.style.display='none'">
-  <div class="card" style="width:100%;max-width:540px;padding:24px" onclick="event.stopPropagation()">
+  <div class="card" style="width:100%;max-width:540px;padding:24px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
       <h2 style="font-size:16px;font-weight:700;color:#1e293b">Yeni Fason Ürün</h2>
       <button onclick="document.getElementById('modalEkle').style.display='none'" style="color:#94a3b8;background:none;border:none;font-size:20px;cursor:pointer;line-height:1">×</button>
     </div>
     <form method="POST" action="{{ url_for('satin_alma.fason_urun_ekle') }}" style="display:grid;gap:12px">
       <div>
-        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Tedarikçi *</label>
-        <input type="text" placeholder="Ara..." oninput="filterSelectOptions('tedSelectEkle', this.value)"
-          style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-radius:8px 8px 0 0;font-size:13px;box-sizing:border-box;outline:none">
-        <select name="tedarikci_id" id="tedSelectEkle" required
-          style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;font-size:13px;max-height:160px">
-          <option value="">Seçin...</option>
-          {% for t in tedarikciler %}
-          <option value="{{ t.id }}" {% if secili_ted == t.id|string %}selected{% endif %}>{{ t.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
         <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Ürün Adı *</label>
-        <input name="urun_adi" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px" placeholder="Örn: CNC Freze, Talaş İşleme...">
+        <input name="urun_adi" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box" placeholder="Örn: CNC Freze, Talaş İşleme, 313103307...">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
           <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Ürün Kodu</label>
-          <input name="urun_kodu" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px" placeholder="Opsiyonel">
+          <input name="urun_kodu" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box" placeholder="Opsiyonel">
         </div>
         <div>
           <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Birim</label>
@@ -168,21 +166,31 @@
       </div>
       <div>
         <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Açıklama</label>
-        <textarea name="aciklama" rows="2" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical" placeholder="Opsiyonel..."></textarea>
+        <textarea name="aciklama" rows="2" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical;box-sizing:border-box" placeholder="Opsiyonel..."></textarea>
       </div>
-      <!-- İlk Fiyat -->
+      <!-- İlk Fiyat (opsiyonel) -->
       <div style="border-top:1px solid #f1f5f9;padding-top:12px">
         <label style="font-size:12px;font-weight:600;color:#16a34a;display:block;margin-bottom:8px">İlk Fiyat (opsiyonel)</label>
-        <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-bottom:8px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:3px">Tedarikçi</label>
+          <input type="text" placeholder="Ara..." oninput="filterSelectOptions('tedSelectEkle', this.value)"
+            style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-radius:8px 8px 0 0;font-size:13px;box-sizing:border-box;outline:none">
+          <select name="ilk_tedarikci_id" id="tedSelectEkle"
+            style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;font-size:13px;max-height:140px;box-sizing:border-box">
+            <option value="">— Tedarikçi belirtme (sonradan eklenebilir) —</option>
+            {% for t in tedarikciler %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-top:8px">
           <input name="fiyat" type="number" step="0.01" min="0"
-            style="width:100%;padding:8px 12px;border:1px solid #bbf7d0;border-radius:8px;font-size:13px" placeholder="0.00">
+            style="width:100%;padding:8px 12px;border:1px solid #bbf7d0;border-radius:8px;font-size:13px;box-sizing:border-box" placeholder="0.00">
           <select name="para_birimi" style="padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
             <option>TL</option><option>EUR</option><option>USD</option>
           </select>
           <input name="tarih_ay" type="month" value="{{ now_ay }}"
             style="padding:7px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
         </div>
-        <input name="proje" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box" placeholder="Proje / Makine (opsiyonel)">
+        <input name="proje" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box;margin-top:8px" placeholder="Proje / Makine (opsiyonel)">
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
         <button type="button" onclick="document.getElementById('modalEkle').style.display='none'"
@@ -193,72 +201,34 @@
   </div>
 </div>
 
-<!-- Düzenle Modal -->
-<div id="modalDuzenle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center;padding:16px"
-  onclick="if(event.target===this)this.style.display='none'">
-  <div class="card" style="width:100%;max-width:540px;padding:24px" onclick="event.stopPropagation()">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-      <h2 style="font-size:16px;font-weight:700;color:#1e293b">Fason Ürünü Düzenle</h2>
-      <button onclick="document.getElementById('modalDuzenle').style.display='none'" style="color:#94a3b8;background:none;border:none;font-size:20px;cursor:pointer;line-height:1">×</button>
-    </div>
-    <form id="duzenleForm" method="POST" style="display:grid;gap:12px">
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Tedarikçi *</label>
-        <input type="text" placeholder="Ara..." oninput="filterSelectOptions('tedSelectDuzenle', this.value)"
-          style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-radius:8px 8px 0 0;font-size:13px;box-sizing:border-box;outline:none">
-        <select name="tedarikci_id" id="tedSelectDuzenle" required
-          style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;font-size:13px;max-height:160px">
-          <option value="">Seçin...</option>
-          {% for t in tedarikciler %}
-          <option value="{{ t.id }}">{{ t.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Ürün Adı *</label>
-        <input name="urun_adi" id="duzenleUrunAdi" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div>
-          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Ürün Kodu</label>
-          <input name="urun_kodu" id="duzenleUrunKodu" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Birim</label>
-          <select name="birim" id="duzenleBirim" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
-            <option>Adet</option><option>Kg</option><option>Metre</option><option>m²</option><option>Saat</option><option>Lot</option>
-          </select>
-        </div>
-      </div>
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Açıklama</label>
-        <textarea name="aciklama" id="duzenleAciklama" rows="2" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical"></textarea>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
-        <button type="button" onclick="document.getElementById('modalDuzenle').style.display='none'"
-          style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;cursor:pointer;background:#fff;color:#475569">İptal</button>
-        <button type="submit" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Kaydet</button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <!-- Fiyat Ekle Modal -->
 <div id="modalFiyat" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center;padding:16px"
   onclick="if(event.target===this)this.style.display='none'">
-  <div class="card" style="width:100%;max-width:380px;padding:24px" onclick="event.stopPropagation()">
+  <div class="card" style="width:100%;max-width:460px;padding:24px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2 style="font-size:15px;font-weight:700;color:#1e293b">Fiyat Ekle</h2>
+      <h2 style="font-size:15px;font-weight:700;color:#1e293b">Fiyat / Firma Ekle</h2>
       <button onclick="document.getElementById('modalFiyat').style.display='none'" style="color:#94a3b8;background:none;border:none;font-size:20px;cursor:pointer;line-height:1">×</button>
     </div>
     <p style="font-size:13px;color:#475569;margin-bottom:14px;font-weight:600" id="fiyatUrunAdi"></p>
     <form id="fiyatForm" method="POST" style="display:grid;gap:10px">
+      <!-- Tedarikçi -->
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Tedarikçi</label>
+        <input type="text" placeholder="Ara..." oninput="filterSelectOptions('tedSelectFiyat', this.value)"
+          style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-radius:8px 8px 0 0;font-size:13px;box-sizing:border-box;outline:none">
+        <select name="tedarikci_id" id="tedSelectFiyat"
+          style="width:100%;padding:7px 12px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;font-size:13px;max-height:140px;box-sizing:border-box">
+          <option value="">— Tedarikçi belirtme —</option>
+          {% for t in tedarikciler %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+        </select>
+        <p style="font-size:11px;color:#94a3b8;margin-top:3px">Aynı ürün için farklı firmaların fiyatını karşılaştırmak için tedarikçi seçin</p>
+      </div>
       <!-- Fiyat + Para birimi -->
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px">
         <div>
           <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Fiyat *</label>
           <input name="fiyat" id="fiyatInput" type="number" step="0.01" min="0" required
-            style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box">
         </div>
         <div>
           <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Birim</label>
@@ -268,26 +238,22 @@
           </select>
         </div>
       </div>
-      <!-- Ay seçimi -->
+      <!-- Ay -->
       <div>
         <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Ay / Yıl *</label>
         <input name="tarih_ay" id="fiyatTarihAy" type="month" required value="{{ now_ay }}"
-          style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
-        <p style="font-size:11px;color:#94a3b8;margin-top:3px">Fiyatın geçerli olduğu ay ve yılı seçin</p>
+          style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box">
       </div>
-      <!-- Proje -->
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Proje / Makine</label>
-        <input name="proje" id="fiyatProje"
-          style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px"
-          placeholder="Örn: FA-Line, OEA Montaj... (opsiyonel)">
-      </div>
-      <!-- Not -->
-      <div>
-        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Not</label>
-        <input name="notlar"
-          style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px"
-          placeholder="Opsiyonel...">
+      <!-- Proje + Not -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Proje / Makine</label>
+          <input name="proje" id="fiyatProje" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box" placeholder="Opsiyonel">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Not</label>
+          <input name="notlar" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box" placeholder="Opsiyonel">
+        </div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
         <button type="button" onclick="document.getElementById('modalFiyat').style.display='none'"
@@ -298,20 +264,65 @@
   </div>
 </div>
 
+<!-- Düzenle Modal -->
+<div id="modalDuzenle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center;padding:16px"
+  onclick="if(event.target===this)this.style.display='none'">
+  <div class="card" style="width:100%;max-width:480px;padding:24px" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <h2 style="font-size:16px;font-weight:700;color:#1e293b">Ürün Bilgilerini Düzenle</h2>
+      <button onclick="document.getElementById('modalDuzenle').style.display='none'" style="color:#94a3b8;background:none;border:none;font-size:20px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <form id="duzenleForm" method="POST" style="display:grid;gap:12px">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Ürün Adı *</label>
+        <input name="urun_adi" id="duzenleUrunAdi" required style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Ürün Kodu</label>
+          <input name="urun_kodu" id="duzenleUrunKodu" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Birim</label>
+          <select name="birim" id="duzenleBirim" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px">
+            <option>Adet</option><option>Kg</option><option>Metre</option><option>m²</option><option>Saat</option><option>Lot</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Açıklama</label>
+        <textarea name="aciklama" id="duzenleAciklama" rows="2" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+        <button type="button" onclick="document.getElementById('modalDuzenle').style.display='none'"
+          style="padding:8px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;cursor:pointer;background:#fff;color:#475569">İptal</button>
+        <button type="submit" class="erlau-green text-white px-4 py-2 rounded-lg text-sm font-medium">Kaydet</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
-// Tedarikçi select filtresi
 function filterSelectOptions(selectId, q) {
   const sel = document.getElementById(selectId);
   const lower = q.toLowerCase().trim();
   Array.from(sel.options).forEach(o => {
     o.style.display = (!lower || o.text.toLowerCase().includes(lower)) ? '' : 'none';
   });
-  if (lower) sel.size = Math.min(8, Array.from(sel.options).filter(o => o.style.display !== 'none').length + 1);
-  else sel.size = 1;
+  sel.size = lower ? Math.min(8, Array.from(sel.options).filter(o => o.style.display !== 'none').length + 1) : 1;
 }
 
-// Düzenle modal aç
-function duzenleAc(id, urunAdi, tedId, urunKodu, birim, aciklama) {
+function fiyatEkle(id, urunAdi) {
+  document.getElementById('fiyatUrunAdi').textContent = urunAdi;
+  document.getElementById('fiyatForm').action = '/satinalma/fason/' + id + '/fiyat-ekle';
+  document.getElementById('fiyatInput').value = '';
+  document.getElementById('fiyatProje').value = '';
+  document.getElementById('tedSelectFiyat').value = '';
+  document.getElementById('modalFiyat').style.display = 'flex';
+  setTimeout(() => document.getElementById('fiyatInput').focus(), 100);
+}
+
+function duzenleAc(id, urunAdi, urunKodu, birim, aciklama) {
   document.getElementById('duzenleForm').action = '/satinalma/fason/' + id + '/duzenle';
   document.getElementById('duzenleUrunAdi').value = urunAdi;
   document.getElementById('duzenleUrunKodu').value = urunKodu;
@@ -320,26 +331,8 @@ function duzenleAc(id, urunAdi, tedId, urunKodu, birim, aciklama) {
   for (let i = 0; i < birimSel.options.length; i++) {
     birimSel.options[i].selected = (birimSel.options[i].value === birim);
   }
-  const tedSel = document.getElementById('tedSelectDuzenle');
-  for (let i = 0; i < tedSel.options.length; i++) {
-    tedSel.options[i].selected = (parseInt(tedSel.options[i].value) === tedId);
-  }
   document.getElementById('modalDuzenle').style.display = 'flex';
   document.getElementById('duzenleUrunAdi').focus();
-}
-
-// Fiyat modal aç
-function fiyatEkle(id, urunAdi, paraBirimi) {
-  document.getElementById('fiyatUrunAdi').textContent = urunAdi;
-  document.getElementById('fiyatForm').action = '/satinalma/fason/' + id + '/fiyat-ekle';
-  document.getElementById('fiyatInput').value = '';
-  document.getElementById('fiyatProje').value = '';
-  const pb = document.getElementById('fiyatParaBirimi');
-  for (let i = 0; i < pb.options.length; i++) {
-    if (pb.options[i].value === paraBirimi) { pb.selectedIndex = i; break; }
-  }
-  document.getElementById('modalFiyat').style.display = 'flex';
-  document.getElementById('fiyatInput').focus();
 }
 </script>
 {% endblock %}

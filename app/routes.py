@@ -627,37 +627,37 @@ def onayla(talep_id):
 
 
 def _fason_otomatik_kaydet(talep):
-    """Sipariş yolda/teslim durumuna geçince Tür=Fason kalemleri FasonUrun/FasonFiyat'a otomatik ekler."""
+    """Sipariş yolda durumuna geçince Tür=Fason kalemleri FasonUrun/FasonFiyat'a otomatik ekler."""
     from datetime import date as _date
     for kalem in talep.kalemler:
         if (kalem.malzeme_turu or '').lower() != 'fason':
             continue
-        if not kalem.tedarikci_id or not kalem.br_fiyat:
+        if not kalem.br_fiyat:
             continue
-        # Aynı tedarikçi + aynı malzeme adı var mı?
-        urun = FasonUrun.query.filter_by(
-            tedarikci_id=kalem.tedarikci_id, is_active=True
-        ).filter(
+        # Ürün adına göre eşleştir (tedarikçiden bağımsız)
+        urun = FasonUrun.query.filter_by(is_active=True).filter(
             FasonUrun.urun_adi.ilike(kalem.malzeme_adi.strip())
         ).first()
         if not urun:
             urun = FasonUrun(
-                tedarikci_id=kalem.tedarikci_id,
                 urun_adi=kalem.malzeme_adi.strip(),
                 urun_kodu=kalem.marka_model or None,
                 birim=kalem.birim or 'Adet',
             )
             db.session.add(urun)
             db.session.flush()
-        # Aynı ay için zaten fiyat girilmişse tekrar ekleme
+        # Aynı tedarikçi + aynı ay → tekrar ekleme
         siparis_tarihi = talep.created_at.date() if talep.created_at else _date.today()
         ay_basi = siparis_tarihi.replace(day=1)
         mevcut = FasonFiyat.query.filter_by(
-            fason_urun_id=urun.id, tarih=ay_basi
+            fason_urun_id=urun.id,
+            tedarikci_id=kalem.tedarikci_id,
+            tarih=ay_basi,
         ).first()
         if not mevcut:
             db.session.add(FasonFiyat(
                 fason_urun_id=urun.id,
+                tedarikci_id=kalem.tedarikci_id,
                 fiyat=kalem.br_fiyat,
                 para_birimi=kalem.para_birimi or 'TL',
                 tarih=ay_basi,
@@ -3053,13 +3053,15 @@ def fatura_pdf_indir(fatura_id):
 @role_required('satinalma', 'admin')
 def fason_listesi():
     tedarikciler = Tedarikci.query.filter_by(is_active=True).order_by(Tedarikci.name).all()
-    secili_ted = request.args.get('tedarikci_id', '', type=str)
+    ara = request.args.get('ara', '').strip()
     q = FasonUrun.query.filter_by(is_active=True)
-    if secili_ted:
-        q = q.filter_by(tedarikci_id=int(secili_ted))
-    urunler = q.order_by(FasonUrun.tedarikci_id, FasonUrun.urun_adi).all()
+    if ara:
+        q = q.filter(FasonUrun.urun_adi.ilike(f'%{ara}%') | FasonUrun.urun_kodu.ilike(f'%{ara}%'))
+    urunler = q.order_by(FasonUrun.urun_adi).all()
+    from datetime import date as _d
+    now_ay = _d.today().strftime('%Y-%m')
     return render_template('satinalma/fason.html',
-        urunler=urunler, tedarikciler=tedarikciler, secili_ted=secili_ted)
+        urunler=urunler, tedarikciler=tedarikciler, ara=ara, now_ay=now_ay)
 
 
 @satin_alma.route('/fason/ekle', methods=['POST'])
@@ -3067,12 +3069,10 @@ def fason_listesi():
 @role_required('satinalma', 'admin')
 def fason_urun_ekle():
     adi = request.form.get('urun_adi', '').strip()
-    ted_id = request.form.get('tedarikci_id', type=int)
-    if not adi or not ted_id:
-        flash('Ürün adı ve tedarikçi zorunlu.', 'danger')
+    if not adi:
+        flash('Ürün adı zorunlu.', 'danger')
         return redirect(url_for('satin_alma.fason_listesi'))
     u = FasonUrun(
-        tedarikci_id=ted_id,
         urun_adi=adi,
         urun_kodu=request.form.get('urun_kodu', '').strip() or None,
         birim=request.form.get('birim', 'Adet'),
@@ -3088,8 +3088,10 @@ def fason_urun_ekle():
             ilk_tarih = _dt.strptime(tarih_ay + '-01', '%Y-%m-%d').date() if tarih_ay else date.today()
         except ValueError:
             ilk_tarih = date.today()
+        ted_id = request.form.get('ilk_tedarikci_id', type=int) or None
         db.session.add(FasonFiyat(
             fason_urun_id=u.id,
+            tedarikci_id=ted_id,
             fiyat=float(fiyat_str),
             para_birimi=request.form.get('para_birimi', 'TL'),
             tarih=ilk_tarih,
@@ -3098,7 +3100,7 @@ def fason_urun_ekle():
         ))
     db.session.commit()
     flash(f'"{adi}" fason ürün listesine eklendi.', 'success')
-    return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=ted_id))
+    return redirect(url_for('satin_alma.fason_listesi'))
 
 
 @satin_alma.route('/fason/<int:urun_id>/fiyat-ekle', methods=['POST'])
@@ -3116,8 +3118,10 @@ def fason_fiyat_ekle(urun_id):
         fiyat_tarih = _dt.strptime(tarih_ay + '-01', '%Y-%m-%d').date() if tarih_ay else date.today()
     except ValueError:
         fiyat_tarih = date.today()
+    ted_id = request.form.get('tedarikci_id', type=int) or None
     db.session.add(FasonFiyat(
         fason_urun_id=u.id,
+        tedarikci_id=ted_id,
         fiyat=float(fiyat_str),
         para_birimi=request.form.get('para_birimi', 'TL'),
         tarih=fiyat_tarih,
@@ -3127,7 +3131,7 @@ def fason_fiyat_ekle(urun_id):
     ))
     db.session.commit()
     flash(f'"{u.urun_adi}" için yeni fiyat kaydedildi.', 'success')
-    return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=u.tedarikci_id))
+    return redirect(url_for('satin_alma.fason_listesi'))
 
 
 @satin_alma.route('/fason/<int:urun_id>/duzenle', methods=['POST'])
@@ -3136,18 +3140,16 @@ def fason_fiyat_ekle(urun_id):
 def fason_urun_duzenle(urun_id):
     u = db.get_or_404(FasonUrun, urun_id)
     adi = request.form.get('urun_adi', '').strip()
-    ted_id = request.form.get('tedarikci_id', type=int)
-    if not adi or not ted_id:
-        flash('Ürün adı ve tedarikçi zorunlu.', 'danger')
+    if not adi:
+        flash('Ürün adı zorunlu.', 'danger')
         return redirect(url_for('satin_alma.fason_listesi'))
     u.urun_adi = adi
-    u.tedarikci_id = ted_id
     u.urun_kodu = request.form.get('urun_kodu', '').strip() or None
     u.birim = request.form.get('birim', 'Adet')
     u.aciklama = request.form.get('aciklama', '').strip() or None
     db.session.commit()
     flash(f'"{adi}" güncellendi.', 'success')
-    return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=u.tedarikci_id))
+    return redirect(url_for('satin_alma.fason_listesi'))
 
 
 @satin_alma.route('/fason/<int:urun_id>/sil', methods=['POST'])
@@ -3158,7 +3160,7 @@ def fason_urun_sil(urun_id):
     u.is_active = False
     db.session.commit()
     flash(f'"{u.urun_adi}" pasife alındı.', 'warning')
-    return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=u.tedarikci_id))
+    return redirect(url_for('satin_alma.fason_listesi'))
 
 
 @satin_alma.route('/fason/tarama', methods=['POST'])

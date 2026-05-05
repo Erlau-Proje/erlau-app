@@ -180,14 +180,24 @@ class TedarikciSablon(db.Model):
 
 
 # ---------------------------------------------------------------------------
+# MALZEME TÜRÜ LİSTESİ (yapılandırılabilir)
+# ---------------------------------------------------------------------------
+
+class MalzemeTuru(db.Model):
+    __tablename__ = 'malzeme_turu_listesi'
+    id = db.Column(db.Integer, primary_key=True)
+    ad = db.Column(db.String(100), nullable=False, unique=True)
+    sira = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+
+
+# ---------------------------------------------------------------------------
 # FASON ÜRÜNLER
 # ---------------------------------------------------------------------------
 
 class FasonUrun(db.Model):
     __tablename__ = 'fason_urun'
     id = db.Column(db.Integer, primary_key=True)
-    tedarikci_id = db.Column(db.Integer, db.ForeignKey('tedarikci.id'), nullable=False, index=True)
-    tedarikci = db.relationship('Tedarikci', foreign_keys=[tedarikci_id])
     urun_adi = db.Column(db.String(300), nullable=False, index=True)
     urun_kodu = db.Column(db.String(100))
     birim = db.Column(db.String(20), default='Adet')
@@ -198,18 +208,28 @@ class FasonUrun(db.Model):
                                cascade='all, delete-orphan',
                                order_by='FasonFiyat.tarih.desc()')
 
-    @property
-    def son_fiyat(self):
-        return self.fiyatlar[0] if self.fiyatlar else None
+    def fiyatlar_by_tedarikci(self):
+        groups = {}
+        for f in self.fiyatlar:
+            key = f.tedarikci_id or 0
+            if key not in groups:
+                groups[key] = {'tedarikci': f.tedarikci, 'fiyatlar': []}
+            groups[key]['fiyatlar'].append(f)
+        result = list(groups.values())
+        result.sort(key=lambda x: x['tedarikci'].name.lower() if x['tedarikci'] else '\xff')
+        return result
 
 
 class FasonFiyat(db.Model):
     __tablename__ = 'fason_fiyat'
     id = db.Column(db.Integer, primary_key=True)
     fason_urun_id = db.Column(db.Integer, db.ForeignKey('fason_urun.id'), nullable=False)
+    tedarikci_id = db.Column(db.Integer, db.ForeignKey('tedarikci.id'), nullable=True, index=True)
+    tedarikci = db.relationship('Tedarikci', foreign_keys=[tedarikci_id])
     fiyat = db.Column(db.Float, nullable=False)
     para_birimi = db.Column(db.String(10), default='TL')
     tarih = db.Column(db.Date, nullable=False, default=date.today)
+    proje = db.Column(db.String(200))
     notlar = db.Column(db.Text)
     giren_personel_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     giren_personel = db.relationship('User', foreign_keys=[giren_personel_id])
