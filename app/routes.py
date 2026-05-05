@@ -626,6 +626,46 @@ def onayla(talep_id):
     return redirect(url_for('satin_alma.panel'))
 
 
+def _fason_otomatik_kaydet(talep):
+    """Sipariş yolda/teslim durumuna geçince Tür=Fason kalemleri FasonUrun/FasonFiyat'a otomatik ekler."""
+    from datetime import date as _date
+    for kalem in talep.kalemler:
+        if (kalem.malzeme_turu or '').lower() != 'fason':
+            continue
+        if not kalem.tedarikci_id or not kalem.br_fiyat:
+            continue
+        # Aynı tedarikçi + aynı malzeme adı var mı?
+        urun = FasonUrun.query.filter_by(
+            tedarikci_id=kalem.tedarikci_id, is_active=True
+        ).filter(
+            FasonUrun.urun_adi.ilike(kalem.malzeme_adi.strip())
+        ).first()
+        if not urun:
+            urun = FasonUrun(
+                tedarikci_id=kalem.tedarikci_id,
+                urun_adi=kalem.malzeme_adi.strip(),
+                urun_kodu=kalem.marka_model or None,
+                birim=kalem.birim or 'Adet',
+            )
+            db.session.add(urun)
+            db.session.flush()
+        # Aynı ay için zaten fiyat girilmişse tekrar ekleme
+        siparis_tarihi = talep.created_at.date() if talep.created_at else _date.today()
+        ay_basi = siparis_tarihi.replace(day=1)
+        mevcut = FasonFiyat.query.filter_by(
+            fason_urun_id=urun.id, tarih=ay_basi
+        ).first()
+        if not mevcut:
+            db.session.add(FasonFiyat(
+                fason_urun_id=urun.id,
+                fiyat=kalem.br_fiyat,
+                para_birimi=kalem.para_birimi or 'TL',
+                tarih=ay_basi,
+                proje=kalem.proje_makine or None,
+                notlar=f"Otomatik — {talep.siparis_no}",
+            ))
+
+
 def _malzeme_kullanim_ogren(talep):
     """Onaylanan siparişteki malzemeleri Malzeme tablosuna eşleştir ve kullanım notunu güncelle."""
     import os
@@ -1470,6 +1510,9 @@ def siparis_excel(talep_id, tedarikci_id):
 def yolda(talep_id):
     talep = db.get_or_404(TalepFormu, talep_id)
     talep.durum = 'yolda'
+    if not talep.yolda_tarihi:
+        talep.yolda_tarihi = datetime.utcnow()
+    _fason_otomatik_kaydet(talep)
     db.session.commit()
     flash('Sipariş yolda olarak işaretlendi.', 'success')
     return redirect(url_for('satin_alma.panel'))
@@ -1495,6 +1538,8 @@ def durum_guncelle(talep_id):
         talep.durum = yeni_durum
         if yeni_durum == 'yolda' and not talep.yolda_tarihi:
             talep.yolda_tarihi = datetime.utcnow()
+        if yeni_durum == 'yolda':
+            _fason_otomatik_kaydet(talep)
         if yeni_durum == 'teslim_alindi':
             now = datetime.utcnow()
             for kalem in talep.kalemler:
@@ -3114,6 +3159,28 @@ def fason_urun_sil(urun_id):
     db.session.commit()
     flash(f'"{u.urun_adi}" pasife alındı.', 'warning')
     return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=u.tedarikci_id))
+
+
+@satin_alma.route('/fason/tarama', methods=['POST'])
+@login_required
+@role_required('admin')
+def fason_gecmis_tarama():
+    """Tüm yolda/teslim_alindi siparişlerdeki Fason kalemleri FasonUrun/FasonFiyat'a toplu ekler."""
+    talepler = TalepFormu.query.filter(
+        TalepFormu.durum.in_(['yolda', 'teslim_alindi'])
+    ).all()
+    eklenen_urun = 0
+    eklenen_fiyat = 0
+    for talep in talepler:
+        onceki_urun = FasonUrun.query.count()
+        onceki_fiyat = FasonFiyat.query.count()
+        _fason_otomatik_kaydet(talep)
+        db.session.flush()
+        eklenen_urun += FasonUrun.query.count() - onceki_urun
+        eklenen_fiyat += FasonFiyat.query.count() - onceki_fiyat
+    db.session.commit()
+    flash(f'Tarama tamamlandı: {eklenen_urun} yeni ürün, {eklenen_fiyat} yeni fiyat kaydı eklendi.', 'success')
+    return redirect(url_for('satin_alma.fason_listesi'))
 
 
 # ---------------------------------------------------------------------------

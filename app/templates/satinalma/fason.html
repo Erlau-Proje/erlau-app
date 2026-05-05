@@ -12,10 +12,20 @@
       <h1 style="font-size:22px;font-weight:700;color:#1e293b">Fason Ürünler</h1>
       <p style="font-size:13px;color:#64748b;margin-top:2px">Tedarikçi bazlı fason ürün listesi ve fiyat arşivi</p>
     </div>
-    <button onclick="document.getElementById('modalEkle').style.display='flex'" class="btn-primary">
-      <svg style="width:15px;height:15px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-      Fason Ürün Ekle
-    </button>
+    <div style="display:flex;gap:8px;align-items:center">
+      {% if current_user.role == 'admin' %}
+      <form method="POST" action="{{ url_for('satin_alma.fason_gecmis_tarama') }}"
+        onsubmit="return confirm('Tüm yolda/teslim siparişlerdeki Fason kalemler taranarak listeye eklenecek. Devam?')">
+        <button type="submit" style="padding:7px 14px;border:1px solid #d97706;border-radius:8px;font-size:13px;cursor:pointer;background:#fffbeb;color:#92400e;font-weight:600">
+          Geçmiş Tarama
+        </button>
+      </form>
+      {% endif %}
+      <button onclick="document.getElementById('modalEkle').style.display='flex'" class="btn-primary">
+        <svg style="width:15px;height:15px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Fason Ürün Ekle
+      </button>
+    </div>
   </div>
 
   <!-- Tedarikçi filtresi -->

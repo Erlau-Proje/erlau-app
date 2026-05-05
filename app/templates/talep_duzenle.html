@@ -83,7 +83,7 @@
               {% endfor %}
             </select></td>
             <td class="px-2 py-2"><select name="kullanilan_alan[]" class="border border-gray-200 rounded px-1 py-1 text-xs">
-              {% for al in ['FA','OEA','OEI','OEF','OES','Fason'] %}
+              {% for al in ['FA','OEA','OEI','OEF','OES'] %}
               <option {% if kalem.kullanilan_alan == al %}selected{% endif %}>{{ al }}</option>
               {% endfor %}
             </select></td>
@@ -137,7 +137,7 @@ function satirEkle() {
     <td class="px-2 py-2"><input type="number" name="miktar[]" class="w-14 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="0"></td>
     <td class="px-2 py-2"><select name="hedef[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option value="siparis">Sipariş</option><option value="stok">Stok</option><option value="proje">Proje</option></select></td>
     <td class="px-2 py-2"><select name="kullanim_amaci[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option>Üretim</option><option>Bakım</option><option>Sarf Malzeme</option><option>Personel İhtiyacı</option><option>Diğer</option></select></td>
-    <td class="px-2 py-2"><select name="kullanilan_alan[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option value="FA">FA</option><option value="OEA">OEA</option><option value="OEI">OEI</option><option value="OEF">OEF</option><option value="OES">OES</option><option value="Fason">Fason</option></select></td>
+    <td class="px-2 py-2"><select name="kullanilan_alan[]" class="border border-gray-200 rounded px-1 py-1 text-xs"><option value="FA">FA</option><option value="OEA">OEA</option><option value="OEI">OEI</option><option value="OEF">OEF</option><option value="OES">OES</option></select></td>
     <td class="px-2 py-2"><input type="text" name="proje_makine[]" class="w-24 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Proje/Makine"></td>
     <td class="px-2 py-2"><input type="text" name="kw[]" class="w-14 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="KW18"></td>
     <td class="px-2 py-2"><input type="text" name="aciklama[]" class="w-28 border border-gray-200 rounded px-2 py-1 text-xs" placeholder="Not..."></td>
