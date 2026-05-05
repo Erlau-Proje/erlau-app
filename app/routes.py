@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import selectinload
 from app import db
-from app.models import User, UserPermission, UserScopeDepartment, UserScopeStation, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPersoneli, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi, PlanliBakim, PeriyodikKontrol, TeklifGrubu, TeklifKalem, TeknikResim, KaliteKontrol, DOF, DOFAksiyon, FasonUrun, FasonFiyat
+from app.models import User, UserPermission, UserScopeDepartment, UserScopeStation, Department, TalepFormu, TalepKalem, Tedarikci, Fatura, FaturaKalem, TedarikciSablon, Malzeme, Urun, IsIstasyonu, UretimPersoneli, UretimPlani, UretimPlaniSatir, UretimKaydi, ArizaKaydi, Makine, BakimPlani, BakimKaydi, PlanliBakim, PeriyodikKontrol, TeklifGrubu, TeklifKalem, TeknikResim, KaliteKontrol, DOF, DOFAksiyon, FasonUrun, FasonFiyat, MalzemeTuru
 from app.utils import generate_siparis_no, generate_stok_kodu, generate_urun_kodu, generate_plan_no, generate_teklif_no, devir_gunu
 from app.permissions import PERMISSIONS, PERMISSION_BY_CODE, ENDPOINT_PERMISSIONS, has_permission, default_permission_allowed
 from app.access_profiles import JOB_PROFILES, SCOPE_TYPES, USER_TYPES, PROFILE_LABELS, SCOPE_LABELS, USER_TYPE_LABELS, infer_profile
@@ -250,7 +250,8 @@ def yeni_talep():
         flash(f'Talep {talep.siparis_no} başarıyla oluşturuldu!', 'success')
         return redirect(url_for('main.dashboard'))
 
-    return render_template('yeni_talep.html')
+    malzeme_turu_listesi = MalzemeTuru.query.filter_by(is_active=True).order_by(MalzemeTuru.sira).all()
+    return render_template('yeni_talep.html', malzeme_turu_listesi=malzeme_turu_listesi)
 
 @main.route('/talep/<int:talep_id>')
 @login_required
@@ -311,16 +312,36 @@ def talep_duzenle(talep_id):
 def talep_sil(talep_id):
     talep = db.get_or_404(TalepFormu, talep_id)
     is_satinalma = current_user.role in ('satinalma', 'admin')
+    redirect_url = url_for('satin_alma.panel') if is_satinalma else url_for('main.dashboard')
     if talep.talep_eden_id != current_user.id and not is_satinalma:
         flash('Bu talebi silme yetkiniz yok.', 'danger')
-        return redirect(url_for('main.dashboard'))
+        return redirect(redirect_url)
     if talep.durum != 'bekliyor' and not is_satinalma:
         flash('Sadece bekleyen talepler silinebilir.', 'danger')
-        return redirect(url_for('main.dashboard'))
-    db.session.delete(talep)
-    db.session.commit()
-    flash('Talep silindi.', 'success')
-    redirect_url = url_for('satin_alma.panel') if is_satinalma else url_for('main.dashboard')
+        return redirect(redirect_url)
+    if not is_satinalma:
+        # Normal kullanıcılar teklif bağlı talebi silemez
+        bagli_teklif = TeklifGrubu.query.join(TalepKalem).filter(
+            TalepKalem.talep_id == talep.id
+        ).first()
+        if bagli_teklif:
+            flash('Bu talebe ait teklif/sipariş kaydı bulunduğu için silinemez.', 'danger')
+            return redirect(url_for('main.talep_detay', talep_id=talep_id))
+    try:
+        if is_satinalma:
+            # Teklif kayıtlarını (TeklifGrubu + TeklifKalem cascade) önce temizle
+            kalem_idler = [k.id for k in talep.kalemler]
+            if kalem_idler:
+                TeklifGrubu.query.filter(
+                    TeklifGrubu.talep_kalem_id.in_(kalem_idler)
+                ).delete(synchronize_session=False)
+        db.session.delete(talep)
+        db.session.commit()
+        flash('Talep silindi.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Talep silinirken bir hata oluştu.', 'danger')
+        return redirect(url_for('main.talep_detay', talep_id=talep_id))
     return redirect(redirect_url)
 
 @satin_alma.route('/siparis-raporu')
@@ -826,8 +847,48 @@ def kullanici_sil(user_id):
 @login_required
 @role_required('admin', 'satinalma')
 def tedarikci_listesi():
-    tedarikciler = Tedarikci.query.all()
-    return render_template('tedarikci.html', tedarikciler=tedarikciler)
+    q = request.args.get('q', '').strip()
+    kat = request.args.get('kat', '')
+    para = request.args.get('para', '')
+    sayfa = request.args.get('sayfa', 1, type=int)
+    per_page = 50
+
+    query = Tedarikci.query
+    if q:
+        query = query.filter(
+            db.or_(
+                Tedarikci.name.ilike(f'%{q}%'),
+                Tedarikci.unvan.ilike(f'%{q}%'),
+                Tedarikci.vergi_no.ilike(f'%{q}%'),
+                Tedarikci.email.ilike(f'%{q}%'),
+            )
+        )
+    if kat:
+        query = query.filter(Tedarikci.kategori == kat)
+    if para:
+        query = query.filter(Tedarikci.para_birimi == para)
+    query = query.order_by(Tedarikci.name)
+
+    toplam = query.count()
+    toplam_sayfa = max(1, (toplam + per_page - 1) // per_page)
+    sayfa = max(1, min(sayfa, toplam_sayfa))
+    tedarikciler = query.offset((sayfa - 1) * per_page).limit(per_page).all()
+
+    kategoriler = db.session.query(Tedarikci.kategori).filter(
+        Tedarikci.kategori.isnot(None), Tedarikci.kategori != ''
+    ).distinct().order_by(Tedarikci.kategori).all()
+    kategoriler = [k[0] for k in kategoriler]
+
+    kayit_bas = (sayfa - 1) * per_page + 1
+    kayit_son = min(sayfa * per_page, toplam)
+    pag_start = max(1, sayfa - 2)
+    pag_end = min(toplam_sayfa, sayfa + 2)
+
+    return render_template('tedarikci.html',
+        tedarikciler=tedarikciler, toplam=toplam, sayfa=sayfa,
+        toplam_sayfa=toplam_sayfa, q=q, kat=kat, para=para,
+        kategoriler=kategoriler, kayit_bas=kayit_bas, kayit_son=kayit_son,
+        pag_start=pag_start, pag_end=pag_end)
 
 @admin.route('/tedarikci/sablonu-indir')
 @login_required
@@ -2976,11 +3037,18 @@ def fason_urun_ekle():
     db.session.flush()
     fiyat_str = request.form.get('fiyat', '').strip()
     if fiyat_str:
+        tarih_ay = request.form.get('tarih_ay', '').strip()
+        try:
+            from datetime import datetime as _dt
+            ilk_tarih = _dt.strptime(tarih_ay + '-01', '%Y-%m-%d').date() if tarih_ay else date.today()
+        except ValueError:
+            ilk_tarih = date.today()
         db.session.add(FasonFiyat(
             fason_urun_id=u.id,
             fiyat=float(fiyat_str),
             para_birimi=request.form.get('para_birimi', 'TL'),
-            tarih=date.today(),
+            tarih=ilk_tarih,
+            proje=request.form.get('proje', '').strip() or None,
             giren_personel_id=current_user.id,
         ))
     db.session.commit()
@@ -2997,16 +3065,43 @@ def fason_fiyat_ekle(urun_id):
     if not fiyat_str:
         flash('Fiyat boş bırakılamaz.', 'danger')
         return redirect(url_for('satin_alma.fason_listesi'))
+    tarih_ay = request.form.get('tarih_ay', '').strip()
+    try:
+        from datetime import datetime as _dt
+        fiyat_tarih = _dt.strptime(tarih_ay + '-01', '%Y-%m-%d').date() if tarih_ay else date.today()
+    except ValueError:
+        fiyat_tarih = date.today()
     db.session.add(FasonFiyat(
         fason_urun_id=u.id,
         fiyat=float(fiyat_str),
         para_birimi=request.form.get('para_birimi', 'TL'),
-        tarih=date.today(),
+        tarih=fiyat_tarih,
+        proje=request.form.get('proje', '').strip() or None,
         notlar=request.form.get('notlar', '').strip() or None,
         giren_personel_id=current_user.id,
     ))
     db.session.commit()
     flash(f'"{u.urun_adi}" için yeni fiyat kaydedildi.', 'success')
+    return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=u.tedarikci_id))
+
+
+@satin_alma.route('/fason/<int:urun_id>/duzenle', methods=['POST'])
+@login_required
+@role_required('satinalma', 'admin')
+def fason_urun_duzenle(urun_id):
+    u = db.get_or_404(FasonUrun, urun_id)
+    adi = request.form.get('urun_adi', '').strip()
+    ted_id = request.form.get('tedarikci_id', type=int)
+    if not adi or not ted_id:
+        flash('Ürün adı ve tedarikçi zorunlu.', 'danger')
+        return redirect(url_for('satin_alma.fason_listesi'))
+    u.urun_adi = adi
+    u.tedarikci_id = ted_id
+    u.urun_kodu = request.form.get('urun_kodu', '').strip() or None
+    u.birim = request.form.get('birim', 'Adet')
+    u.aciklama = request.form.get('aciklama', '').strip() or None
+    db.session.commit()
+    flash(f'"{adi}" güncellendi.', 'success')
     return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=u.tedarikci_id))
 
 
@@ -3019,6 +3114,49 @@ def fason_urun_sil(urun_id):
     db.session.commit()
     flash(f'"{u.urun_adi}" pasife alındı.', 'warning')
     return redirect(url_for('satin_alma.fason_listesi', tedarikci_id=u.tedarikci_id))
+
+
+# ---------------------------------------------------------------------------
+# MALZEME TÜRÜ YÖNETİMİ (satınalma + admin)
+# ---------------------------------------------------------------------------
+
+@satin_alma.route('/malzeme-turleri', methods=['GET', 'POST'])
+@login_required
+def malzeme_turleri():
+    if current_user.role not in ('satinalma', 'admin'):
+        flash('Bu sayfaya erişim yetkiniz yok.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'ekle':
+            ad = request.form.get('ad', '').strip()
+            if ad:
+                mevcut = MalzemeTuru.query.filter_by(ad=ad).first()
+                if mevcut:
+                    flash(f'"{ad}" zaten mevcut.', 'warning')
+                else:
+                    max_sira = db.session.query(db.func.max(MalzemeTuru.sira)).scalar() or 0
+                    db.session.add(MalzemeTuru(ad=ad, sira=max_sira + 1, is_active=True))
+                    db.session.commit()
+                    flash(f'"{ad}" eklendi.', 'success')
+        elif action == 'sil':
+            tur_id = int(request.form.get('tur_id', 0))
+            tur = MalzemeTuru.query.get(tur_id)
+            if tur:
+                db.session.delete(tur)
+                db.session.commit()
+                flash(f'"{tur.ad}" silindi.', 'warning')
+        elif action == 'pasif':
+            tur_id = int(request.form.get('tur_id', 0))
+            tur = MalzemeTuru.query.get(tur_id)
+            if tur:
+                tur.is_active = not tur.is_active
+                db.session.commit()
+                durum = 'aktif' if tur.is_active else 'pasif'
+                flash(f'"{tur.ad}" {durum} yapıldı.', 'info')
+        return redirect(url_for('satin_alma.malzeme_turleri'))
+    turler = MalzemeTuru.query.order_by(MalzemeTuru.sira).all()
+    return render_template('satinalma/malzeme_turleri.html', turler=turler)
 
 
 # ---------------------------------------------------------------------------
